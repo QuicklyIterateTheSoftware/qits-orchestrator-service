@@ -59,9 +59,9 @@
              qits-integrations-quarkus. The url is a property so the image build can point it at the
              address the builder container can actually reach — see docker/Dockerfile and
              .qits-maven-settings.xml. -->
-        <qits.db-core.version>2026.917.65806</qits.db-core.version>
-        <qits.auth-core.version>2026.917.65806</qits.auth-core.version>
-        <qits.arch-rules.version>2026.917.65806</qits.arch-rules.version>
+        <qits.db-core.version>2026.929.140626</qits.db-core.version>
+        <qits.auth-core.version>2026.929.140626</qits.auth-core.version>
+        <qits.arch-rules.version>2026.929.140626</qits.arch-rules.version>
         <!-- THE PLATFORM EVENT BUS, and this repository's first consumption of it: the outbox, the
              idempotent PUT, the durable listener and CausationScope, published by
              components/qits-eventstream into the same platform Maven repository as the three
@@ -74,7 +74,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.924.141456</qits.eventstream.version>
+        <qits.eventstream.version>2026.929.142419</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
@@ -86,7 +86,7 @@
         <!-- The recording service mocks those ITs boot against (the generic MockService plus
              idp.MockIdp), published by qits-integrations-quarkus beside qits-auth-core,
              qits-arch-rules and qits-db-core. -->
-        <qits.service-mock.version>2026.917.65806</qits.service-mock.version>
+        <qits.service-mock.version>2026.929.140626</qits.service-mock.version>
         <qits.maven.repository.url>http://registry.dev.localhost:8080/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
