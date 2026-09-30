@@ -50,7 +50,7 @@ import org.junit.jupiter.api.BeforeAll;
  * apply to it.
  *
  * <p>So one story, one broken peer, and a diagram that says both halves at once: an arrow to
- * qits-ci carrying a 503, twelve arrows to the peers that answered anyway, and <b>no arrow to
+ * qits-ci carrying a 503, thirteen arrows to the peers that answered anyway, and <b>no arrow to
  * qits-artifacts that would have deleted anything</b> — the plan and the sweep are simply not there.
  * The registry IS reached, once, by the store measurement that needs no pin, so the honest claim is
  * about which calls are missing rather than about which peer is untouched; a presence check cannot
@@ -59,7 +59,7 @@ import org.junit.jupiter.api.BeforeAll;
  * <h2>How the peer is broken</h2>
  *
  * <p>{@link StoryPeers#refuse} is the one piece of state in the stand-in, and the class javadoc over
- * there says why it has to be state here and can be a path elsewhere: a gc run's fifteen paths are
+ * there says why it has to be state here and can be a path elsewhere: a gc run's sixteen paths are
  * fixed by {@code GcProcess.steps()} and identical in every run, so "qits-ci is down tonight" cannot be
  * spelled as a url the story addresses. It is armed inside a {@code try} and cleared in a {@code
  * finally}, and cleared again in {@code @AfterEach} — a refusal that outlived its story would be a
@@ -112,7 +112,7 @@ public class PeerFailureIT {
       A skipped step names the step that actually FAILED rather than the skipped neighbour in
       between, so a reader does not have to walk the graph backwards to find the cause. And the
       whole of what "fail-closed" means is visible on the diagram rather than described: one arrow
-      to qits-ci carrying its 503, twelve arrows to the peers that answered, and not one arrow to
+      to qits-ci carrying its 503, thirteen arrows to the peers that answered, and not one arrow to
       qits-artifacts that would have deleted anything — the registry is read for its size and asked
       for nothing else.
       """)
@@ -189,7 +189,10 @@ public class PeerFailureIT {
             containsString("host 12.6 GB reclaimed"))
         // A different pin pattern one store further out, and unaffected by this one's failure.
         .body(StoryRuns.stepPath("repos.catalogue") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SUCCEEDED"));
+        .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SUCCEEDED"))
+        // configuration.entries depends on pins.deployments alone, which answered — so qits-ci's
+        // 503 leaves it untouched too, the same "only what needs a pin waits for one" shape.
+        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"));
     story
         .note(
             "everything that needed no pin ran anyway: 12.6 GB of build cache reclaimed, orphan"
@@ -238,7 +241,7 @@ public class PeerFailureIT {
 
     // The broken peer, drawn with the status it answered — evidence rather than a claim.
     to(StoryPeers.CI, StoryPeers.label("GET", StoryPeers.DAEMON_PATH, StoryPeers.REFUSED_STATUS));
-    // …and the twelve calls that happened anyway. Each store was measured once rather than twice,
+    // …and the thirteen calls that happened anyway. Each store was measured once rather than twice,
     // because both after-steps were skipped — it is the same label either way, so the count is what
     // says so and the step assertions above are what make it readable.
     to(StoryPeers.CONTAINERS, StoryPeers.read(StoryPeers.USAGE_PATH));
@@ -253,6 +256,9 @@ public class PeerFailureIT {
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.PINS_PATH));
     to(StoryPeers.PROJECTS, StoryPeers.read(StoryPeers.REPOSITORIES_PATH));
     to(StoryPeers.WORKSPACES, StoryPeers.written(StoryPeers.BRANCHES_PATH));
+    // configuration.entries only waits on pins.deployments, which answered — qits-ci's 503 does
+    // not touch it.
+    to(StoryPeers.CONFIGURATION, StoryPeers.written(StoryPeers.CONFIGURATION_ENTRIES_PATH));
 
     // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES reached the registry — not the
     // plan, not the sweep — because a pin that protects it could not be read. The registry is
@@ -266,10 +272,10 @@ public class PeerFailureIT {
                 edge ->
                     StoryPeers.ARTIFACTS.equals(edge.to()) && edge.label().contains("/gc/")),
         () -> "a collection call reached the registry without its pins: " + report.network());
-    // Two in, thirteen out. The credential was minted an hour ago by the first run of the
+    // Two in, fourteen out. The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 15);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 16);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,

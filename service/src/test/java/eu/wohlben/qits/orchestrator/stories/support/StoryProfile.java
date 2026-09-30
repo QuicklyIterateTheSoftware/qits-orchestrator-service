@@ -62,7 +62,7 @@ import java.util.Map;
  * <p>{@code quarkus.scheduler.enabled=false} is inherited from the parent and it is load-bearing
  * rather than tidy: {@code GcSchedule} is a cron at 03:00 UTC, and a CI run straddling that minute
  * would start an unattended deletion run out of a test JVM, against peers that now ANSWER. Nor
- * could a recording tell that run's fifteen calls from a story's — the paths are identical — so an
+ * could a recording tell that run's sixteen calls from a story's — the paths are identical — so an
  * arrow would appear or disappear depending on what time the suite ran, which is a {@code
  * networkHash} that never settles.
  *

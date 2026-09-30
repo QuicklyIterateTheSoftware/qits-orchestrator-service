@@ -39,6 +39,7 @@ so what comes after it still runs.
 | `containers.build-cache` | containers | `POST /containers/api/gc/build-cache` | usage.before |
 | `repos.catalogue` | projects | `GET /projects/api/repositories` | — |
 | `branches.sweep` | workspaces | `POST /workspaces/api/gc/branches {dryRun, repositories, keepPrefixes}` | repos.catalogue |
+| `configuration.entries` | configuration | `POST /configuration/api/gc/entries {dryRun, deployments}` | pins.deployments |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
 | `usage.after` | containers | `GET /containers/api/gc/usage` | artifacts.sweep, containers.images, containers.volumes, containers.build-cache |
 
@@ -82,6 +83,15 @@ and `docker system df` cannot see one of them. A run whose whole receipt was the
 reported a platform that was not growing while the registry did: the 2026-09-04 storage incident was
 50 GB nobody's receipt showed. The after-step hangs off `artifacts.sweep` alone, so a container
 prune that failed still leaves the registry's own before-and-after in the run.
+
+**`configuration.entries` deletes rows, not bytes.** qits-configuration deletes entries of RETIRED
+keys — a key some declaration of an application used to state and that no surviving declaration
+states any longer, neither a serving nor a rollback version. The rule for what counts as retired
+lives with qits-configuration, the owner of the store; this process hands it `pins.deployments`
+verbatim, the one pin its rule needs, and that is the step's only edge — the other five pin sources
+answer a different tense that has no bearing on whether a configuration key is still declared. It
+frees no disk, so it hangs off neither `usage.after` plane, and it runs on a dry run too, the same
+reasoning as `branches.sweep`.
 
 **Only what needs a pin waits for one.** `containers.build-cache` hangs off `usage.before`, not
 off the image sweep: a prune has no keep-set, so a broken pin read must not cost the platform the

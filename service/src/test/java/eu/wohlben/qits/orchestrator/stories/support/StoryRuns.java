@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * shape the client itself has.
  *
  * <p><b>Why it is two requests and not one.</b> {@code POST /processes/{kind}/runs} answers 202 with
- * the id as soon as the run row and its seventeen PENDING step rows exist; the work is minutes of
+ * the id as soon as the run row and its eighteen PENDING step rows exist; the work is minutes of
  * somebody else's pruning on a single-threaded worker, and an HTTP request is the wrong place to
  * hold it. So a caller polls {@code GET /runs/{id}} — the Angular client does it every two seconds
  * while the run is RUNNING, and these stories do it faster because the peers are next door.
@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 public final class StoryRuns {
 
   /**
-   * Long enough for the fifteen calls a seventeen-step run makes to a stub next door — each store is
+   * Long enough for the sixteen calls an eighteen-step run makes to a stub next door — each store is
    * measured with the same call twice — and short enough to fail rather than hang CI.
    */
   private static final Duration PATIENCE = Duration.ofSeconds(120);

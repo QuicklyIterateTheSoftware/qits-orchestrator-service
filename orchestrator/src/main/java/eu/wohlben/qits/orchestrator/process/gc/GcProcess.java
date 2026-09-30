@@ -80,6 +80,7 @@ import java.util.List;
  * containers.build-cache containers     POST /containers/api/gc/build-cache  ← usage.before
  * repos.catalogue        projects       GET  /projects/api/repositories
  * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue
+ * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.deployments
  * artifacts.usage.after  artifacts      GET  /artifacts/api/store/summary    ← artifacts.sweep
  * usage.after            containers     GET  /containers/api/gc/usage        ← everything that frees disk
  * </pre>
@@ -110,6 +111,18 @@ import java.util.List;
  * was 50 GB nobody's receipt showed. Its after-step hangs off the registry sweep alone rather than
  * off everything that frees disk, so a broken container prune still leaves the registry's own
  * before-and-after in the run.
+ *
+ * <p><b>{@code configuration.entries} deletes rows, not bytes, which is why it hangs off neither
+ * {@code usage.after} plane.</b> qits-configuration deletes entries of RETIRED keys — a key some
+ * declaration of an application used to state and no surviving declaration states any longer. The
+ * rule for what counts as retired lives with qits-configuration, the owner of the store; this
+ * process hands it the one pin that answers the question its rule needs — {@code pins.deployments},
+ * the serving and rollback shas — verbatim, the same discipline as {@link #pinsBody}. The other five
+ * pin sources answer a different tense (what a launch would pull, what a manifest still references)
+ * that has no bearing on whether a configuration key is still declared, so this step's only edge is
+ * {@code pins.deployments}: fail-closed still applies, and an unread pin skips it before the body
+ * runs. It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
+ * nightly dry figures are real figures, the same reasoning as {@code branches.sweep}.
  */
 @ApplicationScoped
 public class GcProcess implements TechnicalProcess {
@@ -132,6 +145,7 @@ public class GcProcess implements TechnicalProcess {
   static final String CONTAINERS_BUILD_CACHE = "containers.build-cache";
   static final String REPOS_CATALOGUE = "repos.catalogue";
   static final String BRANCHES_SWEEP = "branches.sweep";
+  static final String CONFIGURATION_ENTRIES = "configuration.entries";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
 
@@ -346,6 +360,20 @@ public class GcProcess implements TechnicalProcess {
                             branchesBody(context)),
                     answer -> GcSummaries.branchesSweep(answer.json()))),
         new StepDefinition(
+            CONFIGURATION_ENTRIES,
+            "Retired configuration entries",
+            PeerTarget.CONFIGURATION,
+            List.of(PINS_DEPLOYMENTS),
+            context ->
+                StepResult.of(
+                    context
+                        .peers()
+                        .post(
+                            PeerTarget.CONFIGURATION,
+                            "/configuration/api/gc/entries",
+                            entriesBody(context)),
+                    answer -> GcSummaries.configurationEntries(answer.json()))),
+        new StepDefinition(
             ARTIFACTS_USAGE_AFTER,
             "Registry store after",
             PeerTarget.ARTIFACTS,
@@ -484,6 +512,24 @@ public class GcProcess implements TechnicalProcess {
     ArrayNode prefixes = JSON.createArrayNode();
     config.branchKeepPrefixes().forEach(prefixes::add);
     body.set("keepPrefixes", prefixes);
+    return body.toString();
+  }
+
+  /**
+   * The configuration entry-gc request:
+   *
+   * <pre>{@code {"dryRun":…, "deployments": <the deployments pin answer, verbatim>}}</pre>
+   *
+   * <p><b>Verbatim, the same discipline as {@link #pinsBody}.</b> qits-configuration owns the
+   * retirement rule, so the deployments pin travels as the document qits-platform-deployments sent
+   * rather than a keep-set re-shaped here. A pin answer this run could not read is simply absent —
+   * but this step never runs in that case, because {@code pins.deployments} is its declared
+   * dependency.
+   */
+  private String entriesBody(RunContext context) {
+    ObjectNode body = JSON.createObjectNode();
+    body.put("dryRun", context.dryRun());
+    context.answer(PINS_DEPLOYMENTS).ifPresent(node -> body.set("deployments", node));
     return body.toString();
   }
 

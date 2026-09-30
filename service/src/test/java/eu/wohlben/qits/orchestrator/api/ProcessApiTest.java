@@ -96,6 +96,12 @@ class ProcessApiTest {
             "{\"dryRun\":false,\"repositoriesExamined\":1,\"branchesExamined\":4,"
                 + "\"removed\":[{\"repositoryId\":\"r-1\",\"repositoryName\":\"qits-ci\","
                 + "\"branch\":\"old-work\"}],\"errors\":[]}"));
+    peers.answer(
+        "/configuration/api/gc/entries",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"examined\":1,\"removed\":[],"
+                + "\"kept\":{\"unpinned\":0,\"undeclaredPinnedVersion\":0,\"pinned\":1,"
+                + "\"inFlight\":0,\"neverDeclared\":0,\"staged\":0},\"errors\":[]}"));
   }
 
   /** Starts a run and returns its id. */
@@ -141,7 +147,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(17))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(18))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -172,8 +178,11 @@ class ProcessApiTest {
         .body("find { it.kind == 'gc' }.steps[14].id", equalTo("branches.sweep"))
         .body("find { it.kind == 'gc' }.steps[14].target", equalTo("workspaces"))
         .body("find { it.kind == 'gc' }.steps[14].dependsOn", contains("repos.catalogue"))
-        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("artifacts.usage.after"))
-        .body("find { it.kind == 'gc' }.steps[15].dependsOn", contains("artifacts.sweep"));
+        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("configuration.entries"))
+        .body("find { it.kind == 'gc' }.steps[15].target", equalTo("configuration"))
+        .body("find { it.kind == 'gc' }.steps[15].dependsOn", contains("pins.deployments"))
+        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("artifacts.usage.after"))
+        .body("find { it.kind == 'gc' }.steps[16].dependsOn", contains("artifacts.sweep"));
   }
 
   @Test
@@ -209,7 +218,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(17))
+        .body("steps.size()", equalTo(18))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -248,12 +257,19 @@ class ProcessApiTest {
         .body("steps[14].request.body", containsString("\"mainBranch\":\"main\""))
         .body("steps[14].request.body", containsString("environment/"))
         .body("steps[14].summary", containsString("removed 1 of 4 branches"))
+        // configuration.entries is not withheld either — qits-configuration has a real dry mode,
+        // the same reasoning as the branch sweep.
+        .body("steps[15].id", equalTo("configuration.entries"))
+        .body("steps[15].status", equalTo("SUCCEEDED"))
+        .body("steps[15].request.method", equalTo("POST"))
+        .body("steps[15].request.body", containsString("\"dryRun\":true"))
+        .body("steps[15].request.body", containsString("\"applicationName\":\"qits-ci\""))
         // The registry's own measurement, taken twice like the host's — the plane a `docker system
         // df` receipt cannot see.
-        .body("steps[15].id", equalTo("artifacts.usage.after"))
-        .body("steps[15].status", equalTo("SUCCEEDED"))
+        .body("steps[16].id", equalTo("artifacts.usage.after"))
+        .body("steps[16].status", equalTo("SUCCEEDED"))
         .body(
-            "steps[15].request.url",
+            "steps[16].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
   }
 

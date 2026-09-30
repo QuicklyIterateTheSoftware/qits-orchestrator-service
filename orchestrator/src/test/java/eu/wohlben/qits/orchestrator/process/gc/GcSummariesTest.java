@@ -122,6 +122,61 @@ class GcSummariesTest {
   }
 
   @Test
+  void theConfigurationEntrySweepReportsWhatWasRemovedAndWhatWasKept() {
+    assertEquals(
+        "removed 8 of 142 entries (dry run); kept: unpinned 12, undeclaredPinnedVersion 3,"
+            + " pinned 10, inFlight 2, neverDeclared 85, staged 4; 1 error",
+        GcSummaries.configurationEntries(
+            json(
+                """
+                {"dryRun":true,"examined":142,
+                 "removed":[{"application":"qits-ci","env":"dev","key":"env.OLD_FLAG",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-ci","env":"dev","key":"env.OLD_FLAG_2",
+                             "reason":"retired","lastDeclaredBy":"2026.814.101010"},
+                            {"application":"qits-gateway","env":"dev","key":"env.A",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-gateway","env":"dev","key":"env.B",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-gateway","env":"dev","key":"env.C",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-gateway","env":"dev","key":"env.D",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-gateway","env":"dev","key":"env.E",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"},
+                            {"application":"qits-gateway","env":"dev","key":"env.F",
+                             "reason":"retired","lastDeclaredBy":"2026.815.120000"}],
+                 "kept":{"unpinned":12,"undeclaredPinnedVersion":3,"pinned":10,"inFlight":2,
+                         "neverDeclared":85,"staged":4},
+                 "errors":[{"application":"qits-workspaces","message":"timeout"}]}
+                """)));
+  }
+
+  @Test
+  void theConfigurationEntrySweepOnANonDryRunOmitsTheDryRunSuffix() {
+    assertEquals(
+        "removed 0 of 0 entries; kept: unpinned 0, undeclaredPinnedVersion 0, pinned 0,"
+            + " inFlight 0, neverDeclared 0, staged 0; 0 errors",
+        GcSummaries.configurationEntries(
+            json(
+                """
+                {"dryRun":false,"examined":0,"removed":[],
+                 "kept":{"unpinned":0,"undeclaredPinnedVersion":0,"pinned":0,"inFlight":0,
+                         "neverDeclared":0,"staged":0},
+                 "errors":[]}
+                """)));
+  }
+
+  @Test
+  void aConfigurationEntryAnswerThisReaderDoesNotRecogniseIsStillASentence() {
+    assertEquals("no entry-gc report in the answer", GcSummaries.configurationEntries(null));
+    assertEquals(
+        "removed 0 of 0 entries; kept: unpinned 0, undeclaredPinnedVersion 0, pinned 0,"
+            + " inFlight 0, neverDeclared 0, staged 0; 0 errors",
+        GcSummaries.configurationEntries(json("{\"message\":\"never scanned\"}")));
+  }
+
+  @Test
   void aLaunchPinAnswerCanBeSingularEmptyOrUnreadableAndIsStillASentence() {
     assertEquals(
         "1 launch image — what a workspace/editor start would pull today",
