@@ -102,6 +102,14 @@ class ProcessApiTest {
             "{\"dryRun\":false,\"examined\":1,\"removed\":[],"
                 + "\"kept\":{\"unpinned\":0,\"undeclaredPinnedVersion\":0,\"pinned\":1,"
                 + "\"inFlight\":0,\"neverDeclared\":0,\"staged\":0},\"errors\":[]}"));
+    peers.answer(
+        "/projects/api/gc/tags",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"repositories\":1,\"examined\":1,"
+                + "\"deleted\":[{\"repository\":\"qits-ci\",\"tag\":\"old\",\"host\":true,"
+                + "\"twin\":true}],"
+                + "\"kept\":{\"newest\":0,\"pinnedVersion\":1,\"gitlink\":0,\"inFlight\":0,"
+                + "\"young\":0},\"errors\":[]}"));
   }
 
   /** Starts a run and returns its id. */
@@ -147,7 +155,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(18))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(19))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -181,8 +189,20 @@ class ProcessApiTest {
         .body("find { it.kind == 'gc' }.steps[15].id", equalTo("configuration.entries"))
         .body("find { it.kind == 'gc' }.steps[15].target", equalTo("configuration"))
         .body("find { it.kind == 'gc' }.steps[15].dependsOn", contains("pins.deployments"))
-        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("artifacts.usage.after"))
-        .body("find { it.kind == 'gc' }.steps[16].dependsOn", contains("artifacts.sweep"));
+        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("tags.sweep"))
+        .body("find { it.kind == 'gc' }.steps[16].target", equalTo("projects"))
+        .body(
+            "find { it.kind == 'gc' }.steps[16].dependsOn",
+            contains(
+                "pins.deployments",
+                "pins.ci",
+                "pins.dependencies",
+                "pins.images",
+                "pins.workspaces",
+                "pins.projects",
+                "repos.catalogue"))
+        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("artifacts.usage.after"))
+        .body("find { it.kind == 'gc' }.steps[17].dependsOn", contains("artifacts.sweep"));
   }
 
   @Test
@@ -218,7 +238,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(18))
+        .body("steps.size()", equalTo(19))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -264,12 +284,20 @@ class ProcessApiTest {
         .body("steps[15].request.method", equalTo("POST"))
         .body("steps[15].request.body", containsString("\"dryRun\":true"))
         .body("steps[15].request.body", containsString("\"applicationName\":\"qits-ci\""))
+        // tags.sweep is not withheld either — qits-projects judges identically on a dry run — and
+        // it carries the same {"pins": {...}} object the plan does, not just one source.
+        .body("steps[16].id", equalTo("tags.sweep"))
+        .body("steps[16].status", equalTo("SUCCEEDED"))
+        .body("steps[16].request.method", equalTo("POST"))
+        .body("steps[16].request.body", containsString("\"dryRun\":true"))
+        .body("steps[16].request.body", containsString("\"applicationName\":\"qits-ci\""))
+        .body("steps[16].summary", containsString("tags decommissioned"))
         // The registry's own measurement, taken twice like the host's — the plane a `docker system
         // df` receipt cannot see.
-        .body("steps[16].id", equalTo("artifacts.usage.after"))
-        .body("steps[16].status", equalTo("SUCCEEDED"))
+        .body("steps[17].id", equalTo("artifacts.usage.after"))
+        .body("steps[17].status", equalTo("SUCCEEDED"))
         .body(
-            "steps[16].request.url",
+            "steps[17].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
   }
 

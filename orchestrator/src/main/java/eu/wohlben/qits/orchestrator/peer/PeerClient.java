@@ -97,15 +97,30 @@ public class PeerClient {
 
   /** A POST with a JSON body, as the same pair. */
   public PeerExchange post(String target, String path, String body) {
+    return post(target, path, body, callTimeout);
+  }
+
+  /**
+   * A POST with its own read timeout, for the one call this process knows in advance is slower
+   * than the rest — qits-projects' tag sweep, which can walk dozens of repositories and push to
+   * GitHub. Every other caller goes through the three-argument {@link #post}, which uses {@link
+   * #callTimeout}.
+   */
+  public PeerExchange post(String target, String path, String body, Duration timeout) {
     PeerCall call = new PeerCall("POST", url(target, path), body);
-    return new PeerExchange(call, send(target, call));
+    return new PeerExchange(call, send(target, call, timeout));
   }
 
   /** Sends one call and turns everything that can happen into an answer. */
   public PeerAnswer send(String target, PeerCall call) {
+    return send(target, call, callTimeout);
+  }
+
+  /** The same send, with its own read timeout rather than {@link #callTimeout}. */
+  public PeerAnswer send(String target, PeerCall call, Duration timeout) {
     HttpRequest.Builder request =
         HttpRequest.newBuilder(URI.create(call.url()))
-            .timeout(callTimeout)
+            .timeout(timeout)
             .header("Accept", "application/json")
             // The forward-auth half: this service's own name and the one role it acts with. Every
             // peer route a process calls is a machine route, so the role is qits:system and never

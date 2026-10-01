@@ -122,13 +122,13 @@ public class RunHistoryIT {
         .body("kind", hasItem(StoryTarget.GC))
         .body(gc() + ".name", equalTo("Garbage collection"))
         .body(gc() + ".description", notNullValue())
-        .body(gc() + ".steps.size()", equalTo(18))
+        .body(gc() + ".steps.size()", equalTo(19))
         .body(gc() + ".steps.id[0]", equalTo("usage.before"))
         .body(gc() + ".steps.id", hasItem("branches.sweep"))
         .body(gc() + ".steps.target", hasItem("workspaces"));
     story
         .note(
-            "the catalogue: one process, eighteen steps, each naming the peer it calls — the graph"
+            "the catalogue: one process, nineteen steps, each naming the peer it calls — the graph"
                 + " the client draws before a run exists")
         .as("plan-served");
 
@@ -217,7 +217,7 @@ public class RunHistoryIT {
         .body("kind", equalTo(StoryTarget.GC))
         .body("trigger", equalTo("manual"))
         .body("finishedAt", notNullValue())
-        .body("steps.size()", equalTo(18))
+        .body("steps.size()", equalTo(19))
         .body(StoryRuns.stepPath("usage.before") + ".target", equalTo("containers"))
         .body(StoryRuns.stepPath("usage.before") + ".request.method", equalTo("GET"))
         .body(

@@ -47,6 +47,7 @@ import java.util.Optional;
  * repos.catalogue              qits-projects                 GET  /projects/api/repositories
  * branches.sweep               qits-workspaces               POST /workspaces/api/gc/branches
  * configuration.entries        qits-configuration            POST /configuration/api/gc/entries
+ * tags.sweep                   qits-projects                 POST /projects/api/gc/tags
  * </pre>
  *
  * <p><b>One process impersonates all of them, and the diagram is drawn from the PATH.</b> The eight
@@ -71,7 +72,7 @@ import java.util.Optional;
  * <p>The exception is {@link #refuse}, and it exists because <b>no story-controlled value reaches a
  * peer path here</b>. In a repository whose peers are addressed per subject ({@code
  * …/applications/story-misconfigured/resolved}) a refusal can be keyed on the name in the url, and
- * being unreadable is then what that name MEANS. A gc run's sixteen paths are fixed by {@code
+ * being unreadable is then what that name MEANS. A gc run's seventeen paths are fixed by {@code
  * GcProcess.steps()} and identical in every run, so "this peer is down tonight" cannot be spelled
  * as a path. It is spelled as a file instead — written by the one story about a broken peer, in a
  * {@code try}/{@code finally} that always clears it, wiped again when the stub starts, and read
@@ -96,8 +97,8 @@ import java.util.Optional;
  * <p>quarkus-oidc-client caches the token it acquires and re-mints only when it expires, so the
  * {@code POST /idp/token} arrow belongs to the <b>first run of the whole catalogue</b> and to no
  * other. That is a real property of this service rather than an artefact here: {@code PeerTokens}
- * holds one {@code TokensHelper} for the one named client precisely so that an eighteen-step run is
- * not eighteen token requests.
+ * holds one {@code TokensHelper} for the one named client precisely so that a nineteen-step run is
+ * not nineteen token requests.
  *
  * <p>What this stand-in chooses is only that the horizon is the whole run: the token says {@code
  * expires_in: 3600}, so the mint lands in exactly one story and every other story's edge count is
@@ -167,6 +168,7 @@ public final class StoryPeers {
   public static final String REPOSITORIES_PATH = "/projects/api/repositories";
   public static final String BRANCHES_PATH = "/workspaces/api/gc/branches";
   public static final String CONFIGURATION_ENTRIES_PATH = "/configuration/api/gc/entries";
+  public static final String TAGS_SWEEP_PATH = "/projects/api/gc/tags";
   public static final String TOKEN_PATH = "/idp/token";
 
   // --- the figures the stories read back out of a summary -------------------------------------
@@ -402,6 +404,15 @@ public final class StoryPeers {
               + "\"}],"
               + "\"kept\":{\"unpinned\":0,\"undeclaredPinnedVersion\":0,\"pinned\":1,"
               + "\"inFlight\":0,\"neverDeclared\":0,\"staged\":0},\"errors\":[]}";
+      case TAGS_SWEEP_PATH ->
+          "{\"dryRun\":"
+              + dryRun
+              + ",\"repositories\":1,\"examined\":1,"
+              + "\"deleted\":[{\"repository\":\""
+              + CATALOGUE_REPOSITORY
+              + "\",\"tag\":\"2026.814.090000\",\"host\":true,\"twin\":true}],"
+              + "\"kept\":{\"newest\":0,\"pinnedVersion\":1,\"gitlink\":0,\"inFlight\":0,"
+              + "\"young\":0},\"errors\":[]}";
       // An hour, so the mints land in exactly one story of the run — see the class javadoc.
       case TOKEN_PATH ->
           "POST".equals(method)

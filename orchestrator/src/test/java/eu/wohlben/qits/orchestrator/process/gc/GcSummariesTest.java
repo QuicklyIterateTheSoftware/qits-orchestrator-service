@@ -177,6 +177,49 @@ class GcSummariesTest {
   }
 
   @Test
+  void theTagSweepReportsWhatWasDecommissionedByHostAndTwinAndWhatWasKept() {
+    assertEquals(
+        "3 tags decommissioned across 2 repositories (2 host, 2 twin); kept: newest 40,"
+            + " pinnedVersion 6, gitlink 3, inFlight 1, young 2; 1 error",
+        GcSummaries.tagsSweep(
+            json(
+                """
+                {"dryRun":false,"repositories":2,"examined":52,
+                 "deleted":[{"repository":"qits-ci","tag":"2026.814.090000","host":true,"twin":true},
+                            {"repository":"qits-ci","tag":"2026.813.070000","host":true,"twin":false},
+                            {"repository":"qits-docs","tag":"2026.812.050000","host":false,
+                             "twin":true}],
+                 "kept":{"newest":40,"pinnedVersion":6,"gitlink":3,"inFlight":1,"young":2},
+                 "errors":["qits-gateway: push failed"]}
+                """)));
+  }
+
+  @Test
+  void theTagSweepOnADryRunSaysWouldDecommissionInsteadOfDecommissioned() {
+    assertEquals(
+        "1 tags would be decommissioned across 1 repositories (1 host, 0 twin); kept: newest 0,"
+            + " pinnedVersion 0, gitlink 0, inFlight 0, young 0; 0 errors",
+        GcSummaries.tagsSweep(
+            json(
+                """
+                {"dryRun":true,"repositories":1,"examined":1,
+                 "deleted":[{"repository":"qits-ci","tag":"2026.814.090000","host":true,
+                             "twin":false}],
+                 "kept":{"newest":0,"pinnedVersion":0,"gitlink":0,"inFlight":0,"young":0},
+                 "errors":[]}
+                """)));
+  }
+
+  @Test
+  void aTagSweepAnswerThisReaderDoesNotRecogniseIsStillASentence() {
+    assertEquals("no tag-sweep report in the answer", GcSummaries.tagsSweep(null));
+    assertEquals(
+        "0 tags decommissioned across 0 repositories (0 host, 0 twin); kept: newest 0,"
+            + " pinnedVersion 0, gitlink 0, inFlight 0, young 0; 0 errors",
+        GcSummaries.tagsSweep(json("{\"message\":\"never scanned\"}")));
+  }
+
+  @Test
   void aLaunchPinAnswerCanBeSingularEmptyOrUnreadableAndIsStillASentence() {
     assertEquals(
         "1 launch image — what a workspace/editor start would pull today",

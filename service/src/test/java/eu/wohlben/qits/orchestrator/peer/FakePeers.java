@@ -103,6 +103,12 @@ public class FakePeers extends PeerClient {
     return exchange(new PeerCall("POST", url(target, path), body), path);
   }
 
+  /** Same seam, timeout ignored — a fake never blocks on the network it is standing in for. */
+  @Override
+  public PeerExchange post(String target, String path, String body, java.time.Duration timeout) {
+    return post(target, path, body);
+  }
+
   private PeerExchange exchange(PeerCall call, String path) {
     calls.add(call);
     CountDownLatch latch = gate;

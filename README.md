@@ -40,6 +40,7 @@ so what comes after it still runs.
 | `repos.catalogue` | projects | `GET /projects/api/repositories` | — |
 | `branches.sweep` | workspaces | `POST /workspaces/api/gc/branches {dryRun, repositories, keepPrefixes}` | repos.catalogue |
 | `configuration.entries` | configuration | `POST /configuration/api/gc/entries {dryRun, deployments}` | pins.deployments |
+| `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.images, pins.workspaces, pins.projects, repos.catalogue |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
 | `usage.after` | containers | `GET /containers/api/gc/usage` | artifacts.sweep, containers.images, containers.volumes, containers.build-cache |
 
@@ -92,6 +93,19 @@ verbatim, the one pin its rule needs, and that is the step's only edge — the o
 answer a different tense that has no bearing on whether a configuration key is still declared. It
 frees no disk, so it hangs off neither `usage.after` plane, and it runs on a dry run too, the same
 reasoning as `branches.sweep`.
+
+**`tags.sweep` decommissions git tags, on the platform's git host and its backup twin alike.**
+qits-projects is the one peer that can reach both addresses, so it is the one asked, carrying the
+same `{"pins": {...}}` object `artifacts.plan` sends — every one of the six sources, because a tag
+can be the thing any of them protects: a sha a deployment still serves, a version a manifest
+references, or an image a launch would pull. `repos.catalogue` is its iteration set, the same role
+it plays for `branches.sweep`. All seven are fail-closed edges: an unread pin or an unread catalogue
+skips the sweep before its body is built. It frees no disk either, so it is not a `usage.after`
+dependency, and it runs on a dry run too. This is also the one call slow enough to need its own
+budget: `qits.orchestrator.gc.tags-sweep-call-timeout` (15 minutes, PeerClient's four-argument
+`post`) rather than the shared `qits.orchestrator.gc.call-timeout` (2 minutes) every other step
+uses, because walking the whole catalogue and pushing a decommissioning commit per affected
+repository to GitHub is a different order of call than one store's own read or write.
 
 **Only what needs a pin waits for one.** `containers.build-cache` hangs off `usage.before`, not
 off the image sweep: a prune has no keep-set, so a broken pin read must not cost the platform the

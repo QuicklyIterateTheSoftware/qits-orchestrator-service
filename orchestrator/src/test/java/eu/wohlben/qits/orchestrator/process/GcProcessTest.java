@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the eighteen steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the nineteen steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -54,6 +54,7 @@ class GcProcessTest {
   private static final String CATALOGUE = "/projects/api/repositories";
   private static final String BRANCHES = "/workspaces/api/gc/branches";
   private static final String ENTRIES = "/configuration/api/gc/entries";
+  private static final String TAGS = "/projects/api/gc/tags";
 
   @Inject RunExecutor executor;
 
@@ -208,6 +209,15 @@ class GcProcessTest {
                      "neverDeclared":85,"staged":4},
              "errors":[]}
             """));
+    peers.answer(
+        TAGS,
+        FakePeers.Scripted.ok(
+            """
+            {"dryRun":false,"repositories":2,"examined":31,
+             "deleted":[{"repository":"qits-ci","tag":"2026.814.090000","host":true,"twin":true}],
+             "kept":{"newest":2,"pinnedVersion":2,"gitlink":1,"inFlight":0,"young":3},
+             "errors":[]}
+            """));
   }
 
   /**
@@ -264,7 +274,7 @@ class GcProcessTest {
   }
 
   @Test
-  void aHealthyPlatformRunsAllEighteenStepsAndSummarisesEachFromTheAnswer() {
+  void aHealthyPlatformRunsAllNineteenStepsAndSummarisesEachFromTheAnswer() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
@@ -289,6 +299,7 @@ class GcProcessTest {
             "repos.catalogue",
             "branches.sweep",
             "configuration.entries",
+            "tags.sweep",
             "artifacts.usage.after",
             "usage.after"),
         runs.steps(id).stream().map(step -> step.stepId).toList());
@@ -332,6 +343,10 @@ class GcProcessTest {
         "removed 1 of 142 entries; kept: unpinned 12, undeclaredPinnedVersion 3, pinned 10,"
             + " inFlight 2, neverDeclared 85, staged 4; 0 errors",
         steps.get("configuration.entries").summary);
+    assertEquals(
+        "1 tags decommissioned across 2 repositories (1 host, 1 twin); kept: newest 2,"
+            + " pinnedVersion 2, gitlink 1, inFlight 0, young 3; 0 errors",
+        steps.get("tags.sweep").summary);
 
     // The url is the shipped target plus the shipped path — a wrong peer would fail here. The host
     // is the derived dev-qits-<alias> form (no QITS_ENVIRONMENT in this suite, so the `dev`
@@ -364,6 +379,70 @@ class GcProcessTest {
         "http://dev-qits-configuration:8080/configuration/api/gc/entries",
         steps.get("configuration.entries").requestUrl);
     assertEquals("POST", steps.get("configuration.entries").requestMethod);
+    assertEquals(
+        "http://dev-qits-projects:8080/projects/api/gc/tags", steps.get("tags.sweep").requestUrl);
+    assertEquals("POST", steps.get("tags.sweep").requestMethod);
+  }
+
+  @Test
+  void theTagsSweepStepDependsOnAllSixPinsAndTheCatalogueAndEmbedsThePinsVerbatim() {
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(
+        "pins.deployments,pins.ci,pins.dependencies,pins.images,pins.workspaces,pins.projects,"
+            + "repos.catalogue",
+        runs.steps(id).stream()
+            .filter(step -> "tags.sweep".equals(step.stepId))
+            .findFirst()
+            .orElseThrow()
+            .dependsOn);
+
+    JsonNode body = json(peers.bodiesFor(TAGS).getFirst());
+    assertFalse(body.get("dryRun").asBoolean());
+    JsonNode pins = body.get("pins");
+    // The same pins object artifacts.plan sends, verbatim — all six sources, not just the one
+    // configuration.entries carries.
+    assertEquals(
+        "qits-ci", pins.get("deployments").get("pins").get(0).get("applicationName").asText());
+    assertEquals("2026.815.120000", pins.get("ciDaemon").get("daemonVersion").asText());
+    assertEquals(
+        "eu.wohlben.qits:qits-blobstore",
+        pins.get("dependencies").get("pins").get(0).get("name").asText());
+    assertEquals(
+        "qits/project-agent", pins.get("configuredImages").get("pins").get(0).get("image").asText());
+    assertEquals(
+        "2026.903.120000",
+        pins.get("workspaceLaunches").get("pins").get(0).get("version").asText());
+    assertEquals(
+        "refinement", pins.get("projectLaunches").get("pins").get(1).get("launches").asText());
+  }
+
+  @Test
+  void aBrokenDeploymentPinReadSkipsTheTagsSweepToo() {
+    peers.answer(
+        DEPLOYMENT_PINS, FakePeers.Scripted.unreachable("qits-platform-deployments: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    Map<String, OpStep> steps = stepsOf(id);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
+    assertEquals("skipped: pins.deployments failed", steps.get("tags.sweep").error);
+    assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without every pin source");
+  }
+
+  @Test
+  void aBrokenCatalogueReadSkipsTheTagsSweepToo() {
+    peers.answer(CATALOGUE, FakePeers.Scripted.unreachable("qits-projects: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    Map<String, OpStep> steps = stepsOf(id);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
+    assertEquals("skipped: repos.catalogue failed", steps.get("tags.sweep").error);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("branches.sweep").status);
   }
 
   @Test
@@ -479,6 +558,10 @@ class GcProcessTest {
     assertEquals("skipped: pins.workspaces failed", steps.get("artifacts.plan").error);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("artifacts.sweep").status);
     assertTrue(peers.bodiesFor(PLAN).isEmpty(), "no plan may be asked for without every pin source");
+    // tags.sweep carries all six pin edges too, so the same broken source skips it.
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
+    assertEquals("skipped: pins.workspaces failed", steps.get("tags.sweep").error);
+    assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without every pin source");
 
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.projects").status);
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.images").status);
@@ -552,6 +635,10 @@ class GcProcessTest {
     // registry's own sweep.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("configuration.entries").status);
     assertTrue(json(peers.bodiesFor(ENTRIES).getFirst()).get("dryRun").asBoolean());
+    // TAGS.SWEEP IS NOT WITHHELD EITHER, the same reasoning: qits-projects judges identically on a
+    // dry run and deletes nothing.
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("tags.sweep").status);
+    assertTrue(json(peers.bodiesFor(TAGS).getFirst()).get("dryRun").asBoolean());
   }
 
   @Test
@@ -573,8 +660,11 @@ class GcProcessTest {
     assertEquals(RunStatus.SKIPPED.name(), steps.get("artifacts.sweep").status);
     assertEquals("skipped: pins.deployments failed", steps.get("artifacts.sweep").error);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.images").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
+    assertEquals("skipped: pins.deployments failed", steps.get("tags.sweep").error);
     assertTrue(peers.bodiesFor(PLAN).isEmpty(), "no plan may be asked for without pins");
     assertTrue(peers.bodiesFor(IMAGES).isEmpty(), "no image may be swept without pins");
+    assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without pins");
 
     // AND EVERYTHING THAT NEEDS NO PINS STILL RUNS. That is the point of the edges being per step:
     // both the volume sweep and the build-cache prune hang off usage.before alone, so a broken pin
@@ -615,6 +705,8 @@ class GcProcessTest {
     assertEquals(RunStatus.SKIPPED.name(), steps.get("artifacts.sweep").status);
     assertEquals("skipped: pins.dependencies failed", steps.get("artifacts.sweep").error);
     assertTrue(peers.bodiesFor(PLAN).isEmpty(), "no plan may be asked for without every pin source");
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
+    assertEquals("skipped: pins.dependencies failed", steps.get("tags.sweep").error);
 
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.images").status);
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.images").status);

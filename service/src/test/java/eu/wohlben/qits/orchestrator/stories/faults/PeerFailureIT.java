@@ -59,7 +59,7 @@ import org.junit.jupiter.api.BeforeAll;
  * <h2>How the peer is broken</h2>
  *
  * <p>{@link StoryPeers#refuse} is the one piece of state in the stand-in, and the class javadoc over
- * there says why it has to be state here and can be a path elsewhere: a gc run's sixteen paths are
+ * there says why it has to be state here and can be a path elsewhere: a gc run's seventeen paths are
  * fixed by {@code GcProcess.steps()} and identical in every run, so "qits-ci is down tonight" cannot be
  * spelled as a url the story addresses. It is armed inside a {@code try} and cleared in a {@code
  * finally}, and cleared again in {@code @AfterEach} — a refusal that outlived its story would be a
@@ -154,7 +154,11 @@ public class PeerFailureIT {
         .body(StoryRuns.stepPath("artifacts.plan") + ".status", equalTo("SKIPPED"))
         .body(StoryRuns.stepPath("artifacts.plan") + ".error", equalTo("skipped: pins.ci failed"))
         .body(StoryRuns.stepPath("artifacts.sweep") + ".status", equalTo("SKIPPED"))
-        .body(StoryRuns.stepPath("artifacts.sweep") + ".error", equalTo("skipped: pins.ci failed"));
+        .body(StoryRuns.stepPath("artifacts.sweep") + ".error", equalTo("skipped: pins.ci failed"))
+        // tags.sweep carries all six pin edges too, so the same broken read skips it before its
+        // body — carrying every pin, not just pins.deployments — is ever built.
+        .body(StoryRuns.stepPath("tags.sweep") + ".status", equalTo("SKIPPED"))
+        .body(StoryRuns.stepPath("tags.sweep") + ".error", equalTo("skipped: pins.ci failed"));
     story
         .note(
             "the registry plan and the sweep behind it are SKIPPED before either body runs — the"

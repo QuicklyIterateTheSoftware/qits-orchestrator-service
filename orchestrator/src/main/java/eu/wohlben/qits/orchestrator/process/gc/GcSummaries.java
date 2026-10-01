@@ -273,6 +273,58 @@ final class GcSummaries {
         + (errors == 1 ? " error" : " errors");
   }
 
+  /**
+   * {@code 12 tags decommissioned across 8 repositories (5 host, 7 twin); kept: newest 40,
+   * pinnedVersion 6, gitlink 3, inFlight 1, young 2; 1 error} — qits-projects' own tag-decommission
+   * sweep, across both the platform's git host and its backup twin.
+   *
+   * <p><b>{@code host}/{@code twin} count deleted TAGS, not repositories.</b> One decommissioned
+   * tag can carry either flag, both, or (transiently, on a half-finished sweep an error recorded)
+   * neither; the two numbers here are how many of the entries in {@code deleted} said so, read the
+   * same way {@link #configurationEntries} reads its own {@code kept} breakdown.
+   */
+  static String tagsSweep(JsonNode body) {
+    if (body == null) {
+      return "no tag-sweep report in the answer";
+    }
+    JsonNode deleted = body.path("deleted");
+    int host = 0;
+    int twin = 0;
+    for (JsonNode tag : deleted) {
+      if (tag.path("host").asBoolean()) {
+        host++;
+      }
+      if (tag.path("twin").asBoolean()) {
+        twin++;
+      }
+    }
+    int repositories = body.path("repositories").asInt();
+    int errors = body.path("errors").size();
+    JsonNode kept = body.path("kept");
+    return deleted.size()
+        + (body.path("dryRun").asBoolean()
+            ? " tags would be decommissioned across "
+            : " tags decommissioned across ")
+        + repositories
+        + " repositories ("
+        + host
+        + " host, "
+        + twin
+        + " twin); kept: newest "
+        + kept.path("newest").asInt()
+        + ", pinnedVersion "
+        + kept.path("pinnedVersion").asInt()
+        + ", gitlink "
+        + kept.path("gitlink").asInt()
+        + ", inFlight "
+        + kept.path("inFlight").asInt()
+        + ", young "
+        + kept.path("young").asInt()
+        + "; "
+        + errors
+        + (errors == 1 ? " error" : " errors");
+  }
+
   private static String text(JsonNode node, String field, String fallback) {
     JsonNode value = node == null ? null : node.get(field);
     return value == null || value.isNull() ? fallback : value.asText();

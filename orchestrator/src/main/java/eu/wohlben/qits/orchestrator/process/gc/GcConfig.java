@@ -47,6 +47,9 @@ public class GcConfig {
   @ConfigProperty(name = "qits.orchestrator.gc.builder-cache-keep-bytes")
   long builderCacheKeepBytes;
 
+  @ConfigProperty(name = "qits.orchestrator.gc.tags-sweep-call-timeout")
+  Duration tagsSweepCallTimeout;
+
   /** Whether the CLOCK may start a run. A manual run ignores this — a person is the trigger. */
   public boolean enabled() {
     return enabled;
@@ -120,5 +123,14 @@ public class GcConfig {
    */
   public long builderCacheKeepBytes() {
     return builderCacheKeepBytes;
+  }
+
+  /**
+   * How long {@code tags.sweep} alone may take — longer than every other step's {@code
+   * call-timeout}, because it is the one call that walks dozens of repositories and pushes
+   * decommissioning commits to GitHub rather than reading or writing one store.
+   */
+  public Duration tagsSweepCallTimeout() {
+    return tagsSweepCallTimeout;
   }
 }

@@ -81,6 +81,7 @@ import java.util.List;
  * repos.catalogue        projects       GET  /projects/api/repositories
  * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue
  * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.deployments
+ * tags.sweep             projects       POST /projects/api/gc/tags {pins}    ← pins.*, repos.catalogue
  * artifacts.usage.after  artifacts      GET  /artifacts/api/store/summary    ← artifacts.sweep
  * usage.after            containers     GET  /containers/api/gc/usage        ← everything that frees disk
  * </pre>
@@ -123,6 +124,18 @@ import java.util.List;
  * {@code pins.deployments}: fail-closed still applies, and an unread pin skips it before the body
  * runs. It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
  * nightly dry figures are real figures, the same reasoning as {@code branches.sweep}.
+ *
+ * <p><b>{@code tags.sweep} decommissions git tags, on the platform's git host and on its backup
+ * twin alike.</b> qits-projects owns the repository catalogue and is the one peer that can reach
+ * both addresses, so it is the one asked, the same reasoning that put {@code repos.catalogue} and
+ * {@code branches.sweep} on their own owners. It carries every pin this run read — all SIX, the
+ * same {@code pins} object {@link #pinsBody} sends — because a tag can be the thing any one of them
+ * protects: a sha a deployment still serves, a version a dependency manifest references, or an
+ * image a launch would pull. {@code repos.catalogue} is the iteration set, the same role it plays
+ * for the branch sweep. Fail-closed applies to all seven edges alike: an unread pin, or an unread
+ * catalogue, skips the sweep before its body runs. It is not a {@code usage.after} dependency either
+ * — a decommissioned tag frees no docker disk — and it runs on a dry run too, the same reasoning as
+ * {@code branches.sweep} and {@code configuration.entries}.
  */
 @ApplicationScoped
 public class GcProcess implements TechnicalProcess {
@@ -146,6 +159,7 @@ public class GcProcess implements TechnicalProcess {
   static final String REPOS_CATALOGUE = "repos.catalogue";
   static final String BRANCHES_SWEEP = "branches.sweep";
   static final String CONFIGURATION_ENTRIES = "configuration.entries";
+  static final String TAGS_SWEEP = "tags.sweep";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
 
@@ -374,6 +388,28 @@ public class GcProcess implements TechnicalProcess {
                             entriesBody(context)),
                     answer -> GcSummaries.configurationEntries(answer.json()))),
         new StepDefinition(
+            TAGS_SWEEP,
+            "Decommissioned git tags",
+            PeerTarget.PROJECTS,
+            List.of(
+                PINS_DEPLOYMENTS,
+                PINS_CI,
+                PINS_DEPENDENCIES,
+                PINS_IMAGES,
+                PINS_WORKSPACES,
+                PINS_PROJECTS,
+                REPOS_CATALOGUE),
+            context ->
+                StepResult.of(
+                    context
+                        .peers()
+                        .post(
+                            PeerTarget.PROJECTS,
+                            "/projects/api/gc/tags",
+                            tagsSweepBody(context),
+                            config.tagsSweepCallTimeout()),
+                    answer -> GcSummaries.tagsSweep(answer.json()))),
+        new StepDefinition(
             ARTIFACTS_USAGE_AFTER,
             "Registry store after",
             PeerTarget.ARTIFACTS,
@@ -421,6 +457,17 @@ public class GcProcess implements TechnicalProcess {
    * without all six, so the absent case is the belt.
    */
   private static String pinsBody(RunContext context) {
+    ObjectNode body = JSON.createObjectNode();
+    body.set("pins", pinsObject(context));
+    return body.toString();
+  }
+
+  /**
+   * The six pin answers, re-embedded verbatim under the names qits-artifacts (and now
+   * qits-projects' tag sweep) take them by. Shared by every step that sends the whole pin set
+   * rather than a single source of it, so the six lines live in exactly one place.
+   */
+  private static ObjectNode pinsObject(RunContext context) {
     ObjectNode pins = JSON.createObjectNode();
     context.answer(PINS_DEPLOYMENTS).ifPresent(node -> pins.set("deployments", node));
     context.answer(PINS_CI).ifPresent(node -> pins.set("ciDaemon", node));
@@ -428,9 +475,7 @@ public class GcProcess implements TechnicalProcess {
     context.answer(PINS_IMAGES).ifPresent(node -> pins.set("configuredImages", node));
     context.answer(PINS_WORKSPACES).ifPresent(node -> pins.set("workspaceLaunches", node));
     context.answer(PINS_PROJECTS).ifPresent(node -> pins.set("projectLaunches", node));
-    ObjectNode body = JSON.createObjectNode();
-    body.set("pins", pins);
-    return body.toString();
+    return pins;
   }
 
   /**
@@ -530,6 +575,27 @@ public class GcProcess implements TechnicalProcess {
     ObjectNode body = JSON.createObjectNode();
     body.put("dryRun", context.dryRun());
     context.answer(PINS_DEPLOYMENTS).ifPresent(node -> body.set("deployments", node));
+    return body.toString();
+  }
+
+  /**
+   * The tag-decommission request:
+   *
+   * <pre>{@code {"dryRun":…, "pins": {"deployments":…, "ciDaemon":…, "dependencies":…,
+   * "configuredImages":…, "workspaceLaunches":…, "projectLaunches":…}}}</pre>
+   *
+   * <p><b>The same {@code pins} object {@link #pinsBody} sends, built by {@link #pinsObject} so the
+   * six lines live once.</b> A git tag can be the thing any one of the six protects — a sha a
+   * deployment still serves, a version a manifest references, an image a launch would pull — so
+   * qits-projects is handed every source rather than one, unlike {@link #entriesBody}'s single pin.
+   * A member this run could not read is simply absent, the same fail-closed discipline as the
+   * artifacts plan — but this step never runs with one missing, because all six pin reads are its
+   * declared dependencies.
+   */
+  private String tagsSweepBody(RunContext context) {
+    ObjectNode body = JSON.createObjectNode();
+    body.put("dryRun", context.dryRun());
+    body.set("pins", pinsObject(context));
     return body.toString();
   }
 
