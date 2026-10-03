@@ -40,7 +40,7 @@
          is meant to be edited by hand. Deliberately NOT a -SNAPSHOT: the image build resolves this
          reactor from source, so a snapshot coordinate would only invite a resolver to look for one
          in a repository that will never hold it. -->
-    <version>2026.1002.213129</version>
+    <version>2026.1003.64600</version>
     <packaging>pom</packaging>
     <name>qits-platform-orchestrator</name>
 
@@ -74,7 +74,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1002.104319</qits.eventstream.version>
+        <qits.eventstream.version>2026.1003.44717</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
