@@ -41,6 +41,8 @@ so what comes after it still runs.
 | `branches.sweep` | workspaces | `POST /workspaces/api/gc/branches {dryRun, repositories, keepPrefixes}` | repos.catalogue |
 | `configuration.entries` | configuration | `POST /configuration/api/gc/entries {dryRun, deployments}` | pins.deployments |
 | `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.images, pins.workspaces, pins.projects, repos.catalogue |
+| `claims.idp-clients` | deployments | `GET /deployments/api/claims/idp-clients` | — |
+| `idp.service-clients` | idp | `POST /idp/api/gc/service-clients {dryRun, claims}` — FAILED, no request, when the read answered no claims | claims.idp-clients |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
 | `usage.after` | containers | `GET /containers/api/gc/usage` | artifacts.sweep, containers.images, containers.volumes, containers.build-cache |
 
@@ -93,6 +95,16 @@ verbatim, the one pin its rule needs, and that is the step's only edge — the o
 answer a different tense that has no bearing on whether a configuration key is still declared. It
 frees no disk, so it hangs off neither `usage.after` plane, and it runs on a dry run too, the same
 reasoning as `branches.sweep`.
+
+**`idp.service-clients` deletes service clients nothing claims** (qits-878). qits-deployments
+provisions a qits-idp client for every application declaring an `idp:client` resource, and is the
+one service that knows which client ids are still claimed; `claims.idp-clients` reads them and the
+sweep hands the `claims` array to qits-idp verbatim, which judges what is unclaimed, what is still
+in its grace window and which client is the caller. A failed read skips the sweep (the edge); a read
+that answered ZERO claims is refused in the body rather than sent, because an empty claim set would
+condemn every service client — this service's own included. It runs on a dry run too (qits-idp
+honours the flag) and frees no disk, so it hangs off neither `usage.after` plane. qits-idp is
+reached with the same `qits` bearer as every other peer.
 
 **`tags.sweep` decommissions git tags, on the platform's git host and its backup twin alike.**
 qits-projects is the one peer that can reach both addresses, so it is the one asked, carrying the
@@ -216,6 +228,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.targets.workspaces-url` | `http://qits-workspaces:8080` | where branch semantics live |
 | `qits.orchestrator.targets.maintenance-url` | `http://qits-platform-maintenance:8080` | where the dependency pins are |
 | `qits.orchestrator.targets.configuration-url` | `http://qits-configuration:8080` | where the configured image pins are |
+| `qits.orchestrator.targets.idp-url` | `http://${QITS_ENVIRONMENT:dev}-qits-idp:8080` | where the service-client store is |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
 | `qits.orchestrator.gc.time-zone` | `UTC` | the zone the cron is read in (the platform's convention) |
@@ -251,7 +264,7 @@ this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_UR
 dev estate's `dev-qits-idp` alias and `dev-qits-orchestrator`). No configuration entry names any of
 the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
 PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
-every peer accepts it — so one client and one audience serve all eight calls, and what this service
+every peer accepts it — so one client and one audience serve all nine calls, and what this service
 may do at a peer is decided by its roles.
 
 One switch, `quarkus.oidc-client.qits.client-enabled`: shipped **true**, because every deployment
@@ -286,7 +299,7 @@ builds the client. `./mvnw test` needs neither — Quinoa is off in test mode.
 
 Integration tests are skipped by default. `-DskipITs=false` runs them against the fast-jar —
 `PackagedSurfaceIT`, and the five **user-story** classes that drive a whole gc run against an in-JVM
-stand-in for all eight peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
+stand-in for all nine peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
 builds the GraalVM binary (`.sdkmanrc` names `25.0.2-graalce`) and runs it against that.
 
 The stories reach nothing outside the JVM they run in, so they need no docker and no credentials

@@ -3,6 +3,7 @@ package eu.wohlben.qits.orchestrator.stories.faults;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,7 +51,7 @@ import org.junit.jupiter.api.BeforeAll;
  * apply to it.
  *
  * <p>So one story, one broken peer, and a diagram that says both halves at once: an arrow to
- * qits-ci carrying a 503, thirteen arrows to the peers that answered anyway, and <b>no arrow to
+ * qits-ci carrying a 503, fifteen arrows to the peers that answered anyway, and <b>no arrow to
  * qits-artifacts that would have deleted anything</b> — the plan and the sweep are simply not there.
  * The registry IS reached, once, by the store measurement that needs no pin, so the honest claim is
  * about which calls are missing rather than about which peer is untouched; a presence check cannot
@@ -59,7 +60,7 @@ import org.junit.jupiter.api.BeforeAll;
  * <h2>How the peer is broken</h2>
  *
  * <p>{@link StoryPeers#refuse} is the one piece of state in the stand-in, and the class javadoc over
- * there says why it has to be state here and can be a path elsewhere: a gc run's seventeen paths are
+ * there says why it has to be state here and can be a path elsewhere: a gc run's nineteen paths are
  * fixed by {@code GcProcess.steps()} and identical in every run, so "qits-ci is down tonight" cannot be
  * spelled as a url the story addresses. It is armed inside a {@code try} and cleared in a {@code
  * finally}, and cleared again in {@code @AfterEach} — a refusal that outlived its story would be a
@@ -77,6 +78,11 @@ public class PeerFailureIT {
       "A pin nobody could read deletes nothing, and stops nothing that needs no pin";
 
   static final String FAIL_CLOSED_SLUG = Slugs.slug(FAIL_CLOSED);
+
+  static final String CLAIMS_UNREAD =
+      "A claim set nobody could read removes no service client";
+
+  static final String CLAIMS_UNREAD_SLUG = Slugs.slug(CLAIMS_UNREAD);
 
   @BeforeAll
   static void tapBothEndsOfTheNetwork() {
@@ -112,7 +118,7 @@ public class PeerFailureIT {
       A skipped step names the step that actually FAILED rather than the skipped neighbour in
       between, so a reader does not have to walk the graph backwards to find the cause. And the
       whole of what "fail-closed" means is visible on the diagram rather than described: one arrow
-      to qits-ci carrying its 503, thirteen arrows to the peers that answered, and not one arrow to
+      to qits-ci carrying its 503, fifteen arrows to the peers that answered, and not one arrow to
       qits-artifacts that would have deleted anything — the registry is read for its size and asked
       for nothing else.
       """)
@@ -196,7 +202,10 @@ public class PeerFailureIT {
         .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SUCCEEDED"))
         // configuration.entries depends on pins.deployments alone, which answered — so qits-ci's
         // 503 leaves it untouched too, the same "only what needs a pin waits for one" shape.
-        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"));
+        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"))
+        // …and the service-client sweep waits on the deployer's claims alone, which no pin touches.
+        .body(StoryRuns.stepPath("claims.idp-clients") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SUCCEEDED"));
     story
         .note(
             "everything that needed no pin ran anyway: 12.6 GB of build cache reclaimed, orphan"
@@ -227,6 +236,79 @@ public class PeerFailureIT {
         .as("failure-skip-cascades");
   }
 
+  @UserStory(value = CLAIMS_UNREAD, category = CATEGORY)
+  @UserStoryDescription(
+      """
+      qits-deployments is the one service that knows which service clients are still claimed — every
+      application that declares an idp:client resource holds one — and tonight its claims read
+      answers 503. A claim set nobody could read is not an empty claim set: to qits-idp an empty
+      one would mean nothing is claimed, and every service client on the platform, this
+      orchestrator's own included, would be condemned.
+
+      So the sweep is skipped before its body runs, naming the read that failed, and qits-idp is
+      not asked for anything at all — the diagram has no arrow to it. The run is FAILED, because a
+      peer that could not be read is a failure. Everything else the night does needs no claim and
+      runs as it always does: the pins are read, the registry is planned and swept, the host is
+      pruned, branches and tags are swept and both stores are measured again.
+      """)
+  @UserflowRunsAfter(GarbageCollectionRunIT.class)
+  void anUnreadClaimSetSkipsTheServiceClientSweepAndAsksQitsIdpForNothing(Interactions story) {
+    NetworkCapture.actor(StoryIdentities.OPERATOR);
+
+    String id;
+    JsonPath run;
+    StoryPeers.refuse(StoryPeers.CLAIMS_PATH);
+    try {
+      story
+          .note("qits-deployments' idp-client claims answer 503 tonight")
+          .as("claims-are-down");
+      id = StoryRuns.start(operator(), false);
+      run = StoryRuns.detail(operator(), id);
+    } finally {
+      StoryPeers.answerNormally();
+    }
+
+    assertEquals(
+        "FAILED", run.getString("status"), "an unread claim set must fail the run: " + run.prettify());
+    operator()
+        .get()
+        .when()
+        .get(StoryTarget.runPath(id))
+        .then()
+        .statusCode(200)
+        .body(StoryRuns.stepPath("claims.idp-clients") + ".status", equalTo("FAILED"))
+        .body(
+            StoryRuns.stepPath("claims.idp-clients") + ".httpStatus",
+            equalTo(StoryPeers.REFUSED_STATUS))
+        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SKIPPED"))
+        .body(
+            StoryRuns.stepPath("idp.service-clients") + ".error",
+            equalTo("skipped: claims.idp-clients failed"))
+        .body(StoryRuns.stepPath("idp.service-clients") + ".request", nullValue());
+    story
+        .note(
+            "the service-client sweep is SKIPPED before its body runs, naming claims.idp-clients —"
+                + " and it made no request: an unread claim set is never sent as an empty one")
+        .as("sweep-skipped");
+
+    operator()
+        .get()
+        .when()
+        .get(StoryTarget.runPath(id))
+        .then()
+        .statusCode(200)
+        .body(StoryRuns.stepPath("artifacts.sweep") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("tags.sweep") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("usage.after") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("artifacts.usage.after") + ".status", equalTo("SUCCEEDED"));
+    story
+        .note(
+            "nothing else waits on a claim: the registry, the host, branches and tags are all"
+                + " collected and both stores measured again")
+        .as("rest-of-the-night-runs");
+  }
+
   @AfterAll
   static void theFailClosedStoryIsComplete() {
     ReportAssertions.assertComplete(CATEGORY_SLUG, FAIL_CLOSED_SLUG, UserflowReport.PASSED);
@@ -245,7 +327,7 @@ public class PeerFailureIT {
 
     // The broken peer, drawn with the status it answered — evidence rather than a claim.
     to(StoryPeers.CI, StoryPeers.label("GET", StoryPeers.DAEMON_PATH, StoryPeers.REFUSED_STATUS));
-    // …and the thirteen calls that happened anyway. Each store was measured once rather than twice,
+    // …and the fifteen calls that happened anyway. Each store was measured once rather than twice,
     // because both after-steps were skipped — it is the same label either way, so the count is what
     // says so and the step assertions above are what make it readable.
     to(StoryPeers.CONTAINERS, StoryPeers.read(StoryPeers.USAGE_PATH));
@@ -263,6 +345,9 @@ public class PeerFailureIT {
     // configuration.entries only waits on pins.deployments, which answered — qits-ci's 503 does
     // not touch it.
     to(StoryPeers.CONFIGURATION, StoryPeers.written(StoryPeers.CONFIGURATION_ENTRIES_PATH));
+    // The service-client sweep waits on the claims read alone, which answered.
+    to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.CLAIMS_PATH));
+    to(StoryPeers.IDP, StoryPeers.written(StoryPeers.SERVICE_CLIENTS_PATH));
 
     // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES reached the registry — not the
     // plan, not the sweep — because a pin that protects it could not be read. The registry is
@@ -276,13 +361,36 @@ public class PeerFailureIT {
                 edge ->
                     StoryPeers.ARTIFACTS.equals(edge.to()) && edge.label().contains("/gc/")),
         () -> "a collection call reached the registry without its pins: " + report.network());
-    // Two in, fourteen out. The credential was minted an hour ago by the first run of the
+    // Two in, sixteen out. The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 16);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 18);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,
+        List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
+
+    // --- the unread claim set ------------------------------------------------------------------
+    ReportAssertions.assertComplete(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, UserflowReport.PASSED);
+    for (String step : List.of("claims-are-down", "sweep-skipped", "rest-of-the-night-runs")) {
+      ReportAssertions.assertStepId(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, step);
+    }
+    ReportAssertions.assertEdge(
+        CATEGORY_SLUG,
+        CLAIMS_UNREAD_SLUG,
+        NetworkEdge.HTTP,
+        StoryTarget.SERVICE,
+        StoryPeers.DEPLOYMENTS,
+        StoryPeers.label("GET", StoryPeers.CLAIMS_PATH, StoryPeers.REFUSED_STATUS));
+    // THE CLAIM. Not one request reached qits-idp — no sweep, and no token either: the credential
+    // was minted by the first run of the catalogue and is cached for the hour.
+    ReportAssertions.assertNoEdgesTo(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, StoryPeers.IDP);
+    // Two in, eighteen out: the seventeen calls that need no claim, the claims read as its 503 —
+    // and no service-client sweep.
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 20);
+    ReportAssertions.assertOnlyEdgesFrom(
+        CATEGORY_SLUG,
+        CLAIMS_UNREAD_SLUG,
         List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
   }
 

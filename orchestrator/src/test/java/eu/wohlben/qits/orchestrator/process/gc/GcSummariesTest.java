@@ -236,4 +236,92 @@ class GcSummariesTest {
         "0 launch images — what an agent/refinement start would pull today",
         GcSummaries.projectLaunchPins(json("{\"message\":\"forbidden\"}")));
   }
+
+  @Test
+  void theClaimsReadCountsClaimsAndTheApplicationsHoldingThem() {
+    assertEquals(
+        "3 service-client claims across 2 applications",
+        GcSummaries.idpClientClaims(
+            json(
+                """
+                {"claims":[
+                  {"clientId":"dev-qits-ci","applicationName":"qits-ci","environmentName":"dev",
+                   "createdAt":"2026-09-01T00:00:00Z"},
+                  {"clientId":"prod-qits-ci","applicationName":"qits-ci","environmentName":"prod",
+                   "createdAt":"2026-09-01T00:00:00Z"},
+                  {"clientId":"dev-qits-orchestrator","applicationName":"qits-orchestrator",
+                   "environmentName":"dev","createdAt":"2026-09-02T00:00:00Z"}]}
+                """)));
+    assertEquals(
+        "1 service-client claim across 1 application",
+        GcSummaries.idpClientClaims(
+            json("{\"claims\":[{\"clientId\":\"a\",\"applicationName\":\"qits-a\"}]}")));
+  }
+
+  @Test
+  void aClaimsAnswerWithNoClaimsInItIsStillASentence() {
+    assertEquals(
+        "0 service-client claims across 0 applications", GcSummaries.idpClientClaims(null));
+    assertEquals(
+        "0 service-client claims across 0 applications",
+        GcSummaries.idpClientClaims(json("{\"message\":\"nope\"}")));
+  }
+
+  @Test
+  void theServiceClientSweepNamesWhatItRemovedAndCountsWhatItKeptByReason() {
+    assertEquals(
+        "removed 2 service clients (dev-qits-old, dev-qits-gone); kept 3 (claimed 1, grace 1,"
+            + " caller 1)",
+        GcSummaries.idpServiceClients(
+            json(
+                """
+                {"dryRun":false,
+                 "removed":[
+                   {"clientId":"dev-qits-old","createdAt":"2026-08-01T00:00:00Z",
+                    "createdBy":"qits-deployments","reason":"unclaimed"},
+                   {"clientId":"dev-qits-gone","createdAt":"2026-08-02T00:00:00Z",
+                    "createdBy":"qits-deployments","reason":"unclaimed"}],
+                 "kept":[
+                   {"clientId":"dev-qits-ci","createdAt":"2026-08-01T00:00:00Z",
+                    "createdBy":"qits-deployments","reason":"claimed"},
+                   {"clientId":"dev-qits-new","createdAt":"2026-10-03T00:00:00Z",
+                    "createdBy":"qits-deployments","reason":"grace"},
+                   {"clientId":"dev-qits-orchestrator","createdAt":"2026-08-01T00:00:00Z",
+                    "createdBy":"qits-deployments","reason":"caller"}],
+                 "keptCounts":{"claimed":1,"grace":1,"caller":1}}
+                """)));
+  }
+
+  @Test
+  void theServiceClientSweepOnADryRunSaysWouldRemoveAndNamesAtMostFive() {
+    assertEquals(
+        "would remove 7 service clients (c1, c2, c3, c4, c5, …); kept 0 (claimed 0, grace 0,"
+            + " caller 0)",
+        GcSummaries.idpServiceClients(
+            json(
+                """
+                {"dryRun":true,
+                 "removed":[{"clientId":"c1"},{"clientId":"c2"},{"clientId":"c3"},
+                            {"clientId":"c4"},{"clientId":"c5"},{"clientId":"c6"},
+                            {"clientId":"c7"}],
+                 "kept":[],"keptCounts":{"claimed":0,"grace":0,"caller":0}}
+                """)));
+    assertEquals(
+        "would remove 1 service client (c1); kept 2 (claimed 2, grace 0, caller 0)",
+        GcSummaries.idpServiceClients(
+            json(
+                """
+                {"dryRun":true,"removed":[{"clientId":"c1"}],
+                 "kept":[{"clientId":"k1"},{"clientId":"k2"}],
+                 "keptCounts":{"claimed":2,"grace":0,"caller":0}}
+                """)));
+  }
+
+  @Test
+  void aServiceClientAnswerThisReaderDoesNotRecogniseIsStillASentence() {
+    assertEquals("no service-client report in the answer", GcSummaries.idpServiceClients(null));
+    assertEquals(
+        "removed 0 service clients; kept 0 (claimed 0, grace 0, caller 0)",
+        GcSummaries.idpServiceClients(json("{\"message\":\"never swept\"}")));
+  }
 }

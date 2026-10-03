@@ -40,6 +40,17 @@ public record StepResult(
   }
 
   /**
+   * A step that refused to make its call because what it would have sent is not evidence — an
+   * empty keep-set handed to a deleter, for one.
+   *
+   * <p><b>FAILED, not skipped</b>: nothing went as asked, and a run that quietly did nothing is
+   * the outcome a reader most needs to see. There is no request beside it, because none was made.
+   */
+  public static StepResult refused(String reason) {
+    return new StepResult(RunStatus.FAILED, null, null, null, reason, null);
+  }
+
+  /**
    * A step whose dependency FAILED, so it could not honestly run.
    *
    * <p>The executor's own, not a body's. {@code origin} is the step that actually failed rather

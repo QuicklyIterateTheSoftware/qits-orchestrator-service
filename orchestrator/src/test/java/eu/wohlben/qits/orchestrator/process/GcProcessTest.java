@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the nineteen steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the twenty-one steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -55,6 +55,8 @@ class GcProcessTest {
   private static final String BRANCHES = "/workspaces/api/gc/branches";
   private static final String ENTRIES = "/configuration/api/gc/entries";
   private static final String TAGS = "/projects/api/gc/tags";
+  private static final String CLAIMS = "/deployments/api/claims/idp-clients";
+  private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
 
   @Inject RunExecutor executor;
 
@@ -218,6 +220,28 @@ class GcProcessTest {
              "kept":{"newest":2,"pinnedVersion":2,"gitlink":1,"inFlight":0,"young":3},
              "errors":[]}
             """));
+    peers.answer(
+        CLAIMS,
+        FakePeers.Scripted.ok(
+            """
+            {"claims":[{"clientId":"dev-qits-ci","applicationName":"qits-ci",
+                        "environmentName":"dev","createdAt":"2026-09-01T10:00:00Z"},
+                       {"clientId":"dev-qits-orchestrator","applicationName":"qits-orchestrator",
+                        "environmentName":"dev","createdAt":"2026-09-02T10:00:00Z"}]}
+            """));
+    peers.answer(
+        SERVICE_CLIENTS,
+        FakePeers.Scripted.ok(
+            """
+            {"dryRun":false,
+             "removed":[{"clientId":"dev-qits-retired","createdAt":"2026-08-01T10:00:00Z",
+                         "createdBy":"qits-deployments","reason":"unclaimed"}],
+             "kept":[{"clientId":"dev-qits-ci","createdAt":"2026-09-01T10:00:00Z",
+                      "createdBy":"qits-deployments","reason":"claimed"},
+                     {"clientId":"dev-qits-orchestrator","createdAt":"2026-09-02T10:00:00Z",
+                      "createdBy":"qits-deployments","reason":"caller"}],
+             "keptCounts":{"claimed":1,"grace":0,"caller":1}}
+            """));
   }
 
   /**
@@ -274,7 +298,7 @@ class GcProcessTest {
   }
 
   @Test
-  void aHealthyPlatformRunsAllNineteenStepsAndSummarisesEachFromTheAnswer() {
+  void aHealthyPlatformRunsAllTwentyOneStepsAndSummarisesEachFromTheAnswer() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
@@ -300,6 +324,8 @@ class GcProcessTest {
             "branches.sweep",
             "configuration.entries",
             "tags.sweep",
+            "claims.idp-clients",
+            "idp.service-clients",
             "artifacts.usage.after",
             "usage.after"),
         runs.steps(id).stream().map(step -> step.stepId).toList());
@@ -347,6 +373,11 @@ class GcProcessTest {
         "1 tags decommissioned across 2 repositories (1 host, 1 twin); kept: newest 2,"
             + " pinnedVersion 2, gitlink 1, inFlight 0, young 3; 0 errors",
         steps.get("tags.sweep").summary);
+    assertEquals(
+        "2 service-client claims across 2 applications", steps.get("claims.idp-clients").summary);
+    assertEquals(
+        "removed 1 service client (dev-qits-retired); kept 2 (claimed 1, grace 0, caller 1)",
+        steps.get("idp.service-clients").summary);
 
     // The url is the shipped target plus the shipped path — a wrong peer would fail here. The host
     // is the derived dev-qits-<alias> form (no QITS_ENVIRONMENT in this suite, so the `dev`
@@ -382,6 +413,101 @@ class GcProcessTest {
     assertEquals(
         "http://dev-qits-projects:8080/projects/api/gc/tags", steps.get("tags.sweep").requestUrl);
     assertEquals("POST", steps.get("tags.sweep").requestMethod);
+    // The claims are read from the deployer, the sweep is asked of qits-idp — the ninth target.
+    assertEquals(
+        "http://dev-qits-deployments:8080/deployments/api/claims/idp-clients",
+        steps.get("claims.idp-clients").requestUrl);
+    assertEquals("GET", steps.get("claims.idp-clients").requestMethod);
+    assertEquals(
+        "http://dev-qits-idp:8080/idp/api/gc/service-clients",
+        steps.get("idp.service-clients").requestUrl);
+    assertEquals("POST", steps.get("idp.service-clients").requestMethod);
+  }
+
+  @Test
+  void theServiceClientSweepDependsOnTheClaimsReadAloneAndEmbedsTheClaimsVerbatim() {
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(
+        "claims.idp-clients",
+        runs.steps(id).stream()
+            .filter(step -> "idp.service-clients".equals(step.stepId))
+            .findFirst()
+            .orElseThrow()
+            .dependsOn);
+
+    JsonNode body = json(peers.bodiesFor(SERVICE_CLIENTS).getFirst());
+    assertFalse(body.get("dryRun").asBoolean());
+    // The deployer's claims array, unchanged — every field of every row, re-embedded rather than
+    // projected onto a list of ids.
+    assertEquals(
+        json(
+            """
+            [{"clientId":"dev-qits-ci","applicationName":"qits-ci",
+              "environmentName":"dev","createdAt":"2026-09-01T10:00:00Z"},
+             {"clientId":"dev-qits-orchestrator","applicationName":"qits-orchestrator",
+              "environmentName":"dev","createdAt":"2026-09-02T10:00:00Z"}]
+            """),
+        body.get("claims"));
+    assertEquals(2, body.size(), "the body is dryRun and claims, nothing else: " + body);
+  }
+
+  @Test
+  void aBrokenClaimsReadSkipsTheServiceClientSweepAndAsksQitsIdpForNothing() {
+    peers.answer(CLAIMS, FakePeers.Scripted.unreachable("qits-deployments: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    Map<String, OpStep> steps = stepsOf(id);
+    assertEquals(RunStatus.FAILED.name(), steps.get("claims.idp-clients").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("idp.service-clients").status);
+    assertEquals("skipped: claims.idp-clients failed", steps.get("idp.service-clients").error);
+    assertNull(steps.get("idp.service-clients").requestUrl);
+    assertTrue(
+        peers.bodiesFor(SERVICE_CLIENTS).isEmpty(),
+        "no service client may be swept against claims nobody could read");
+    // Nothing else waits on the claims: every other deleter and both closing measurements ran.
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("tags.sweep").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("configuration.entries").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("usage.after").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("artifacts.usage.after").status);
+  }
+
+  @Test
+  void aClaimsReadThatAnsweredNoClaimsIsRefusedRatherThanSentAsAnEmptyList() {
+    // The read SUCCEEDED, so the edge lets the sweep run — and the body is what refuses: to qits-idp
+    // an empty claim set means nothing is claimed, which would condemn every service client.
+    peers.answer(CLAIMS, FakePeers.Scripted.ok("{\"claims\":[]}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    Map<String, OpStep> steps = stepsOf(id);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("claims.idp-clients").status);
+    assertEquals(
+        "0 service-client claims across 0 applications", steps.get("claims.idp-clients").summary);
+    assertEquals(RunStatus.FAILED.name(), steps.get("idp.service-clients").status);
+    assertTrue(
+        steps.get("idp.service-clients").error.contains("answered no claims"),
+        steps.get("idp.service-clients").error);
+    assertNull(steps.get("idp.service-clients").requestUrl);
+    assertTrue(peers.bodiesFor(SERVICE_CLIENTS).isEmpty(), "an empty claim set must never be sent");
+  }
+
+  @Test
+  void aClaimsAnswerWithNoClaimsArrayIsRefusedTheSameWay() {
+    peers.answer(CLAIMS, FakePeers.Scripted.ok("{\"message\":\"not the claims document\"}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    Map<String, OpStep> steps = stepsOf(id);
+    assertEquals(RunStatus.FAILED.name(), steps.get("idp.service-clients").status);
+    assertTrue(peers.bodiesFor(SERVICE_CLIENTS).isEmpty(), "a missing claim set must never be sent");
   }
 
   @Test
@@ -639,6 +765,10 @@ class GcProcessTest {
     // dry run and deletes nothing.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("tags.sweep").status);
     assertTrue(json(peers.bodiesFor(TAGS).getFirst()).get("dryRun").asBoolean());
+    // NOR IS THE SERVICE-CLIENT SWEEP: qits-idp honours dryRun itself, so a dry night still reports
+    // which clients it would have removed.
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("idp.service-clients").status);
+    assertTrue(json(peers.bodiesFor(SERVICE_CLIENTS).getFirst()).get("dryRun").asBoolean());
   }
 
   @Test

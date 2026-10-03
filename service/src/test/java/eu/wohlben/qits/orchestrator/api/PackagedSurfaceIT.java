@@ -134,6 +134,8 @@ public class PackagedSurfaceIT {
       // (2026-09-04): what repositories' mains reference, and what a launch would pull.
       overrides.put("qits.orchestrator.targets.maintenance-url", dead);
       overrides.put("qits.orchestrator.targets.configuration-url", dead);
+      // idp is the service-client sweep's peer (qits-878).
+      overrides.put("qits.orchestrator.targets.idp-url", dead);
       // The clock must not start a run beside the one this IT starts itself.
       overrides.put("quarkus.scheduler.enabled", "false");
       return overrides;
@@ -202,11 +204,12 @@ public class PackagedSurfaceIT {
         .get("/orchestrator/api/runs/" + id)
         .then()
         .statusCode(200)
-        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — nineteen since
-        // tags.sweep was added (qits-591), the same count ProcessApiTest and the userflow IT pin.
+        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — twenty-one since
+        // the service-client sweep was added (qits-878), the same count ProcessApiTest and the
+        // userflow IT pin.
         // Step 0 is the first peer read and fails against a dead port; step 8 (the registry plan)
         // depends on all six pin reads and is skipped fail-closed when they do.
-        .body("steps.size()", Matchers.equalTo(19))
+        .body("steps.size()", Matchers.equalTo(21))
         .body("steps[0].status", Matchers.equalTo("FAILED"))
         .body("steps[0].error", Matchers.containsString("could not be called"))
         .body("steps[8].status", Matchers.equalTo("SKIPPED"))
@@ -216,7 +219,7 @@ public class PackagedSurfaceIT {
     // out of the postgres this JVM handed the process through ${QITS_RESOURCE_DB_URL}. That is the
     // whole claim: the shipped expression resolved, and Flyway's migration survived as a classpath
     // resource — exactly the shape a native image drops.
-    assertTrue(stepRows(id) == 19, "the packaged process must have written its steps");
+    assertTrue(stepRows(id) == 21, "the packaged process must have written its steps");
   }
 
   @Test

@@ -110,6 +110,17 @@ class ProcessApiTest {
                 + "\"twin\":true}],"
                 + "\"kept\":{\"newest\":0,\"pinnedVersion\":1,\"gitlink\":0,\"inFlight\":0,"
                 + "\"young\":0},\"errors\":[]}"));
+    peers.answer(
+        "/deployments/api/claims/idp-clients",
+        FakePeers.Scripted.ok(
+            "{\"claims\":[{\"clientId\":\"dev-qits-ci\",\"applicationName\":\"qits-ci\","
+                + "\"environmentName\":\"dev\",\"createdAt\":\"2026-09-01T10:00:00Z\"}]}"));
+    peers.answer(
+        "/idp/api/gc/service-clients",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"removed\":[],"
+                + "\"kept\":[{\"clientId\":\"dev-qits-ci\",\"reason\":\"claimed\"}],"
+                + "\"keptCounts\":{\"claimed\":1,\"grace\":0,\"caller\":0}}"));
   }
 
   /** Starts a run and returns its id. */
@@ -155,7 +166,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(19))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(21))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -201,8 +212,16 @@ class ProcessApiTest {
                 "pins.workspaces",
                 "pins.projects",
                 "repos.catalogue"))
-        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("artifacts.usage.after"))
-        .body("find { it.kind == 'gc' }.steps[17].dependsOn", contains("artifacts.sweep"));
+        // The service-client sweep (qits-878): claims read from the deployer, the ninth peer asked to
+        // delete what nothing claims — and the read is its only edge.
+        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("claims.idp-clients"))
+        .body("find { it.kind == 'gc' }.steps[17].target", equalTo("deployments"))
+        .body("find { it.kind == 'gc' }.steps[17].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'gc' }.steps[18].id", equalTo("idp.service-clients"))
+        .body("find { it.kind == 'gc' }.steps[18].target", equalTo("idp"))
+        .body("find { it.kind == 'gc' }.steps[18].dependsOn", contains("claims.idp-clients"))
+        .body("find { it.kind == 'gc' }.steps[19].id", equalTo("artifacts.usage.after"))
+        .body("find { it.kind == 'gc' }.steps[19].dependsOn", contains("artifacts.sweep"));
   }
 
   @Test
@@ -238,7 +257,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(19))
+        .body("steps.size()", equalTo(21))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -292,12 +311,24 @@ class ProcessApiTest {
         .body("steps[16].request.body", containsString("\"dryRun\":true"))
         .body("steps[16].request.body", containsString("\"applicationName\":\"qits-ci\""))
         .body("steps[16].summary", containsString("tags decommissioned"))
+        // idp.service-clients is not withheld either — qits-idp honours dryRun itself — and it
+        // carries the deployer's claims array as it arrived.
+        .body("steps[17].id", equalTo("claims.idp-clients"))
+        .body("steps[17].status", equalTo("SUCCEEDED"))
+        .body("steps[18].id", equalTo("idp.service-clients"))
+        .body("steps[18].status", equalTo("SUCCEEDED"))
+        .body("steps[18].request.method", equalTo("POST"))
+        .body(
+            "steps[18].request.url",
+            equalTo("http://dev-qits-idp:8080/idp/api/gc/service-clients"))
+        .body("steps[18].request.body", containsString("\"dryRun\":true"))
+        .body("steps[18].request.body", containsString("\"clientId\":\"dev-qits-ci\""))
         // The registry's own measurement, taken twice like the host's — the plane a `docker system
         // df` receipt cannot see.
-        .body("steps[17].id", equalTo("artifacts.usage.after"))
-        .body("steps[17].status", equalTo("SUCCEEDED"))
+        .body("steps[19].id", equalTo("artifacts.usage.after"))
+        .body("steps[19].status", equalTo("SUCCEEDED"))
         .body(
-            "steps[17].request.url",
+            "steps[19].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
   }
 

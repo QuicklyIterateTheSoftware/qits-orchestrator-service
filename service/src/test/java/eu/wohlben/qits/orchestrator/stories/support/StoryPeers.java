@@ -19,7 +19,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * <b>The eight services a gc run drives, and the ninth it borrows a credential from</b> — one
+ * <b>The nine services a gc run drives — the ninth, qits-idp, also the one it borrows a credential
+ * from</b> — one
  * in-JVM stub impersonating all of them, plus the <b>outgoing</b> tap that draws what the launched
  * process asked each one.
  *
@@ -27,7 +28,7 @@ import java.util.Optional;
  *
  * <p>A technical process only SENDS REQUESTS. Everything it does happens on the far side of a
  * socket from this JVM, so a story that wanted to show what a run actually did has exactly one
- * source of evidence: the record each far side keeps of being asked. There are eight of them, and
+ * source of evidence: the record each far side keeps of being asked. There are nine of them, and
  * every one is a decision written down in {@code qits-orchestrator-plan.md}:
  *
  * <pre>
@@ -48,6 +49,8 @@ import java.util.Optional;
  * branches.sweep               qits-workspaces               POST /workspaces/api/gc/branches
  * configuration.entries        qits-configuration            POST /configuration/api/gc/entries
  * tags.sweep                   qits-projects                 POST /projects/api/gc/tags
+ * claims.idp-clients           qits-platform-deployments     GET  /deployments/api/claims/idp-clients
+ * idp.service-clients          qits-idp                      POST /idp/api/gc/service-clients
  * </pre>
  *
  * <p><b>One process impersonates all of them, and the diagram is drawn from the PATH.</b> The eight
@@ -56,7 +59,8 @@ import java.util.Optional;
  * the peer by. Nothing about the evidence changes — direction, method, path and status are what an
  * edge is — and eight servers would only be seven more ports to park.
  *
- * <p><b>The ninth is qits-idp</b>, {@code POST /idp/token}: the outbound half of this
+ * <p><b>qits-idp is drawn twice over, as one node.</b> {@code POST /idp/api/gc/service-clients} is a
+ * peer call like the others (ticket qits-878); {@code POST /idp/token} is the outbound half of this
  * service's identity, which the one named oidc client, {@code qits}, presents to every peer alike
  * (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C4 — one client replaced eight, one per peer,
  * before it). It draws as the same node {@link MockIdp} does, because it is the same component —
@@ -72,7 +76,7 @@ import java.util.Optional;
  * <p>The exception is {@link #refuse}, and it exists because <b>no story-controlled value reaches a
  * peer path here</b>. In a repository whose peers are addressed per subject ({@code
  * …/applications/story-misconfigured/resolved}) a refusal can be keyed on the name in the url, and
- * being unreadable is then what that name MEANS. A gc run's seventeen paths are fixed by {@code
+ * being unreadable is then what that name MEANS. A gc run's nineteen paths are fixed by {@code
  * GcProcess.steps()} and identical in every run, so "this peer is down tonight" cannot be spelled
  * as a path. It is spelled as a file instead — written by the one story about a broken peer, in a
  * {@code try}/{@code finally} that always clears it, wiped again when the stub starts, and read
@@ -97,8 +101,8 @@ import java.util.Optional;
  * <p>quarkus-oidc-client caches the token it acquires and re-mints only when it expires, so the
  * {@code POST /idp/token} arrow belongs to the <b>first run of the whole catalogue</b> and to no
  * other. That is a real property of this service rather than an artefact here: {@code PeerTokens}
- * holds one {@code TokensHelper} for the one named client precisely so that a nineteen-step run is
- * not nineteen token requests.
+ * holds one {@code TokensHelper} for the one named client precisely so that a twenty-one-step run is
+ * not twenty-one token requests.
  *
  * <p>What this stand-in chooses is only that the horizon is the whole run: the token says {@code
  * expires_in: 3600}, so the mint lands in exactly one story and every other story's edge count is
@@ -144,12 +148,16 @@ public final class StoryPeers {
   /** The configured container image versions the NEXT deploy of a launching service would get. */
   public static final String CONFIGURATION = "qits-configuration";
 
-  /** The identity provider — here as the outbound token endpoint. Same node {@link MockIdp} is. */
+  /**
+   * The identity provider — the outbound token endpoint, and the service-client sweep's peer. Same
+   * node {@link MockIdp} is.
+   */
   public static final String IDP = MockIdp.SERVICE_NAME;
 
   /** Every peer, for the negative claims a refusal story makes about all of them at once. */
   public static final List<String> ALL =
-      List.of(CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, CONFIGURATION);
+      List.of(
+          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, CONFIGURATION, IDP);
 
   // --- the paths, exactly as GcProcess spells them --------------------------------------------
 
@@ -171,6 +179,14 @@ public final class StoryPeers {
   public static final String CONFIGURATION_ENTRIES_PATH = "/configuration/api/gc/entries";
   public static final String TAGS_SWEEP_PATH = "/projects/api/gc/tags";
   public static final String TOKEN_PATH = "/idp/token";
+  public static final String CLAIMS_PATH = "/deployments/api/claims/idp-clients";
+  public static final String SERVICE_CLIENTS_PATH = "/idp/api/gc/service-clients";
+
+  /** The one service client the claims answer names — the orchestrator's own. */
+  public static final String CLAIMED_CLIENT = "dev-qits-orchestrator";
+
+  /** The service client nothing claims, which qits-idp reports removing. */
+  public static final String UNCLAIMED_CLIENT = "dev-qits-retired";
 
   // --- the figures the stories read back out of a summary -------------------------------------
 
@@ -414,6 +430,26 @@ public final class StoryPeers {
               + "\",\"tag\":\"2026.814.090000\",\"host\":true,\"twin\":true}],"
               + "\"kept\":{\"newest\":0,\"pinnedVersion\":1,\"gitlink\":0,\"inFlight\":0,"
               + "\"young\":0},\"errors\":[]}";
+      // The deployer's idp-client claims: the orchestrator's own client, the one claim a live
+      // platform always has.
+      case CLAIMS_PATH ->
+          "{\"claims\":[{\"clientId\":\""
+              + CLAIMED_CLIENT
+              + "\",\"applicationName\":\""
+              + PINNED_APPLICATION
+              + "\",\"environmentName\":\"dev\",\"createdAt\":\"2026-09-01T10:00:00Z\"}]}";
+      case SERVICE_CLIENTS_PATH ->
+          "{\"dryRun\":"
+              + dryRun
+              + ",\"removed\":[{\"clientId\":\""
+              + UNCLAIMED_CLIENT
+              + "\",\"createdAt\":\"2026-08-01T10:00:00Z\",\"createdBy\":\"qits-deployments\","
+              + "\"reason\":\"unclaimed\"}],"
+              + "\"kept\":[{\"clientId\":\""
+              + CLAIMED_CLIENT
+              + "\",\"createdAt\":\"2026-09-01T10:00:00Z\",\"createdBy\":\"qits-deployments\","
+              + "\"reason\":\"caller\"}],"
+              + "\"keptCounts\":{\"claimed\":0,\"grace\":0,\"caller\":1}}";
       // An hour, so the mints land in exactly one story of the run — see the class javadoc.
       case TOKEN_PATH ->
           "POST".equals(method)
@@ -554,7 +590,7 @@ public final class StoryPeers {
             Labels.scrub(fields[0] + " " + fields[1] + " -> " + fields[2])));
   }
 
-  /** Which peer a path belongs to — the whole of how one stub draws as seven. */
+  /** Which peer a path belongs to — the whole of how one stub draws as nine. */
   private static String peer(String path) {
     if (path.startsWith("/containers/")) {
       return CONTAINERS;
