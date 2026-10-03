@@ -9,7 +9,7 @@
 # has a declaration that does not list the key. Without this file nothing of this application is
 # flagged, so its dead entries cannot be seen or removed from the configuration UI. Every key below
 # is still read by this service. Any stored entry NOT listed here is one this service no longer
-# reads, and a person may remove it (service-client-identity-plan.md, C9 and C10).
+# reads, and a person may remove it (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C9 and C10).
 #
 # THE LIST MUST BE COMPLETE. A key missing here is flagged orphaned while it is still needed, and the
 # UI invites a person to delete it. Add a key here in the same commit that starts reading it.
@@ -20,27 +20,28 @@
 # `string`s, not `serviceAddress`: a serviceAddress is rendered by the platform and ignores the
 # stored value, so declaring one would change what the container gets.
 #
-# THE `qits` CLIENT'S FALLBACK KEYS STAY UNTIL THE CUTOVER. The one named oidc client `qits` reads
-# QITS_RESOURCE_IDP_* first and falls back to the OLD `artifacts` client's env names
-# (QUARKUS_OIDC_CLIENT_ARTIFACTS_*, see orchestrator/.../META-INF/microprofile-config.properties).
-# Those four are declared below because live runs still mint through them. After this service
-# declares `resources: idp:client` and that release is live, they are inert and a later change
-# removes them from this file.
-#
 # DELIBERATELY NOT HERE, AND A PERSON MAY DELETE THESE STORED ENTRIES:
-#   * Every QUARKUS_OIDC_CLIENT_CONTAINERS_*, _CI_*, _DEPLOYMENTS_*, _PROJECTS_* and _WORKSPACES_*
-#     entry. No code mints through those names — one client, `qits`, mints for every peer. They are
-#     not inert while they are stored, though: quarkus-oidc-client discovers
-#     `quarkus.oidc-client.<name>` map keys FROM THE ENVIRONMENT, so one variable of a family is
-#     enough to make the name a client at runtime, and `client-enabled` / `discovery-enabled` both
-#     default to true. The image therefore ships `client-enabled=false`, `discovery-enabled=false`
-#     and `token-path` for each of those five names to keep them off the network at boot
+#   * QUARKUS_OIDC_CLIENT_ARTIFACTS_*, _CI_*, _CONTAINERS_*, _DEPLOYMENTS_*, _PROJECTS_* and
+#     _WORKSPACES_* — six families, five keys each. No code mints through those names — one client,
+#     `qits`, mints for every peer, reading the deployer's `idp:client` resource alone. They are not
+#     inert while they are stored, though: quarkus-oidc-client discovers `quarkus.oidc-client.<name>`
+#     map keys FROM THE ENVIRONMENT, so one variable of a family is enough to make the name a client
+#     at runtime, and `client-enabled` / `discovery-enabled` both default to true. The image
+#     therefore ships `client-enabled=false`, `discovery-enabled=false` and `token-path` for each of
+#     those six names to keep them off the network at boot
 #     (orchestrator/.../META-INF/microprofile-config.properties). DELETING THESE ENTRIES IS THE
 #     PREREQUISITE FOR REMOVING THOSE LINES, in that order and a later change: the lines cannot go
 #     while a deployment still sets _CLIENT_ENABLED=true for the name.
-#   * QUARKUS_OIDC_CLIENT_ARTIFACTS_GRANT_OPTIONS_CLIENT_AUDIENCE. The `qits` client's audience is
-#     the constant qits-platform and nothing reads a configured one. Its four siblings above are
-#     still read and stay.
+#   * QUARKUS_OIDC_CLIENT_QITS_CLIENT_ENABLED and _CREDENTIALS_SECRET. This is the env SPELLING of
+#     the `qits` client's own dotted properties — the same `quarkus.oidc-client.qits.*` keys this
+#     file's microprofile-config.properties ships — so a deployment that ever set one would SHADOW
+#     the resource read: env is ordinal 300, the shipped `${QITS_RESOURCE_IDP_*:…}` expression is
+#     250, and the environment variable wins outright rather than feeding the expression. Nothing on
+#     this platform sets either today; declaring them here would invite a person to set a value that
+#     silently overrides the deployer's own resource.
+#   * QITS_AUTH_MACHINE_AUDIENCE. qits-auth-core's `MachineAuth` reads the platform audience from its
+#     own shipped `qits.auth.machine.platform-audience`, qits-platform; no property of this
+#     service's own stands between a deployment and that value, so a stored entry sets nothing.
 #   * QITS_RESOURCE_*. The deployer injects those from its own resource registry, the single
 #     authority for a provisioned credential. qits-configuration must not state or delete one.
 
@@ -51,39 +52,9 @@ keys:
     type: boolean
     description: "The machine gate. On, a bearer is validated against the idp; off, there is no OIDC tenant at all."
 
-  env.QITS_AUTH_MACHINE_AUDIENCE:
-    type: string
-    description: "qits-auth-core's gate contract: with the gate on its startup check demands this key. The image ships the platform audience, qits-platform, which is the only audience the idp mints — a value naming anything else is read by nothing and refuses nothing."
-
   env.QUARKUS_OIDC_AUTH_SERVER_URL:
     type: string
     description: "The issuer whose JWKS validates inbound tokens."
-
-  # --- the outbound credential: the one named client `qits` -----------------------------------
-
-  env.QUARKUS_OIDC_CLIENT_ARTIFACTS_CLIENT_ENABLED:
-    type: boolean
-    description: "Fallback switch for the `qits` client until the idp:client cutover. Off, peer calls carry the forward-auth pair alone."
-
-  env.QUARKUS_OIDC_CLIENT_ARTIFACTS_AUTH_SERVER_URL:
-    type: string
-    description: "Fallback idp url the `qits` client mints its token at, until the idp:client cutover."
-
-  env.QUARKUS_OIDC_CLIENT_ARTIFACTS_CLIENT_ID:
-    type: string
-    description: "Fallback client id the `qits` client presents, until the idp:client cutover. This service's own id."
-
-  env.QUARKUS_OIDC_CLIENT_ARTIFACTS_CREDENTIALS_SECRET:
-    type: string
-    description: "Fallback client secret for the `qits` client, until the idp:client cutover. A secret: never give it a default."
-
-  env.QUARKUS_OIDC_CLIENT_QITS_CLIENT_ENABLED:
-    type: boolean
-    description: "The `qits` client's own switch, as the README documents it. Set, it wins over the fallback switch."
-
-  env.QUARKUS_OIDC_CLIENT_QITS_CREDENTIALS_SECRET:
-    type: string
-    description: "The `qits` client's own secret, as the README documents it. A secret: never give it a default."
 
   # --- the eight peers a run calls --------------------------------------------------------------
 

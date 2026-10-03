@@ -30,7 +30,7 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
  *
  * <p><b>Every route accepts the same pair of roles</b>, {@code qits:admin} (a person, through the
  * gateway's forward-auth headers) and {@code qits:system} (a machine, through a bearer validated
- * against qits-platform-idp). A run is started by an operator in a browser and could as well be
+ * against qits-idp). A run is started by an operator in a browser and could as well be
  * started by a machine; a machine-only guard would lock the operator out of the button this service
  * exists to offer. There is no anonymous route here. The reads also take {@code qits:agent} (a
  * commissioned agent); starting a run does not.

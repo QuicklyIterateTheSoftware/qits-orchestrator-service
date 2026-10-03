@@ -11,14 +11,13 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The one named oidc client, {@code qits}, as the shipped {@code microprofile-config.properties}
- * resolves it with no {@code QITS_RESOURCE_IDP_*} or old extras env set — the "nothing configured"
- * arm every clone-alone build and every other test in this repository runs on
- * (service-client-identity-plan.md, C4).
+ * resolves it with no {@code QITS_RESOURCE_IDP_*} set — the "nothing configured" arm every
+ * clone-alone build and every other test in this repository runs on (epic qits-540 dossier, 'Plan
+ * (as of 2026-09-13)', C4).
  *
- * <p>{@link QitsOidcClientOldExtrasFallbackTest} and {@link
- * QitsOidcClientResourceOverridesOldExtrasTest} hold the other two arms — the old extras keys
- * alone, and the new resource keys winning over them — each in its own {@code @QuarkusTest} because
- * a {@code @TestProfile}'s config overrides are fixed for the life of one boot.
+ * <p>{@link QitsOidcClientResourceEnvTest} holds the other arm, the deployer's resource triple
+ * winning over the shipped defaults, in its own {@code @QuarkusTest} because a {@code
+ * @TestProfile}'s config overrides are fixed for the life of one boot.
  */
 @QuarkusTest
 class QitsOidcClientShippedConfigTest {
@@ -31,11 +30,11 @@ class QitsOidcClientShippedConfigTest {
   @Test
   void theQitsClientResolvesItsOwnDefaults() {
     // The host is derived off QITS_ENVIRONMENT, which no test sets, so the `dev` fallback applies —
-    // qits-platform-idp is one of the nine platform applications and qualifies to
-    // dev-qits-platform-idp on this estate.
+    // the application is qits-idp (it was qits-platform-idp until the platform tier went), so its
+    // alias is dev-qits-idp.
     assertEquals(
-        "http://dev-qits-platform-idp:8080/idp", value("quarkus.oidc-client.qits.auth-server-url"));
-    assertEquals("qits-platform-orchestrator", value("quarkus.oidc-client.qits.client-id"));
+        "http://dev-qits-idp:8080/idp", value("quarkus.oidc-client.qits.auth-server-url"));
+    assertEquals("dev-qits-orchestrator", value("quarkus.oidc-client.qits.client-id"));
     // Empty, not absent — SmallRye reads a configured-empty String as null, so an empty secret reads
     // as an empty Optional rather than as "" itself.
     Optional<String> secret =
@@ -48,33 +47,22 @@ class QitsOidcClientShippedConfigTest {
 
   @Test
   void theClientStaysDisabledUnderTest() {
-    // %test.quarkus.oidc-client.qits.client-enabled=false wins over the shipped expression
-    // regardless of what QUARKUS_OIDC_CLIENT_ARTIFACTS_CLIENT_ENABLED says — the arm every test in
-    // this repository is on, so a suite never dials a real idp.
+    // %test.quarkus.oidc-client.qits.client-enabled=false wins over the shipped `true` — the arm
+    // every test in this repository is on, so a suite never dials a real idp.
     assertEquals("false", value("quarkus.oidc-client.qits.client-enabled"));
   }
 
   @Test
-  void theArtifactsBlockIsInert() {
-    // Nothing injects it (PeerTokens mints through `qits` for every peer). It ships because a live
-    // deployment holds this service's credential under the QUARKUS_OIDC_CLIENT_ARTIFACTS_* names the
-    // `qits` client falls back to, and a block can be overridden by the environment only where it
-    // exists: this one is what turns a leftover _CLIENT_ENABLED=true into an INERT client rather
-    // than one that discovers and fetches a token at boot.
-    assertEquals("false", value("quarkus.oidc-client.artifacts.client-enabled"));
-    assertEquals("false", value("quarkus.oidc-client.artifacts.discovery-enabled"));
-    assertEquals("false", value("quarkus.oidc-client.artifacts.early-tokens-acquisition"));
-  }
-
-  @Test
-  void theFiveNamesTheDeploymentStillSetsAreNeutralised() {
+  void theSixNamesTheDeploymentStillSetsAreNeutralised() {
     // No code mints through these — `qits` mints for every peer — but the deployed configuration
-    // still carries a QUARKUS_OIDC_CLIENT_<NAME>_* family for each, _CLIENT_ENABLED=true included,
-    // and ONE variable of a family is enough to mint `quarkus.oidc-client.<name>` as a map key in
-    // the environment source. With no block behind it the name answers the extension's defaults,
-    // and both are ON: an enabled, discovering client is built during runtime init and blocks on
-    // metadata discovery for `connection-timeout` per client, before the listener accepts, so an
-    // issuer that accepts and does not answer fails this service's boot.
+    // still carries a QUARKUS_OIDC_CLIENT_<NAME>_* family for each (dev-qits-orchestrator's envKeys,
+    // read 2026-10-02; `artifacts` included now that it is no longer the `qits` client's fallback),
+    // _CLIENT_ENABLED=true among them, and ONE variable of a family is enough to mint
+    // `quarkus.oidc-client.<name>` as a map key in the environment source. With no block behind it
+    // the name answers the extension's defaults, and both are ON: an enabled, discovering client is
+    // built during runtime init and blocks on metadata discovery for `connection-timeout` per
+    // client, before the listener accepts, so an issuer that accepts and does not answer fails this
+    // service's boot.
     //
     // All three keys are load-bearing, and that is what this pins. `client-enabled=false` is
     // overridden by the deployment's own _CLIENT_ENABLED=true (the environment outranks this file),
@@ -83,6 +71,7 @@ class QitsOidcClientShippedConfigTest {
     // ConfigurationException for want of a token endpoint. Drop any one of the three and the boot
     // hazard is back.
     String[] neutralised = {
+      PeerTarget.ARTIFACTS,
       PeerTarget.CI,
       PeerTarget.CONTAINERS,
       PeerTarget.DEPLOYMENTS,

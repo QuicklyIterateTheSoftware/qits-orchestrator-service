@@ -56,12 +56,12 @@ import java.util.Optional;
  * the peer by. Nothing about the evidence changes — direction, method, path and status are what an
  * edge is — and eight servers would only be seven more ports to park.
  *
- * <p><b>The ninth is qits-platform-idp</b>, {@code POST /idp/token}: the outbound half of this
+ * <p><b>The ninth is qits-idp</b>, {@code POST /idp/token}: the outbound half of this
  * service's identity, which the one named oidc client, {@code qits}, presents to every peer alike
- * (service-client-identity-plan.md, C4 — one client replaced eight, one per peer, before it). It
- * draws as the same node {@link MockIdp} does, because it is the same component — the mock serves
- * the inbound half (the JWKS this service validates callers against) and this stub serves the
- * outbound half.
+ * (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C4 — one client replaced eight, one per peer,
+ * before it). It draws as the same node {@link MockIdp} does, because it is the same component —
+ * the mock serves the inbound half (the JWKS this service validates callers against) and this stub
+ * serves the outbound half.
  *
  * <h2>Stateless, with one deliberate exception</h2>
  *
@@ -107,10 +107,11 @@ import java.util.Optional;
  * appears in whichever diagram happened to be more than a second after the last. An edge that comes
  * and goes with the clock is a {@code networkHash} that never settles.
  *
- * <p>Before service-client-identity-plan.md's C4 this was eight clients minting eight tokens on the
- * first run, drawn as ONE arrow because an edge is {@code (kind, from, to, label)} and all eight
- * were identical in every one of those four. One named client, {@code qits}, now makes it literally
- * one mint rather than eight collapsed into one label. The corollary to know when running one class
+ * <p>Before the epic qits-540 dossier's 'Plan (as of 2026-09-13)', C4, this was eight clients
+ * minting eight tokens on the first run, drawn as ONE arrow because an edge is {@code (kind, from,
+ * to, label)} and all eight were identical in every one of those four. One named client, {@code
+ * qits}, now makes it literally one mint rather than eight collapsed into one label. The corollary
+ * to know when running one class
  * alone: {@code stories.collection.GarbageCollectionRunIT} claims that arrow, and any other story
  * class run on its own inherits it and fails its own edge count — loudly, which is the right way for
  * that assumption to break.

@@ -11,7 +11,7 @@ import io.restassured.specification.RequestSpecification;
  *   <li><b>{@code qits:admin} is a PERSON's</b>, and it arrives only as the {@code X-Qits-User} /
  *       {@code X-Qits-Roles} pair the platform edge asserts for an authenticated admin session.
  *   <li><b>{@code qits:system} is a MACHINE's</b>, and it arrives only in an idp-minted bearer:
- *       qits-platform-idp copies a client's granted roles into the token's {@code groups} claim and
+ *       qits-idp copies a client's granted roles into the token's {@code groups} claim and
  *       quarkus-oidc reads it as roles with no configuration at all.
  * </ul>
  *
@@ -40,7 +40,7 @@ public final class StoryIdentities {
 
   /**
    * The audience this service enforces, and it is the PLATFORM's rather than a name of its own:
-   * qits-platform-idp puts {@code qits-platform} on every token it mints, so every caller on this
+   * qits-idp puts {@code qits-platform} on every token it mints, so every caller on this
    * platform addresses this service by it and the roles decide the rest. {@code
    * quarkus.oidc.token.audience=qits-platform} is spelled as a literal in {@code
    * application.properties} and so is this, so the audience under test is the shipped one.
@@ -102,7 +102,7 @@ public final class StoryIdentities {
   /**
    * A token addressed somewhere that is not this platform. It has to be minted OUTSIDE the platform
    * audience to be a refusal at all: a sibling's bearer carries {@code qits-platform} like every
-   * other token qits-platform-idp mints, so it is admitted here and its roles decide what it may do.
+   * other token qits-idp mints, so it is admitted here and its roles decide what it may do.
    */
   public static String offPlatformToken(String subject) {
     return token(subject, OFF_PLATFORM_AUDIENCE, MACHINE_ROLE);

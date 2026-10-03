@@ -8,9 +8,9 @@ package eu.wohlben.qits.orchestrator.peer;
  * qits.orchestrator.targets.<name>-url}. An enum would have to spell the mapping out twice; a
  * string spells it once.
  *
- * <p>Before service-client-identity-plan.md's C4 this string was also the name of a dedicated oidc
- * client — one per peer, because a token was cut FOR one service. {@code PeerTokens} now mints from
- * one named client, {@code qits}, for every peer alike.
+ * <p>Before the epic qits-540 dossier's 'Plan (as of 2026-09-13)', C4, this string was also the
+ * name of a dedicated oidc client — one per peer, because a token was cut FOR one service. {@code
+ * PeerTokens} now mints from one named client, {@code qits}, for every peer alike.
  */
 public final class PeerTarget {
 

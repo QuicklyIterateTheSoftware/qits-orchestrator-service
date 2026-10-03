@@ -227,7 +227,6 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.gc.build-cache-keep-bytes` | `10737418240` | what the HOST buildkit cache may keep after a prune |
 | `qits.orchestrator.gc.builder-cache-keep-bytes` | `1073741824` | what a `buildx_buildkit_*` BUILDER container may keep |
 | `qits.orchestrator.gc.call-timeout` | `PT120S` | how long one peer call may take |
-| `qits.auth.machine.audience` | `qits-platform` | the one audience qits-platform-idp mints, which an inbound machine token must carry |
 
 **Two build-cache budgets, because the two caches are not the same kind of thing.** The host cache
 is what every CI build warms and re-reads, so 10 GiB of it is kept — measured against a host sitting
@@ -242,23 +241,20 @@ qits-configuration are per environment (`dev-qits-artifacts`, `dev-qits-configur
 service is platform tier, so a live platform injects the qualified names. Known debt, the same one
 qits-configuration carries.
 
-**Outbound credentials** are ONE named oidc client, `qits` (service-client-identity-plan.md, C4),
-`client-id=qits-platform-orchestrator`, shipped `client-enabled=false`. A token is cut for the
-PLATFORM rather than for one receiver — qits-platform-idp puts `qits-platform` on every token it
-mints and every peer accepts it — so one client and one audience serve all eight calls, and what
-this service may do at a peer is decided by its roles. Its keys read `QITS_RESOURCE_IDP_URL` /
-`_CLIENT_ID` / `_CLIENT_SECRET` first and fall back to the `artifacts` client's env names, which are
-the names a live deployment holds this service's credential under until this repository declares
-`resources: idp:client` in its own `.config/qits/deployments.yml` (a later, separate commit). A
-deployment turns it on with
+**Outbound credentials** are ONE named oidc client, `qits` (epic qits-540 dossier, 'Plan (as of
+2026-09-13)', C4). Its id, secret and idp address come from the deployer and nowhere else:
+`.config/qits/deployments.yml` declares `resources: idp:client`, so qits-deployments provisions
+this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_URL`,
+`QITS_RESOURCE_IDP_CLIENT_ID` and `QITS_RESOURCE_IDP_CLIENT_SECRET` (the shipped defaults are the
+dev estate's `dev-qits-idp` alias and `dev-qits-orchestrator`). No configuration entry names any of
+the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
+PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
+every peer accepts it — so one client and one audience serve all eight calls, and what this service
+may do at a peer is decided by its roles.
 
-```
-QUARKUS_OIDC_CLIENT_QITS_CLIENT_ENABLED=true
-QUARKUS_OIDC_CLIENT_QITS_CREDENTIALS_SECRET=<this service's idp client secret>
-```
-
-(or, once the resource is declared, `QITS_RESOURCE_IDP_*`, injected by qits-deployments). Off, calls
-go out with the forward-auth pair alone (`X-Qits-User: qits-platform-orchestrator`,
+One switch, `quarkus.oidc-client.qits.client-enabled`: shipped **true**, because every deployment
+has the resource, and **false** under `%dev` and `%test`, so a suite or a local run never dials an
+idp. Off, calls go out with the forward-auth pair alone (`X-Qits-User: qits-platform-orchestrator`,
 `X-Qits-Roles: qits:system`), which every call carries regardless.
 
 **The store** is its own PostgreSQL database, `qits_platform_orchestrator`, declared by

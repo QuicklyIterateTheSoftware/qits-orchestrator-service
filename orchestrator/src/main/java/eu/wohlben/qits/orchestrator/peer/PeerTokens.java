@@ -11,19 +11,20 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
 /**
- * The one named oidc client, {@code qits} (service-client-identity-plan.md, C4), which mints the
- * bearer every one of the eight peer calls carries.
+ * The one named oidc client, {@code qits} (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C4),
+ * which mints the bearer every one of the eight peer calls carries.
  *
  * <p><b>One audience for every call, {@code qits-platform}</b> — the plan's open calling model: a
  * token is cut for the PLATFORM rather than for one receiver, so one token is good for all eight
- * peers and what this service may do at a peer is decided by its roles. qits-platform-idp puts that
+ * peers and what this service may do at a peer is decided by its roles. qits-idp puts that
  * audience on every token it mints and every receiver's own {@code quarkus.oidc.token.audience}
  * names it.
  *
- * <p><b>The switch is the extension's own</b>, {@code quarkus.oidc-client.qits.client-enabled},
- * false in the shipped properties. There is no key of ours beside it — one switch cannot disagree
- * with itself. Off, this answers empty and the call goes out with the forward-auth headers alone,
- * which is what a platform running its peers open on qits-net accepts.
+ * <p><b>The switch is the extension's own</b>, {@code quarkus.oidc-client.qits.client-enabled} —
+ * shipped true, because every deployment has the `idp:client` resource, and false under
+ * {@code %dev}/{@code %test}. There is no key of ours beside it — one switch cannot disagree with
+ * itself. Off, this answers empty and the call goes out with the forward-auth headers alone, which
+ * is what a platform running its peers open on qits-net accepts.
  *
  * <p><b>A token this cannot mint is empty rather than an exception</b>, the deployer's stance: the
  * refusal that matters belongs to the call itself. An anonymous call to a guarded peer comes back

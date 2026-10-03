@@ -139,7 +139,7 @@ public class TokenValidationBootstrapIT {
   @UserStoryDescription(
       """
       A freshly deployed qits-platform-orchestrator must validate service bearers before any
-      caller arrives: at startup it fetches the signing keys (JWKS) from qits-platform-idp —
+      caller arrives: at startup it fetches the signing keys (JWKS) from qits-idp —
       discovery stays off, the path is configured — so the very first machine request is
       accepted. What that bearer then opens is the plan itself: the technical processes this
       service runs, their steps, and the dependency edges between them. That listing is the
@@ -152,7 +152,7 @@ public class TokenValidationBootstrapIT {
 
     story.note(
         "qits-platform-orchestrator starts with the OIDC tenant on, beside a reachable"
-            + " qits-platform-idp");
+            + " qits-idp");
     given().get("/orchestrator/q/health/ready").then().statusCode(200);
 
     // End (a), the idp side: the JWKS was served during startup — before this story presented any

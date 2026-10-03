@@ -50,7 +50,7 @@ import org.junit.jupiter.api.TestMethodOrder;
  * complete account of a run there is. {@link StoryPeers} is that far side — one stub answering as
  * qits-containers, qits-artifacts, qits-ci, qits-platform-deployments, qits-projects,
  * qits-workspaces, qits-platform-maintenance and qits-configuration, told apart by path prefix,
- * plus qits-platform-idp for the credential this service presents to each of them.
+ * plus qits-idp for the credential this service presents to each of them.
  *
  * <p><b>Three stories, three runs, and each one is a different sentence about the same nineteen
  * steps:</b>

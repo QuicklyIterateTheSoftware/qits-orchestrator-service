@@ -85,7 +85,7 @@ public class DeletionRefusalIT {
       begins. A bearer minted outside this platform is refused the same way, however well-formed it
       looks — both are 401 and not 403, because the credential never became an identity and there is
       no caller to have been forbidden. A sibling service's bearer is not that case: every token
-      qits-platform-idp mints carries the one platform audience, so a peer is admitted here and its
+      qits-idp mints carries the one platform audience, so a peer is admitted here and its
       roles decide what it may do.
 
       A caller holding a role this service has never heard of gets the other answer. qits:reader is

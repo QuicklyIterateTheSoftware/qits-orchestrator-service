@@ -53,7 +53,7 @@ import java.util.Map;
  *       running its peers open on qits-net behind forward-auth is a supported posture. Turning it on
  *       is what puts this service's own machine credential in the diagram, and it is the half of
  *       {@code PeerClient}'s "two credentials on every call" that a disabled client hides. One
- *       client for all eight peers now (service-client-identity-plan.md, C4): the open calling model
+ *       client for all eight peers now (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C4): the open calling model
  *       means a single audience, {@code qits-platform}, is good for every one of them.
  * </ul>
  *

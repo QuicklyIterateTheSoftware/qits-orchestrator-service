@@ -126,29 +126,32 @@ process whose steps had to catch would put half its outcomes on a path nobody re
 that matters belongs to the call: an anonymous call to a guarded peer comes back 401 and the step
 records the url and the status, which is more useful than a mint failure one layer earlier.
 
-**One named client, `qits`, for all eight peers** (service-client-identity-plan.md, C4). A token is
-cut for the PLATFORM and not for one receiver: qits-platform-idp puts `qits-platform` on every token
-it mints and every peer accepts it, so one client and one audience serve all eight calls and the
-roles decide what this service may do at each. The client is turned on or off as a whole, so
-qits-platform-maintenance and qits-configuration are reached with a bearer like the other six.
+**One named client, `qits`, for all eight peers** (epic qits-540 dossier, 'Plan (as of
+2026-09-13)', C4). A token is cut for the PLATFORM and not for one receiver: qits-idp puts
+`qits-platform` on every token it mints and every peer accepts it, so one client and one audience
+serve all eight calls and the roles decide what this service may do at each. Its id, secret and idp
+address come from the deployer's `idp:client` resource alone (`QITS_RESOURCE_IDP_*`), defaulting to
+`dev-qits-idp` / `dev-qits-orchestrator`; no configuration entry names any of the three, and the old
+`QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. The client is turned on wherever the deployer
+runs it, off under `%dev`/`%test`, so qits-platform-maintenance and qits-configuration are reached
+with a bearer like the other six.
 
 **Every other client block is injected by nothing, and each is deliberate.** The unnamed default
 client, which the extension creates whether or not anything injects it and which is disabled so a
-client with no auth-server-url cannot fail the boot. `artifacts`, whose env names the `qits`
-client's fallbacks read and whose shipped `discovery-enabled=false` /
-`early-tokens-acquisition=false` keep a deployment's
-`QUARKUS_OIDC_CLIENT_ARTIFACTS_CLIENT_ENABLED=true` inert; it goes once this repository declares
-`resources: idp:client` (C5) and those extras are off every deployment. And `ci`, `containers`,
-`deployments`, `projects`, `workspaces`, which exist only because the deployment still sets a
-`QUARKUS_OIDC_CLIENT_<NAME>_*` family for each. **A client block is not gone just because this
-repository deleted it.** SmallRye discovers `quarkus.oidc-client.<name>` map keys from the
-ENVIRONMENT, so one variable of a family mints the name, and a name with no block behind it takes
-the extension's defaults — `client-enabled` true and `discovery-enabled` true. Such a client is
-built during runtime init, before the listener accepts, and blocks on metadata discovery for
-`connection-timeout` per client: an issuer that accepts and does not answer fails this service's
-boot. `client-enabled=false` cannot fix that alone (the environment's `true` outranks this file);
-`discovery-enabled=false` plus a `token-path` is what does, and those lines go only after the
-matching entries are deleted from the deployment.
+client with no auth-server-url cannot fail the boot — kept even though no
+`QUARKUS_OIDC_CLIENT_{CLIENT_ID,...}` family is live today, because a stray `false` costs nothing
+and being wrong about it costs a boot hazard. And `artifacts`, `ci`, `containers`, `deployments`,
+`projects`, `workspaces`, which exist only because the deployment still sets a
+`QUARKUS_OIDC_CLIENT_<NAME>_*` family for each (`artifacts` included now that it is no longer the
+`qits` client's fallback). **A client block is not gone just because this repository deleted it.**
+SmallRye discovers `quarkus.oidc-client.<name>` map keys from the ENVIRONMENT, so one variable of a
+family mints the name, and a name with no block behind it takes the extension's defaults —
+`client-enabled` true and `discovery-enabled` true. Such a client is built during runtime init,
+before the listener accepts, and blocks on metadata discovery for `connection-timeout` per client:
+an issuer that accepts and does not answer fails this service's boot. `client-enabled=false` cannot
+fix that alone (the environment's `true` outranks this file); `discovery-enabled=false` plus a
+`token-path` is what does, and those lines go only after the matching entries are deleted from the
+deployment.
 
 **A response is bounded at 1 MiB** with a marker appended, cut on a character boundary. An artifacts
 plan lists every condemned identity on the platform; the store here is a log a person reads, and an
@@ -235,7 +238,7 @@ before, writes the rows the old code wrote, and migrates the rest of the way.
 
 A request with no `Authorization` header is USER traffic — qits-gateway performed the login and
 asserted `X-Qits-User` / `X-Qits-Roles`. A request WITH a bearer is MACHINE traffic, validated by
-quarkus-oidc against qits-platform-idp.
+quarkus-oidc against qits-idp.
 
 **Both land as roles, which is why every route is `@RolesAllowed({"qits:admin", "qits:system"})`.**
 An operator presses Run now in a browser; a machine may post the same run. There is no anonymous
@@ -247,12 +250,12 @@ gate rather than standing on its own, so with the gate off there is no OIDC tena
 a JWKS, and a clone-alone build needs no issuer. There is no third state.
 
 **`quarkus.oidc.token.audience` is the literal `qits-platform` and there is only that one audience.**
-qits-platform-idp puts it on every token it mints, whatever the client asked for, so a peer's bearer
+qits-idp puts it on every token it mints, whatever the client asked for, so a peer's bearer
 and a person's `qits` CLI token both address this service by it and the roles decide the rest. It is
-NOT spelled from `qits.auth.machine.audience`: that key is qits-auth-core's gate contract, which the
-library's startup check reads, and a tenant following an environment override of it would refuse
-every token the platform actually mints. A refusal story therefore mints an audience from outside
-the platform — a sibling's bearer is admitted here.
+NOT spelled from `qits.auth.machine.platform-audience`: that key is qits-auth-core's gate contract,
+read by `MachineAuth` itself with no configuration entry of ours behind it, and a tenant following an
+environment override of it would refuse every token the platform actually mints. A refusal story
+therefore mints an audience from outside the platform — a sibling's bearer is admitted here.
 
 ## Tests
 
