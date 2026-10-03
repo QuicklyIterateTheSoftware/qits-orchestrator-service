@@ -56,7 +56,7 @@ keys:
     type: string
     description: "The issuer whose JWKS validates inbound tokens."
 
-  # --- the eight peers a run calls --------------------------------------------------------------
+  # --- the nine peers a run calls --------------------------------------------------------------
 
   env.QITS_ORCHESTRATOR_TARGETS_ARTIFACTS_URL:
     type: string
@@ -89,6 +89,10 @@ keys:
   env.QITS_ORCHESTRATOR_TARGETS_CONFIGURATION_URL:
     type: string
     description: "Where qits-configuration is: the configured image pins. Scheme, host and port, no path."
+
+  env.QITS_ORCHESTRATOR_TARGETS_IDP_URL:
+    type: string
+    description: "Where qits-idp is: the unclaimed service-client sweep. Scheme, host and port, no path."
 
   # --- the gc policy ----------------------------------------------------------------------------
 

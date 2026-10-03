@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,7 +41,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.TestMethodOrder;
 
 /**
- * <b>The gc run</b> — the one technical process this platform has, driven end to end against eight
+ * <b>The gc run</b> — the one technical process this platform has, driven end to end against nine
  * peers that answer.
  *
  * <p>This is the catalogue's centre, because it is the only place the whole design is visible at
@@ -49,10 +50,11 @@ import org.junit.jupiter.api.TestMethodOrder;
  * does therefore happens on the far side of a socket, and a diagram of what it did is the only
  * complete account of a run there is. {@link StoryPeers} is that far side — one stub answering as
  * qits-containers, qits-artifacts, qits-ci, qits-platform-deployments, qits-projects,
- * qits-workspaces, qits-platform-maintenance and qits-configuration, told apart by path prefix,
- * plus qits-idp for the credential this service presents to each of them.
+ * qits-workspaces, qits-platform-maintenance, qits-configuration and qits-idp, told apart by path
+ * prefix — qits-idp twice over, as the service-client sweep and as the issuer of the credential
+ * this service presents to each of them.
  *
- * <p><b>Three stories, three runs, and each one is a different sentence about the same nineteen
+ * <p><b>Three stories, three runs, and each one is a different sentence about the same twenty-one
  * steps:</b>
  *
  * <ol>
@@ -115,12 +117,13 @@ public class GarbageCollectionRunIT {
       service contributes is ORDER and a PIN SET — it deletes nothing itself.
 
       An operator presses Run now. The answer is a 202 and an id, because the work is minutes of
-      somebody else's pruning; the browser then polls the run while it happens. Nineteen steps run
+      somebody else's pruning; the browser then polls the run while it happens. Twenty-one steps run
       in declaration order: the disk and the registry store are measured, the six pin reads say what
       must survive, the registry is planned and swept, host images, orphan volumes and build cache
       are collected, the repository catalogue is read and merged branches are swept, retired
       configuration entries are removed, decommissioned git tags are swept on the host and its
-      backup twin, and both stores are measured again.
+      backup twin, the service clients nothing claims any more are removed from qits-idp against the
+      claims qits-deployments holds, and both stores are measured again.
 
       The pins are the point. A pin is something a collection must not delete — an image sha a
       restart or a rollback would pull, the ci daemon binary a run would launch, a version a
@@ -162,11 +165,11 @@ public class GarbageCollectionRunIT {
     assertEquals("SUCCEEDED", run.getString("status"), "the run did not succeed: " + run.prettify());
     story
         .note(
-            "the browser polls the run while it happens; nineteen steps later it is SUCCEEDED and"
+            "the browser polls the run while it happens; twenty-one steps later it is SUCCEEDED and"
                 + " the run's own summary is one line per step")
         .as("run-succeeded");
 
-    // The nineteen steps, each with the line it read out of its peer's answer. Asserting the SENTENCE
+    // The twenty-one steps, each with the line it read out of its peer's answer. Asserting the SENTENCE
     // rather than a status is what pins "computes nothing": every figure below is a number the
     // owner of that store reported, quoted back.
     operator()
@@ -175,7 +178,7 @@ public class GarbageCollectionRunIT {
         .get(StoryTarget.runPath(id))
         .then()
         .statusCode(200)
-        .body("steps.size()", equalTo(19))
+        .body("steps.size()", equalTo(21))
         .body("steps.status", everyItem(equalTo("SUCCEEDED")))
         .body(
             StoryRuns.stepPath("usage.before") + ".summary",
@@ -230,6 +233,19 @@ public class GarbageCollectionRunIT {
             equalTo(
                 "1 tags decommissioned across 1 repositories (1 host, 1 twin); kept: newest 0,"
                     + " pinnedVersion 1, gitlink 0, inFlight 0, young 0; 0 errors"))
+        .body(
+            StoryRuns.stepPath("claims.idp-clients") + ".summary",
+            equalTo("1 service-client claim across 1 application"))
+        .body(
+            StoryRuns.stepPath("idp.service-clients") + ".summary",
+            equalTo(
+                "removed 1 service client ("
+                    + StoryPeers.UNCLAIMED_CLIENT
+                    + "); kept 1 (claimed 0, grace 0, caller 1)"))
+        // The claims travel to qits-idp as the deployer sent them — the owner of the store judges.
+        .body(
+            StoryRuns.stepPath("idp.service-clients") + ".request.body",
+            containsString("\"clientId\":\"" + StoryPeers.CLAIMED_CLIENT + "\""))
         .body(
             StoryRuns.stepPath("artifacts.usage.after") + ".summary",
             equalTo("store 51.2 GB (oci 50.7 GB, docs 164.2 MB, sboms 112.6 MB)"))
@@ -330,7 +346,7 @@ public class GarbageCollectionRunIT {
     JsonPath run = StoryRuns.detail(operator(), id);
     assertEquals("SUCCEEDED", run.getString("status"), "the dry run did not succeed: " + run.prettify());
     story
-        .note("the operator asks for a dry run: the same nineteen steps, with dryRun on the request")
+        .note("the operator asks for a dry run: the same twenty-one steps, with dryRun on the request")
         .as("dry-run-accepted");
 
     operator()
@@ -372,7 +388,15 @@ public class GarbageCollectionRunIT {
             containsString("\"dryRun\":true"))
         .body(
             StoryRuns.stepPath("containers.volumes") + ".request.body",
-            containsString("\"dryRun\":true"));
+            containsString("\"dryRun\":true"))
+        // qits-idp honours the flag itself, so the service-client sweep is asked rather than
+        // withheld, and its figures say what it WOULD have removed.
+        .body(
+            StoryRuns.stepPath("idp.service-clients") + ".request.body",
+            containsString("\"dryRun\":true"))
+        .body(
+            StoryRuns.stepPath("idp.service-clients") + ".summary",
+            startsWith("would remove 1 service client"));
     story
         .note(
             "every other deleter is still CALLED, with the flag in its body: the branch sweep is"
@@ -454,20 +478,19 @@ public class GarbageCollectionRunIT {
     // route rather than how impatient the watching was.
     from(COLLECTED_SLUG, StoryIdentities.OPERATOR, "POST " + StoryTarget.GC_RUNS_PATH + " -> 202");
     from(COLLECTED_SLUG, StoryIdentities.OPERATOR, "GET " + StoryTarget.RUN_LABEL_PATH + " -> 200");
-    // …and what the run sent. Seventeen calls to eight owners, drawn from the far side's own
+    // …and what the run sent. Nineteen calls to nine owners, drawn from the far side's own
     // recording, because a process that only sends requests leaves its evidence nowhere else.
     everyPeerCallOf(COLLECTED_SLUG);
     to(COLLECTED_SLUG, StoryPeers.ARTIFACTS, StoryPeers.written(StoryPeers.SWEEP_PATH));
-    // The credential this service presents to all eight. Eight clients minted eight tokens on this
-    // run and they are ONE arrow — an edge is (kind, from, to, label) and the eight agree in all
-    // four — and the mint is cached for an hour, so no later story carries it.
+    // The credential this service presents to all nine. One client mints it, once, on this run —
+    // and the mint is cached for an hour, so no later story carries it.
     to(COLLECTED_SLUG, StoryPeers.IDP, StoryPeers.written(StoryPeers.TOKEN_PATH));
-    // TWO in, eighteen out. Each store is measured twice and draws once, because the before and the
+    // TWO in, twenty out. Each store is measured twice and draws once, because the before and the
     // after of a store are deliberately the same call: the run's own measurement of what it
     // achieved, taken by the component that owns the store rather than added up from what each step
     // claimed. There are two such pairs — the host's disk and the registry's bytes — and the second
     // exists because the first cannot see it.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, COLLECTED_SLUG, 20);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, COLLECTED_SLUG, 22);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG, COLLECTED_SLUG, List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
 
@@ -480,12 +503,12 @@ public class GarbageCollectionRunIT {
     from(MEASURED_SLUG, StoryIdentities.OPERATOR, "POST " + StoryTarget.GC_RUNS_PATH + " -> 202");
     from(MEASURED_SLUG, StoryIdentities.OPERATOR, "GET " + StoryTarget.RUN_LABEL_PATH + " -> 200");
     everyPeerCallOf(MEASURED_SLUG);
-    // EIGHTEEN, one fewer than the real run's nineteen outbound-and-inbound set: the registry sweep
+    // TWENTY, one fewer than the real run's twenty-one outbound-and-inbound set: the registry sweep
     // is the only arrow a dry run does not draw. qits-artifacts is still reached — the PLAN is what
     // a dry run is for, and so is the store measurement either side of it — so this is a count
     // rather than an absence, and the count is the assertion that would notice a withheld step
     // quietly making its call after all.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, MEASURED_SLUG, 18);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, MEASURED_SLUG, 20);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG, MEASURED_SLUG, List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
 
@@ -500,10 +523,10 @@ public class GarbageCollectionRunIT {
     from(SERIALISED_SLUG, StoryIdentities.OPERATOR, "GET " + StoryTarget.RUN_LABEL_PATH + " -> 200");
     everyPeerCallOf(SERIALISED_SLUG);
     to(SERIALISED_SLUG, StoryPeers.ARTIFACTS, StoryPeers.written(StoryPeers.SWEEP_PATH));
-    // TWENTY: three doors and seventeen peer calls. The refused caller added an arrow to this
+    // TWENTY-TWO: three doors and nineteen peer calls. The refused caller added an arrow to this
     // service and none beyond it — which is the point of the story, and the reason the count is
     // asserted rather than only the 409.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, SERIALISED_SLUG, 20);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, SERIALISED_SLUG, 22);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         SERIALISED_SLUG,
@@ -518,8 +541,8 @@ public class GarbageCollectionRunIT {
   }
 
   /**
-   * The sixteen calls every gc run makes whatever else is true of it — the sweep is the
-   * seventeenth.
+   * The eighteen calls every gc run makes whatever else is true of it — the sweep is the
+   * nineteenth.
    */
   private static void everyPeerCallOf(String slug) {
     to(slug, StoryPeers.CONTAINERS, StoryPeers.read(StoryPeers.USAGE_PATH));
@@ -542,6 +565,10 @@ public class GarbageCollectionRunIT {
     to(slug, StoryPeers.WORKSPACES, StoryPeers.written(StoryPeers.BRANCHES_PATH));
     to(slug, StoryPeers.CONFIGURATION, StoryPeers.written(StoryPeers.CONFIGURATION_ENTRIES_PATH));
     to(slug, StoryPeers.PROJECTS, StoryPeers.written(StoryPeers.TAGS_SWEEP_PATH));
+    // The service-client sweep (qits-878): the deployer's claims read, then qits-idp asked to
+    // delete what nothing claims — on a dry run too, because qits-idp honours the flag itself.
+    to(slug, StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.CLAIMS_PATH));
+    to(slug, StoryPeers.IDP, StoryPeers.written(StoryPeers.SERVICE_CLIENTS_PATH));
   }
 
   private static void from(String slug, String actor, String label) {

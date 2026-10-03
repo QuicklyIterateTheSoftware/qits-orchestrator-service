@@ -96,13 +96,14 @@ class QitsOidcClientShippedConfigTest {
 
   @Test
   void thereIsNoBlockForTheTwoNamesNoDeploymentSets() {
-    // qits-platform-maintenance and qits-configuration have no QUARKUS_OIDC_CLIENT_MAINTENANCE_* or
-    // _CONFIGURATION_* entry anywhere, so no map key is minted for either name and there is nothing
+    // qits-platform-maintenance, qits-configuration and qits-idp have no QUARKUS_OIDC_CLIENT_
+    // MAINTENANCE_*, _CONFIGURATION_* or _IDP_* entry anywhere, so no map key is minted for any of
+    // those names and there is nothing
     // to neutralise. What says a block is absent is that the keys answer the extension's own
     // defaults — `client-enabled` is `true` and `discovery-enabled` has no value at all for ANY
     // name, invented ones included, because these are a config MAPPING's defaults rather than a
     // client somebody declared. A shipped `false` here would mean a block came back.
-    for (String peer : new String[] {PeerTarget.MAINTENANCE, PeerTarget.CONFIGURATION}) {
+    for (String peer : new String[] {PeerTarget.MAINTENANCE, PeerTarget.CONFIGURATION, PeerTarget.IDP}) {
       assertEquals(
           "true",
           value("quarkus.oidc-client." + peer + ".client-enabled"),

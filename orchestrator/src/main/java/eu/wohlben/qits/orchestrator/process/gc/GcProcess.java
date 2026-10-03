@@ -82,6 +82,8 @@ import java.util.List;
  * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue
  * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.deployments
  * tags.sweep             projects       POST /projects/api/gc/tags {pins}    ← pins.*, repos.catalogue
+ * claims.idp-clients     deployments    GET  /deployments/api/claims/idp-clients
+ * idp.service-clients    idp            POST /idp/api/gc/service-clients     ← claims.idp-clients
  * artifacts.usage.after  artifacts      GET  /artifacts/api/store/summary    ← artifacts.sweep
  * usage.after            containers     GET  /containers/api/gc/usage        ← everything that frees disk
  * </pre>
@@ -136,6 +138,20 @@ import java.util.List;
  * catalogue, skips the sweep before its body runs. It is not a {@code usage.after} dependency either
  * — a decommissioned tag frees no docker disk — and it runs on a dry run too, the same reasoning as
  * {@code branches.sweep} and {@code configuration.entries}.
+ *
+ * <p><b>{@code idp.service-clients} deletes service clients, and its keep-set is a CLAIM rather
+ * than a pin</b> (ticket qits-878). Every application that declares an {@code idp:client} resource
+ * has qits-deployments provision a client for it; when the application goes away, the client stays
+ * in qits-idp with nothing to say it is dead. qits-deployments is the one service that knows which
+ * client ids are still claimed, so {@code claims.idp-clients} reads them and the sweep hands its
+ * {@code claims} array to qits-idp VERBATIM — the owner of the store judges what is unclaimed,
+ * what is still in its grace window and which client is the caller itself. Fail-closed is the same
+ * edge as everywhere else: a failed claims read skips the sweep before its body runs. And it is
+ * stricter than an edge on one point: a read that SUCCEEDED with zero claims is refused in the body
+ * rather than sent, because an empty claim set would condemn every service client on the platform —
+ * this orchestrator's own included — and a live platform always has at least that one claim. It
+ * runs on a dry run too; qits-idp honours the flag itself. It frees no disk, so it hangs off
+ * neither {@code usage.after} plane.
  */
 @ApplicationScoped
 public class GcProcess implements TechnicalProcess {
@@ -160,6 +176,8 @@ public class GcProcess implements TechnicalProcess {
   static final String BRANCHES_SWEEP = "branches.sweep";
   static final String CONFIGURATION_ENTRIES = "configuration.entries";
   static final String TAGS_SWEEP = "tags.sweep";
+  static final String CLAIMS_IDP_CLIENTS = "claims.idp-clients";
+  static final String IDP_SERVICE_CLIENTS = "idp.service-clients";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
 
@@ -185,7 +203,8 @@ public class GcProcess implements TechnicalProcess {
   public String description() {
     return "Reads the platform's pin set once, then asks every store's own owner to delete what"
         + " nothing pins: registry identities and blobs (qits-artifacts), host images, orphan"
-        + " volumes and buildkit cache (qits-containers). Measures host disk and the registry"
+        + " volumes and buildkit cache (qits-containers), and service clients nothing claims"
+        + " (qits-idp). Measures host disk and the registry"
         + " store before and after.";
   }
 
@@ -410,6 +429,23 @@ public class GcProcess implements TechnicalProcess {
                             config.tagsSweepCallTimeout()),
                     answer -> GcSummaries.tagsSweep(answer.json()))),
         new StepDefinition(
+            CLAIMS_IDP_CLIENTS,
+            "Service-client claims",
+            PeerTarget.DEPLOYMENTS,
+            List.of(),
+            context ->
+                StepResult.of(
+                    context
+                        .peers()
+                        .get(PeerTarget.DEPLOYMENTS, "/deployments/api/claims/idp-clients"),
+                    answer -> GcSummaries.idpClientClaims(answer.json()))),
+        new StepDefinition(
+            IDP_SERVICE_CLIENTS,
+            "Unclaimed service clients",
+            PeerTarget.IDP,
+            List.of(CLAIMS_IDP_CLIENTS),
+            GcProcess::serviceClients),
+        new StepDefinition(
             ARTIFACTS_USAGE_AFTER,
             "Registry store after",
             PeerTarget.ARTIFACTS,
@@ -597,6 +633,37 @@ public class GcProcess implements TechnicalProcess {
     body.put("dryRun", context.dryRun());
     body.set("pins", pinsObject(context));
     return body.toString();
+  }
+
+  /**
+   * The service-client sweep:
+   *
+   * <pre>{@code {"dryRun":…, "claims": <the claims read's "claims" array, verbatim>}}</pre>
+   *
+   * <p><b>Verbatim, the same discipline as {@link #entriesBody}</b>: the claim rows are
+   * qits-deployments' contract and qits-idp reads them as such, so they are re-embedded rather than
+   * re-shaped into a list of ids here.
+   *
+   * <p><b>Never an empty list.</b> The edge already skips this step when the read FAILED; this is
+   * the other half — a read that answered with no claims (or none this run could parse) is refused
+   * before a request exists, because to qits-idp an empty claim set reads as "nothing is claimed".
+   * qits-idp answers 400 to one as well, and a refusal here is the belt that does not depend on it.
+   */
+  static StepResult serviceClients(RunContext context) {
+    JsonNode claims =
+        context.answer(CLAIMS_IDP_CLIENTS).map(answer -> answer.get("claims")).orElse(null);
+    if (claims == null || !claims.isArray() || claims.isEmpty()) {
+      return StepResult.refused(
+          CLAIMS_IDP_CLIENTS
+              + " answered no claims; an empty claim set is never sent, because it would leave"
+              + " every service client unclaimed");
+    }
+    ObjectNode body = JSON.createObjectNode();
+    body.put("dryRun", context.dryRun());
+    body.set("claims", claims);
+    return StepResult.of(
+        context.peers().post(PeerTarget.IDP, "/idp/api/gc/service-clients", body.toString()),
+        answer -> GcSummaries.idpServiceClients(answer.json()));
   }
 
   /** {@code {"dryRun":…, "minAge":"PT24H"}} */

@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.TestMethodOrder;
 
 /**
- * <b>The doors on the write surface</b> — the one that starts deletions on eight other services.
+ * <b>The doors on the write surface</b> — the one that starts deletions on nine other services.
  *
  * <p>{@code api.TokenValidationBootstrapIT} pins the same refusals on the cheapest READ this
  * service has, because that is what a story about token validation should drive. These two are
@@ -39,7 +39,7 @@ import org.junit.jupiter.api.TestMethodOrder;
  * than in it.
  *
  * <p><b>What a refusal must cost is nothing.</b> A presence check cannot say that; an absence can.
- * Both stories therefore end with {@code assertNoEdgesTo} for every one of the eight peers — the
+ * Both stories therefore end with {@code assertNoEdgesTo} for every one of the nine peers — the
  * refusal left an arrow at this service's door and not one beyond it.
  *
  * <p><b>Both role tracks open every route here, so neither is refused the other's door.</b> That is
@@ -94,7 +94,7 @@ public class DeletionRefusalIT {
       nothing. 403 is what "you may not" looks like when "who are you" was already answered.
 
       And every refusal costs the platform nothing: no run row, no worker, and not one request to
-      any of the eight services a real run would have driven.
+      any of the nine services a real run would have driven.
       """)
   @Order(1)
   void aRefusedCallerStartsNothingAtAll(Interactions story) {

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * {@code PeerTokens} with the one named client, {@code qits}, faked directly — no CDI, the same
  * plain-construction shape {@code PeerClientTest} uses for {@code PeerClient}. What this proves is
  * the behaviour change the epic qits-540 dossier's 'Plan (as of 2026-09-13)', C4, makes: ONE client
- * now answers {@link PeerTokens#token(String)} for every one of the eight peers, {@code maintenance}
+ * now answers {@link PeerTokens#token(String)} for every one of the nine peers, {@code maintenance}
  * and {@code configuration} included — the two that {@code ComposeTemplate.java} never turned a
  * bearer on for before this commit, because a live deployment only ever enabled six of the eight
  * old clients.
@@ -49,7 +49,10 @@ class PeerTokensTest {
       // The two that a live deployment never turned a bearer on for before this commit
       // (ComposeTemplate.java only ever enabled six of the eight old clients).
       PeerTarget.MAINTENANCE,
-      PeerTarget.CONFIGURATION
+      PeerTarget.CONFIGURATION,
+      // The ninth (qits-878): the service-client sweep rides the same bearer — qits-idp mints
+      // qits-platform on every token, so no second client is needed to reach the idp itself.
+      PeerTarget.IDP
     };
     for (String target : everyPeer) {
       assertEquals(
@@ -65,6 +68,7 @@ class PeerTokensTest {
 
     assertTrue(tokens.token(PeerTarget.MAINTENANCE).isEmpty());
     assertTrue(tokens.token(PeerTarget.CONFIGURATION).isEmpty());
+    assertTrue(tokens.token(PeerTarget.IDP).isEmpty());
   }
 
   private static OidcClient fakeClient(String accessToken) {

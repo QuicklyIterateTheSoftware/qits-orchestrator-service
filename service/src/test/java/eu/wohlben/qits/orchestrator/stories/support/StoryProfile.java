@@ -46,7 +46,7 @@ import java.util.Map;
  *   <li><b>{@code quarkus.oidc.auth-server-url}</b> — where the idp is. Discovery stays off and
  *       {@code jwks-path} stays {@code jwks}, joined onto this URL, so the shipped boot-time fetch
  *       is exercised rather than replaced.
- *   <li><b>the eight target urls</b> — {@link StoryPeers}, replacing the parent's dead port. The
+ *   <li><b>the nine target urls</b> — {@link StoryPeers}, replacing the parent's dead port. The
  *       parent points them at a port nothing listens on because its claim is that a failure reaches
  *       a readable row; the claim here is what a run actually DOES, which needs peers that answer.
  *   <li><b>the one named oidc client, {@code qits}, ENABLED</b> — shipped off, because a platform
@@ -62,7 +62,7 @@ import java.util.Map;
  * <p>{@code quarkus.scheduler.enabled=false} is inherited from the parent and it is load-bearing
  * rather than tidy: {@code GcSchedule} is a cron at 03:00 UTC, and a CI run straddling that minute
  * would start an unattended deletion run out of a test JVM, against peers that now ANSWER. Nor
- * could a recording tell that run's seventeen calls from a story's — the paths are identical — so an
+ * could a recording tell that run's nineteen calls from a story's — the paths are identical — so an
  * arrow would appear or disappear depending on what time the suite ran, which is a {@code
  * networkHash} that never settles.
  *
@@ -87,7 +87,7 @@ public class StoryProfile extends PackagedSurfaceIT.PackagedUnderTarget {
    */
   public static final String CLIENT_SECRET = "story-orchestrator-client-secret";
 
-  /** The eight peers and the target url key each one is read from — {@code PeerTarget}'s constants. */
+  /** The nine peers and the target url key each one is read from — {@code PeerTarget}'s constants. */
   private static final Map<String, String> TARGET_URL_KEYS =
       Map.of(
           "artifacts", "qits.orchestrator.targets.artifacts-url",
@@ -97,7 +97,8 @@ public class StoryProfile extends PackagedSurfaceIT.PackagedUnderTarget {
           "projects", "qits.orchestrator.targets.projects-url",
           "workspaces", "qits.orchestrator.targets.workspaces-url",
           "maintenance", "qits.orchestrator.targets.maintenance-url",
-          "configuration", "qits.orchestrator.targets.configuration-url");
+          "configuration", "qits.orchestrator.targets.configuration-url",
+          "idp", "qits.orchestrator.targets.idp-url");
 
   @Override
   public Map<String, String> getConfigOverrides() {
@@ -112,7 +113,7 @@ public class StoryProfile extends PackagedSurfaceIT.PackagedUnderTarget {
     overrides.put("qits.auth.machine.required", "true");
     overrides.put("quarkus.oidc.auth-server-url", idp.baseUrl());
 
-    // Where each peer is — one stub answering as all eight, told apart by path prefix.
+    // Where each peer is — one stub answering as all nine, told apart by path prefix.
     TARGET_URL_KEYS.forEach((peer, key) -> overrides.put(key, peers));
 
     // …and the ONE credential this service presents to every one of them (service-client-identity-

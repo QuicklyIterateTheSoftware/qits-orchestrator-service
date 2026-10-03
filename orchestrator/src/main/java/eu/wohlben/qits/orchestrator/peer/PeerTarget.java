@@ -1,7 +1,7 @@
 package eu.wohlben.qits.orchestrator.peer;
 
 /**
- * The eight peers, by their wire name.
+ * The nine peers, by their wire name.
  *
  * <p>Constants rather than an enum because the same string is two things at once: the value a step
  * reports as its {@code target}, and the middle of the config key {@code
@@ -37,6 +37,13 @@ public final class PeerTarget {
 
   /** qits-configuration — the container images a workspace, editor or agent launch would pull. */
   public static final String CONFIGURATION = "configuration";
+
+  /**
+   * qits-idp — the service-client store, swept against the idp-client claims qits-deployments
+   * holds (ticket qits-878). The same {@code qits} bearer as every other peer: qits-idp mints
+   * {@code qits-platform} on every token, so no second client and no second audience.
+   */
+  public static final String IDP = "idp";
 
   private PeerTarget() {}
 }

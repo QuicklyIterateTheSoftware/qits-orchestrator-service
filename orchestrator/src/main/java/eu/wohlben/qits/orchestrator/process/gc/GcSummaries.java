@@ -1,7 +1,11 @@
 package eu.wohlben.qits.orchestrator.process.gc;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * The one human line each gc step leaves behind, read out of the peer's own answer.
@@ -323,6 +327,69 @@ final class GcSummaries {
         + "; "
         + errors
         + (errors == 1 ? " error" : " errors");
+  }
+
+  /**
+   * {@code 14 service-client claims across 12 applications} — qits-deployments' idp-client claims:
+   * the client ids some application's {@code idp:client} resource still holds.
+   */
+  static String idpClientClaims(JsonNode body) {
+    JsonNode claims = body == null ? null : body.get("claims");
+    int count = claims == null ? 0 : claims.size();
+    Set<String> applications = new HashSet<>();
+    if (claims != null) {
+      for (JsonNode claim : claims) {
+        String application = claim.path("applicationName").asText("");
+        if (!application.isBlank()) {
+          applications.add(application);
+        }
+      }
+    }
+    return count
+        + (count == 1 ? " service-client claim across " : " service-client claims across ")
+        + applications.size()
+        + (applications.size() == 1 ? " application" : " applications");
+  }
+
+  /** How many removed client ids a summary names before it says there are more. */
+  static final int NAMED_CLIENTS = 5;
+
+  /**
+   * {@code removed 2 service clients (dev-qits-old, dev-qits-gone); kept 14 (claimed 12, grace 1,
+   * caller 1)} — qits-idp's own unclaimed-client sweep. On a dry run it says {@code would remove}.
+   *
+   * <p>The removed ids are NAMED, at most {@value #NAMED_CLIENTS} of them and then {@code …}: a
+   * deleted credential is the one deletion an operator asks about by name, and the full list is in
+   * the stored answer beside this line. {@code kept} is the length of qits-idp's own kept list and
+   * the three figures its {@code keptCounts} — both read, neither re-added here.
+   */
+  static String idpServiceClients(JsonNode body) {
+    if (body == null) {
+      return "no service-client report in the answer";
+    }
+    JsonNode removed = body.path("removed");
+    List<String> named = new ArrayList<>();
+    for (JsonNode client : removed) {
+      if (named.size() == NAMED_CLIENTS) {
+        named.add("…");
+        break;
+      }
+      named.add(client.path("clientId").asText("?"));
+    }
+    JsonNode counts = body.path("keptCounts");
+    return (body.path("dryRun").asBoolean() ? "would remove " : "removed ")
+        + removed.size()
+        + (removed.size() == 1 ? " service client" : " service clients")
+        + (named.isEmpty() ? "" : " (" + String.join(", ", named) + ")")
+        + "; kept "
+        + body.path("kept").size()
+        + " (claimed "
+        + counts.path("claimed").asInt()
+        + ", grace "
+        + counts.path("grace").asInt()
+        + ", caller "
+        + counts.path("caller").asInt()
+        + ")";
   }
 
   private static String text(JsonNode node, String field, String fallback) {

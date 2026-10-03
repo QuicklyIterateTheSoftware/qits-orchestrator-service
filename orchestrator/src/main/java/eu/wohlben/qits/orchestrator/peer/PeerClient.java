@@ -70,6 +70,9 @@ public class PeerClient {
   @ConfigProperty(name = "qits.orchestrator.targets.configuration-url")
   String configurationUrl;
 
+  @ConfigProperty(name = "qits.orchestrator.targets.idp-url")
+  String idpUrl;
+
   @ConfigProperty(name = "qits.orchestrator.gc.call-timeout")
   Duration callTimeout;
 
@@ -160,6 +163,7 @@ public class PeerClient {
       case PeerTarget.WORKSPACES -> workspacesUrl;
       case PeerTarget.MAINTENANCE -> maintenanceUrl;
       case PeerTarget.CONFIGURATION -> configurationUrl;
+      case PeerTarget.IDP -> idpUrl;
       default -> throw new IllegalArgumentException("no such peer: " + target);
     };
   }
