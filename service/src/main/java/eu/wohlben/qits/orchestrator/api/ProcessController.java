@@ -33,7 +33,9 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
  * against qits-idp). A run is started by an operator in a browser and could as well be
  * started by a machine; a machine-only guard would lock the operator out of the button this service
  * exists to offer. There is no anonymous route here. The reads also take {@code qits:agent} (a
- * commissioned agent); starting a run does not.
+ * commissioned agent); starting a run takes it too, but only of the {@code gc} process — {@code gc}
+ * is deleting whatever the process deems garbage, which an owner has decided an agent may trigger
+ * (dry-run or real) with no more guard than that.
  */
 @Path("/processes")
 @Produces(MediaType.APPLICATION_JSON)
@@ -105,7 +107,7 @@ public class ProcessController {
   @APIResponse(responseCode = "202", description = "Started; poll GET /runs/{id}")
   @APIResponse(responseCode = "404", description = "No process of that kind")
   @APIResponse(responseCode = "409", description = "A run of that kind is already active")
-  @RolesAllowed({"qits:admin", "qits:system"})
+  @RolesAllowed({"qits:admin", "qits:system", "qits:agent"})
   public Response start(@PathParam("kind") String kind, StartRunRequest request) {
     boolean dryRun = request != null && request.dryRun();
     UUID id = executor.start(kind, RunTrigger.MANUAL, dryRun);

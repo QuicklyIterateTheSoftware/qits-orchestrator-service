@@ -12,7 +12,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code qits:agent}, a commissioned agent's own role: it reads every GET route and starts nothing.
+ * {@code qits:agent}, a commissioned agent's own role: it reads every GET route, and may also start
+ * a {@code gc} run — {@code gc} is the only technical process this service knows, and an owner has
+ * decided an agent may trigger it, dry-run or real, with no further guard.
  *
  * <p>Each request names its identity in {@code X-Qits-User} / {@code X-Qits-Roles}, so the {@code
  * %test} dev user does not apply and the identity holds exactly the role sent.
@@ -45,13 +47,13 @@ class AgentReadAccessTest {
   }
 
   @Test
-  void anAgentStartsNoRun() {
+  void anAgentStartsAGcRun() {
     agent()
         .contentType(ContentType.JSON)
         .body("{\"dryRun\":true}")
         .post(BASE + "/processes/gc/runs")
         .then()
-        .statusCode(403);
+        .statusCode(202);
   }
 
   @Test
