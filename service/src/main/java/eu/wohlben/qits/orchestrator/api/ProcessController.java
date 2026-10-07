@@ -64,7 +64,7 @@ public class ProcessController {
   @GET
   @Operation(summary = "Every technical process, with its steps and their dependencies")
   @APIResponse(responseCode = "200", description = "The processes")
-  @RolesAllowed({"qits:admin", "qits:system", "qits:agent"})
+  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:system", "qits:agent"})
   public List<ProcessDto> processes() {
     return runs.processes();
   }
@@ -80,7 +80,7 @@ public class ProcessController {
   @Operation(summary = "One process's runs, newest first")
   @APIResponse(responseCode = "200", description = "The runs")
   @APIResponse(responseCode = "404", description = "No process of that kind")
-  @RolesAllowed({"qits:admin", "qits:system", "qits:agent"})
+  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:system", "qits:agent"})
   public List<RunSummaryDto> runs(
       @PathParam("kind") String kind,
       @QueryParam("limit") @DefaultValue("" + DEFAULT_LIMIT) int limit) {
@@ -107,7 +107,7 @@ public class ProcessController {
   @APIResponse(responseCode = "202", description = "Started; poll GET /runs/{id}")
   @APIResponse(responseCode = "404", description = "No process of that kind")
   @APIResponse(responseCode = "409", description = "A run of that kind is already active")
-  @RolesAllowed({"qits:admin", "qits:system", "qits:agent"})
+  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:system", "qits:agent"})
   public Response start(@PathParam("kind") String kind, StartRunRequest request) {
     boolean dryRun = request != null && request.dryRun();
     UUID id = executor.start(kind, RunTrigger.MANUAL, dryRun);
