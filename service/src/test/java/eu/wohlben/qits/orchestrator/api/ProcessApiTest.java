@@ -10,6 +10,8 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import eu.wohlben.qits.orchestrator.peer.FakePeers;
+import eu.wohlben.qits.orchestrator.persistence.RunStore;
+import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
@@ -40,8 +42,14 @@ class ProcessApiTest {
 
   @Inject FakePeers peers;
 
+  @Inject RunStore runs;
+
   @BeforeEach
   void scriptTheHappyPath() {
+    // A neighbouring class (AdminAgentAccessTest, AgentReadAccessTest) may have started a gc run
+    // against the one shared app and DB and returned without waiting; drain it before this class
+    // scripts the peers and holds them, or `start` below gets a 409 that is not this class's own.
+    awaitNoActiveGcRun();
     peers.reset();
     peers.answer(
         "/containers/api/gc/usage",
@@ -121,6 +129,28 @@ class ProcessApiTest {
             "{\"dryRun\":false,\"removed\":[],"
                 + "\"kept\":[{\"clientId\":\"dev-qits-ci\",\"reason\":\"claimed\"}],"
                 + "\"keptCounts\":{\"claimed\":1,\"grace\":0,\"caller\":0}}"));
+  }
+
+  /**
+   * Waits for any gc run a neighbouring {@code @QuarkusTest} class left RUNNING, so this class's
+   * own single-flight assertions are not tripped by somebody else's leak. See {@code
+   * GcDeployTriggerTest.awaitNoActiveRun} for the same wait and the clear it needs.
+   */
+  private void awaitNoActiveGcRun() {
+    Instant deadline = Instant.now().plus(Duration.ofSeconds(60));
+    while (Instant.now().isBefore(deadline)) {
+      runs.getEntityManager().clear();
+      if (runs.active(GcProcess.KIND).isEmpty()) {
+        return;
+      }
+      try {
+        Thread.sleep(20);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(e);
+      }
+    }
+    throw new AssertionError("a gc run never finished");
   }
 
   /** Starts a run and returns its id. */
