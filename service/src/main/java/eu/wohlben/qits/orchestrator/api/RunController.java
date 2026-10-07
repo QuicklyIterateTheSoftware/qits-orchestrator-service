@@ -39,7 +39,7 @@ public class RunController {
   @Operation(summary = "One run with its steps")
   @APIResponse(responseCode = "200", description = "The run")
   @APIResponse(responseCode = "404", description = "No such run")
-  @RolesAllowed({"qits:admin", "qits:system", "qits:agent"})
+  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:system", "qits:agent"})
   public RunDetailDto run(@PathParam("id") String id) {
     UUID runId;
     try {

@@ -244,6 +244,7 @@ quarkus-oidc against qits-idp.
 An operator presses Run now in a browser; a machine may post the same run. There is no anonymous
 route here and there must never be one — the write surface starts deletions on other services'
 stores. `stories.refusals` is where each door is shown being shut rather than described.
+`qits:admin-agent` is admitted wherever `qits:admin` is, for now (qits-628 follow-up).
 
 `quarkus.oidc.tenant-enabled=${qits.auth.machine.required:false}` — validation follows the rollout
 gate rather than standing on its own, so with the gate off there is no OIDC tenant, nothing fetches

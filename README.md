@@ -178,7 +178,8 @@ Under `/orchestrator/api`. Every route takes `qits:admin` (a person, via qits-ga
 `X-Qits-User` / `X-Qits-Roles`) or `qits:system` (a machine, via a bearer). Every `GET` also takes
 `qits:agent` (a commissioned agent), and so does starting a run — `gc` is the only technical process
 this service knows, and a `qits:agent` caller may start one, dry-run or real, the same as the other
-two roles. There is no anonymous route.
+two roles. There is no anonymous route. `qits:admin-agent` (an ADMIN workspace's own coding-agent
+container) is admitted everywhere `qits:admin` is, for now (qits-628 follow-up).
 
 ```
 GET  /processes                      → [{kind, name, description,
