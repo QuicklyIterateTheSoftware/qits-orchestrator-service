@@ -1,6 +1,7 @@
 package eu.wohlben.qits.orchestrator.peer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -115,9 +116,55 @@ class PeerClientTest {
     assertTrue(stored.contains("truncated by qits-platform-orchestrator"), "no marker in the body");
     assertTrue(
         stored.length() < responseBody.length(), "a body over the bound must be shorter than it was");
-    // A truncated document is not JSON, and that is not an error: the text is what a person reads.
-    assertNull(exchange.answer().json());
+    // Only the STORED copy is cut. The tree is parsed from the whole answer (qits-1175).
+    assertNotNull(exchange.answer().json());
+    assertEquals(PeerClient.RESPONSE_LIMIT_BYTES, exchange.answer().json().asText().length());
+    assertFalse(exchange.answer().truncated());
     assertNull(exchange.answer().error());
+  }
+
+  @Test
+  void aPinAnswerOverOneMebibyteParsesWhole() {
+    // The shape that broke run cd1c3349: maintenance's pin answer past 1 MiB. Every pin must be in
+    // the tree, the last one included — the stored copy is cut, the parsed answer is not.
+    StringBuilder body = new StringBuilder("{\"pins\":[");
+    int count = 20_000;
+    for (int i = 0; i < count; i++) {
+      if (i > 0) {
+        body.append(',');
+      }
+      body.append("{\"name\":\"eu.wohlben.qits:lib-")
+          .append(i)
+          .append("\",\"version\":\"2026.1010.")
+          .append(i)
+          .append("\",\"repository\":\"qits-some-repository-service\"}");
+    }
+    body.append("]}");
+    responseBody = body.toString();
+    assertTrue(responseBody.length() > PeerClient.RESPONSE_LIMIT_BYTES, "the fixture must pass 1 MiB");
+
+    PeerAnswer answer = client.get(PeerTarget.CI, "/ci/api/daemon").answer();
+
+    assertFalse(answer.truncated());
+    assertNotNull(answer.json());
+    assertEquals(count, answer.json().get("pins").size());
+    assertEquals(
+        "eu.wohlben.qits:lib-" + (count - 1),
+        answer.json().get("pins").get(count - 1).get("name").asText());
+    assertTrue(answer.body().contains("truncated by qits-platform-orchestrator"));
+  }
+
+  @Test
+  void anAnswerOverTheParseLimitIsMarkedTruncatedWithNoTree() {
+    client.parseLimitBytes = 1024;
+    responseBody = "{\"pins\":[\"" + "x".repeat(4096) + "\"]}";
+
+    PeerAnswer answer = client.get(PeerTarget.CI, "/ci/api/daemon").answer();
+
+    assertEquals(200, answer.httpStatus());
+    assertTrue(answer.truncated(), "an answer past the parse limit must say so");
+    assertNull(answer.json());
+    assertNull(answer.error());
   }
 
   @Test

@@ -58,11 +58,26 @@ class GcProcessTest {
   private static final String CLAIMS = "/deployments/api/claims/idp-clients";
   private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
 
+  private static final String PIN_EDGES =
+      "pins.deployments,pins.ci,pins.dependencies,pins.images,pins.workspaces,pins.projects";
+
+  /** Every path a deleting step calls. A run with an unread pin source calls none of them. */
+  private static final List<String> DELETERS =
+      List.of(PLAN, SWEEP, IMAGES, VOLUMES, BUILD_CACHE, BRANCHES, ENTRIES, TAGS, SERVICE_CLIENTS);
+
+  private void assertNoDeleterWasCalled() {
+    for (String path : DELETERS) {
+      assertTrue(peers.bodiesFor(path).isEmpty(), path + " was called with a pin source unread");
+    }
+  }
+
   @Inject RunExecutor executor;
 
   @Inject RunStore runs;
 
   @Inject FakePeers peers;
+
+  @Inject eu.wohlben.qits.orchestrator.process.gc.GcProcess process;
 
   @BeforeEach
   void scriptEveryPeerAsHealthy() {
@@ -425,12 +440,12 @@ class GcProcessTest {
   }
 
   @Test
-  void theServiceClientSweepDependsOnTheClaimsReadAloneAndEmbedsTheClaimsVerbatim() {
+  void theServiceClientSweepDependsOnTheClaimsReadAndEveryPinAndEmbedsTheClaimsVerbatim() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     awaitClosed(id);
 
     assertEquals(
-        "claims.idp-clients",
+        "claims.idp-clients," + PIN_EDGES,
         runs.steps(id).stream()
             .filter(step -> "idp.service-clients".equals(step.stepId))
             .findFirst()
@@ -572,12 +587,12 @@ class GcProcessTest {
   }
 
   @Test
-  void theConfigurationEntriesStepDependsOnDeploymentPinsAloneAndEmbedsThemVerbatim() {
+  void theConfigurationEntriesStepDependsOnEveryPinAndEmbedsTheDeploymentPinsVerbatim() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     awaitClosed(id);
 
     assertEquals(
-        "pins.deployments",
+        PIN_EDGES,
         runs.steps(id).stream()
             .filter(step -> "configuration.entries".equals(step.stepId))
             .findFirst()
@@ -643,34 +658,93 @@ class GcProcessTest {
   }
 
   @Test
-  void aPinSourceThatAnsweredSomethingUnreadableIsAbsentFromTheBodyRatherThanNull() {
-    // 200 with a body that is not JSON: the step SUCCEEDS — a peer that answered is not a failure —
-    // but there is no tree to embed, so the member is absent rather than null. It is the belt behind
-    // the edges (a 1 MiB truncation does the same thing), and qits-artifacts reads an absent member
-    // as that source being unanswered, which aborts the sweep on its side.
+  void aPinSourceThatAnsweredSomethingUnreadableFailsAndNothingDeletes() {
+    // 200 with a body that is not JSON. Before qits-1175 the step SUCCEEDED and the member was simply
+    // absent from the deleters' bodies; now it is a failed read, and the edges skip every deleter.
     peers.answer(IMAGE_PINS, FakePeers.Scripted.status(200, "{\"pins\":[…truncated"));
 
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
-    awaitClosed(id);
+    OpRun run = awaitClosed(id);
 
+    assertEquals(RunStatus.FAILED.name(), run.status);
     Map<String, OpStep> steps = stepsOf(id);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.images").status);
-
-    JsonNode pins = json(peers.bodiesFor(PLAN).getFirst()).get("pins");
-    assertTrue(pins.has("deployments"));
-    assertTrue(pins.has("ciDaemon"));
-    assertTrue(pins.has("dependencies"));
-    assertTrue(pins.has("workspaceLaunches"));
-    assertTrue(pins.has("projectLaunches"));
-    assertFalse(pins.has("configuredImages"), "an unreadable source must not be sent as anything");
+    assertEquals(RunStatus.FAILED.name(), steps.get("pins.images").status);
+    assertTrue(steps.get("pins.images").error.contains("not JSON"), steps.get("pins.images").error);
+    assertNoDeleterWasCalled();
   }
 
   @Test
-  void anEffectiveLaunchPinNobodyCouldReadStopsTheRegistryAndLeavesTheHostSweepAlone() {
+  void aTruncatedPinAnswerFailsItsStepAndNoStoreDeletesAnything() {
+    // Run cd1c3349: maintenance's pin answer was cut off and read as "0 manifest pins across 0
+    // repositories", SUCCEEDED. A cut-off pin answer is a FAILED read, and every deleter — in every
+    // store, not only the registry — is skipped naming it.
+    peers.answer(
+        DEPENDENCY_PINS,
+        FakePeers.Scripted.truncated("{\"generatedAt\":\"2026-10-10T20:55:56Z\",\"repositories\":["));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    Map<String, OpStep> steps = stepsOf(id);
+    OpStep pin = steps.get("pins.dependencies");
+    assertEquals(RunStatus.FAILED.name(), pin.status);
+    assertEquals(200, pin.httpStatus);
+    assertTrue(pin.error.contains("parse limit"), pin.error);
+    for (String deleter :
+        List.of(
+            "artifacts.plan",
+            "artifacts.sweep",
+            "containers.images",
+            "containers.volumes",
+            "containers.build-cache",
+            "branches.sweep",
+            "configuration.entries",
+            "tags.sweep",
+            "idp.service-clients")) {
+      assertEquals(RunStatus.SKIPPED.name(), steps.get(deleter).status, deleter);
+      assertEquals("skipped: pins.dependencies failed", steps.get(deleter).error, deleter);
+    }
+    assertNoDeleterWasCalled();
+    // The reads still run: the other pins, the catalogue, the claims and the opening measurements.
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.deployments").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("repos.catalogue").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("claims.idp-clients").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("usage.before").status);
+  }
+
+  @Test
+  void everyStepThatDeletesDependsOnEveryPinSource() {
+    // The structural guard: a deleter added later without the pin edges fails here, not in a run.
+    List<String> reads =
+        List.of(
+            "usage.before",
+            "artifacts.usage.before",
+            "pins.deployments",
+            "pins.ci",
+            "pins.dependencies",
+            "pins.images",
+            "pins.workspaces",
+            "pins.projects",
+            "repos.catalogue",
+            "claims.idp-clients",
+            "artifacts.usage.after",
+            "usage.after");
+    List<String> pins = List.of(PIN_EDGES.split(","));
+    process.steps().stream()
+        .filter(step -> !reads.contains(step.id()))
+        .forEach(
+            step ->
+                assertTrue(
+                    step.dependsOn().containsAll(pins),
+                    step.id() + " deletes without every pin edge: " + step.dependsOn()));
+  }
+
+  @Test
+  void anEffectiveLaunchPinNobodyCouldReadStopsEveryDeleter() {
     // The same fail-closed shape as the dependency read, and it is asserted separately because the
     // two effective sources ride peers that ALREADY had steps here: qits-workspaces is the branch
-    // sweep's peer. A broken launch-pin read must skip the registry and leave the branch sweep — a
-    // step with no pin of its own — entirely alone.
+    // sweep's peer.
     peers.answer(
         WORKSPACE_LAUNCH_PINS, FakePeers.Scripted.unreachable("qits-workspaces: no route"));
 
@@ -690,9 +764,11 @@ class GcProcessTest {
     assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without every pin source");
 
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.projects").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.images").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("branches.sweep").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.build-cache").status);
+    // …and since qits-1175 every other deleter too: one unread pin source deletes nothing anywhere.
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.images").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("branches.sweep").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.build-cache").status);
+    assertNoDeleterWasCalled();
   }
 
   @Test
@@ -772,7 +848,7 @@ class GcProcessTest {
   }
 
   @Test
-  void anUnreadablePinSetStopsEverythingThatDeletesOnItAndNothingElse() {
+  void anUnreadablePinSetStopsEveryDeleterAndNoRead() {
     peers.answer(
         DEPLOYMENT_PINS, FakePeers.Scripted.unreachable("qits-platform-deployments: no route"));
 
@@ -796,17 +872,15 @@ class GcProcessTest {
     assertTrue(peers.bodiesFor(IMAGES).isEmpty(), "no image may be swept without pins");
     assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without pins");
 
-    // AND EVERYTHING THAT NEEDS NO PINS STILL RUNS. That is the point of the edges being per step:
-    // both the volume sweep and the build-cache prune hang off usage.before alone, so a broken pin
-    // read costs the platform no reclaim it could have had. The build cache is the larger half of
-    // the measured problem, and it has no keep-set to be wrong about.
+    // SINCE qits-1175 THE PRUNES WAIT TOO. They need no keep-set of their own, but a run with any pin
+    // source unread deletes nothing in any store. The reads still run.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("usage.before").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.volumes").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.build-cache").status);
-    assertFalse(peers.bodiesFor(BUILD_CACHE).isEmpty(), "the prune needs no pins and must be asked for");
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.volumes").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.build-cache").status);
+    assertNoDeleterWasCalled();
 
     // usage.after DOES cascade here, and the difference from the dry-run case is the whole point:
-    // two of the four steps it depends on were skipped BY A FAILURE, so an "after" figure would be
+    // the steps it depends on were skipped BY A FAILURE, so an "after" figure would be
     // measuring a run that could not happen rather than one that chose not to.
     assertEquals(RunStatus.SKIPPED.name(), steps.get("usage.after").status);
     // The registry's own opening measurement needs no pin either, so the run still records what the
@@ -816,11 +890,9 @@ class GcProcessTest {
   }
 
   @Test
-  void aDependencyPinNobodyCouldReadStopsTheRegistryAndLeavesTheHostSweepAlone() {
-    // The new pin sources are the registry's, not the host's: qits-platform-maintenance says what
-    // repositories' mains still reference, which is a keep-set for maven, npm and oci identities in
-    // qits-artifacts. A host image is kept by a DEPLOYMENT pin, which answered — so the image sweep
-    // must still run, exactly as the build-cache prune does.
+  void aDependencyPinNobodyCouldReadStopsEveryDeleter() {
+    // qits-platform-maintenance says what repositories' mains still reference. Its keep-set is the
+    // registry's, but since qits-1175 an unread pin source stops every deleter, the host's included.
     peers.answer(
         DEPENDENCY_PINS, FakePeers.Scripted.unreachable("qits-platform-maintenance: no route"));
 
@@ -839,8 +911,9 @@ class GcProcessTest {
     assertEquals("skipped: pins.dependencies failed", steps.get("tags.sweep").error);
 
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.images").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.images").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("containers.build-cache").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.images").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.build-cache").status);
+    assertNoDeleterWasCalled();
   }
 
   @Test

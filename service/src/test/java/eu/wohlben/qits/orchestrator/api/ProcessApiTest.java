@@ -226,10 +226,28 @@ class ProcessApiTest {
         .body("find { it.kind == 'gc' }.steps[13].target", equalTo("projects"))
         .body("find { it.kind == 'gc' }.steps[14].id", equalTo("branches.sweep"))
         .body("find { it.kind == 'gc' }.steps[14].target", equalTo("workspaces"))
-        .body("find { it.kind == 'gc' }.steps[14].dependsOn", contains("repos.catalogue"))
+        .body(
+            "find { it.kind == 'gc' }.steps[14].dependsOn",
+            contains(
+                "repos.catalogue",
+                "pins.deployments",
+                "pins.ci",
+                "pins.dependencies",
+                "pins.images",
+                "pins.workspaces",
+                "pins.projects"))
         .body("find { it.kind == 'gc' }.steps[15].id", equalTo("configuration.entries"))
         .body("find { it.kind == 'gc' }.steps[15].target", equalTo("configuration"))
-        .body("find { it.kind == 'gc' }.steps[15].dependsOn", contains("pins.deployments"))
+        // Every deleter waits on every pin read (qits-1175), not only on the one it embeds.
+        .body(
+            "find { it.kind == 'gc' }.steps[15].dependsOn",
+            contains(
+                "pins.deployments",
+                "pins.ci",
+                "pins.dependencies",
+                "pins.images",
+                "pins.workspaces",
+                "pins.projects"))
         .body("find { it.kind == 'gc' }.steps[16].id", equalTo("tags.sweep"))
         .body("find { it.kind == 'gc' }.steps[16].target", equalTo("projects"))
         .body(
@@ -243,13 +261,22 @@ class ProcessApiTest {
                 "pins.projects",
                 "repos.catalogue"))
         // The service-client sweep (qits-878): claims read from the deployer, the ninth peer asked to
-        // delete what nothing claims — and the read is its only edge.
+        // delete what nothing claims — the claims read first, then every pin read (qits-1175).
         .body("find { it.kind == 'gc' }.steps[17].id", equalTo("claims.idp-clients"))
         .body("find { it.kind == 'gc' }.steps[17].target", equalTo("deployments"))
         .body("find { it.kind == 'gc' }.steps[17].dependsOn", equalTo(java.util.List.of()))
         .body("find { it.kind == 'gc' }.steps[18].id", equalTo("idp.service-clients"))
         .body("find { it.kind == 'gc' }.steps[18].target", equalTo("idp"))
-        .body("find { it.kind == 'gc' }.steps[18].dependsOn", contains("claims.idp-clients"))
+        .body(
+            "find { it.kind == 'gc' }.steps[18].dependsOn",
+            contains(
+                "claims.idp-clients",
+                "pins.deployments",
+                "pins.ci",
+                "pins.dependencies",
+                "pins.images",
+                "pins.workspaces",
+                "pins.projects"))
         .body("find { it.kind == 'gc' }.steps[19].id", equalTo("artifacts.usage.after"))
         .body("find { it.kind == 'gc' }.steps[19].dependsOn", contains("artifacts.sweep"));
   }

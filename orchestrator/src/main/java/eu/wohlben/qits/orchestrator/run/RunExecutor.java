@@ -53,10 +53,9 @@ import org.jboss.logging.Logger;
  * SkipKind}, and the live run that proved the distinction has to be a field rather than a
  * convention.
  *
- * <b>Independent steps still run.</b> A failed pin read stops everything that deletes on the
- * strength of those pins and nothing else — the volume sweep and the build-cache prune do not need
- * a pin set, and a night where they are skipped too is a night of no reclaim for no reason. That is
- * the whole point of the edges being declared per step.
+ * <b>Independent steps still run.</b> A failure skips only the steps whose edges reach it. Which
+ * steps those are is the process's call: the gc process makes every deleter depend on every pin
+ * read, so a failed pin read stops every delete in the run and leaves the reads alone.
  *
  * <p><b>The run is FAILED if any step FAILED.</b> A SKIPPED step does not fail it: a skip is the
  * consequence of a failure already counted.

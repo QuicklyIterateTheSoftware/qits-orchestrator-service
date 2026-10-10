@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -31,15 +33,30 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * what happened, and a process whose steps had to catch would put half its outcomes on an exception
  * path nobody reads.
  *
- * <p><b>A response is bounded at 1 MiB</b> with a marker appended. An artifacts plan lists every
- * condemned identity on the platform and can be tens of megabytes; the store here is a log a person
- * reads, and an unbounded column would let one peer's verbosity decide this service's disk.
+ * <p><b>The STORED copy of a response is bounded at 1 MiB</b> with a marker appended. An artifacts
+ * plan lists every condemned identity on the platform and can be tens of megabytes; the store here
+ * is a log a person reads, and an unbounded column would let one peer's verbosity decide this
+ * service's disk.
+ *
+ * <p><b>The PARSED answer is not bounded by that.</b> It is read up to {@link #PARSE_LIMIT_BYTES}
+ * and parsed whole, because a step judges by the tree, not by the log copy. Parsing the 1 MiB copy
+ * is what made run cd1c3349 read maintenance's 1.2 MiB pin answer as "0 manifest pins" (ticket
+ * qits-1175). An answer over the parse limit comes back with {@code truncated} set and no tree.
  */
 @ApplicationScoped
 public class PeerClient {
 
   /** How much of a peer's answer is kept, and what says so when the rest is dropped. */
   public static final int RESPONSE_LIMIT_BYTES = 1024 * 1024;
+
+  /**
+   * How much of a peer's answer is read and parsed. Large on purpose: maintenance's pin answer
+   * passed 1 MiB in October 2026 and grows with every repository and every unreleased tag.
+   */
+  public static final int PARSE_LIMIT_BYTES = 64 * 1024 * 1024;
+
+  /** The parse limit in force. A field so a test can lower it without sending 64 MiB. */
+  int parseLimitBytes = PARSE_LIMIT_BYTES;
 
   private static final String TRUNCATION_MARKER =
       "\n…truncated by qits-platform-orchestrator at " + RESPONSE_LIMIT_BYTES + " bytes";
@@ -140,10 +157,19 @@ public class PeerClient {
     tokens.token(target).ifPresent(token -> request.header("Authorization", "Bearer " + token));
 
     try {
-      HttpResponse<String> response =
-          client().send(request.build(), HttpResponse.BodyHandlers.ofString());
-      String body = bound(response.body());
-      return new PeerAnswer(response.statusCode(), body, parse(body), null);
+      HttpResponse<InputStream> response =
+          client().send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+      byte[] bytes;
+      boolean truncated;
+      try (InputStream in = response.body()) {
+        bytes = in.readNBytes(parseLimitBytes + 1);
+        truncated = bytes.length > parseLimitBytes;
+      }
+      if (truncated) {
+        bytes = Arrays.copyOf(bytes, parseLimitBytes);
+      }
+      JsonNode json = truncated ? null : parse(bytes);
+      return new PeerAnswer(response.statusCode(), bound(bytes), json, null, truncated);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       return new PeerAnswer(null, null, null, call.url() + " was interrupted");
@@ -187,14 +213,10 @@ public class PeerClient {
    * bound are both about size. Cut on a character boundary, then say so — a silently cut JSON
    * document reads as a malformed one, which is a bug report about the wrong service.
    */
-  private static String bound(String body) {
-    if (body == null) {
-      return null;
+  private static String bound(byte[] bytes) {
+    if (bytes.length <= RESPONSE_LIMIT_BYTES) {
+      return new String(bytes, StandardCharsets.UTF_8);
     }
-    if (body.getBytes(StandardCharsets.UTF_8).length <= RESPONSE_LIMIT_BYTES) {
-      return body;
-    }
-    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
     int end = RESPONSE_LIMIT_BYTES;
     // Do not split a UTF-8 sequence: walk back off any continuation byte.
     while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
@@ -203,13 +225,17 @@ public class PeerClient {
     return new String(bytes, 0, end, StandardCharsets.UTF_8) + TRUNCATION_MARKER;
   }
 
-  /** The body as a tree, or null. A truncated body does not parse, and that is not an error. */
-  private static JsonNode parse(String body) {
-    if (body == null || body.isBlank()) {
+  /**
+   * The whole body as a tree, or null when it is empty or not JSON. Not an error here: whether a
+   * missing tree fails a step is that step's call — see {@code StepResult.ofKeepSet}.
+   */
+  private static JsonNode parse(byte[] body) {
+    if (body.length == 0) {
       return null;
     }
     try {
-      return JSON.readTree(body);
+      JsonNode tree = JSON.readTree(body);
+      return tree == null || tree.isMissingNode() ? null : tree;
     } catch (Exception e) {
       return null;
     }

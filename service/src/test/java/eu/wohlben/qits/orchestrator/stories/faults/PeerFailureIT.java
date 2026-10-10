@@ -39,23 +39,21 @@ import org.junit.jupiter.api.BeforeAll;
  * <p>"Fail-closed is an edge, not an {@code if}" is the sentence this repository's working notes
  * open the executor section with, and it is the hardest thing here to see from the outside. Nothing
  * deletes against a keep-set it could not read, and the mechanism is the DEPENDENCY rather than a
- * check inside a step: {@code artifacts.plan}, {@code artifacts.sweep} and {@code containers.images}
- * declare the pin reads as edges, so a failed pin read skips all three before a body runs. The
- * empty-keep-set path in {@code GcProcess.imagesBody} is kept as a belt and never gets the chance.
+ * check inside a step: every step that deletes declares all six pin reads as edges, so a failed pin
+ * read skips every one of them before a body runs (ticket qits-1175). The empty-keep-set path in
+ * {@code GcProcess.imagesBody} is kept as a belt and never gets the chance.
  *
- * <p><b>The rule cuts the other way too, and that half is the expensive one.</b> A step with no
- * keep-set must NOT wait on a pin: {@code containers.volumes} and {@code containers.build-cache}
- * hang off the disk measurement alone, because a prune and a dangling-volume sweep have nothing a
- * pin could protect — and the build cache is the larger half of the measured problem, so skipping it
- * on a pin failure would cost the platform the night's biggest reclaim for a reason that does not
- * apply to it.
+ * <p><b>The rule covers every store, not only the ones the broken source protects.</b> Before
+ * qits-1175 the volume sweep, the build-cache prune, the branch sweep and the rest ran on a night a
+ * pin read failed, on the reasoning that they had no keep-set to lose. A cut-off pin answer that
+ * read as success showed what that reasoning costs: one bad read, and the only thing between the
+ * platform and a wrong delete was a guard inside one peer. Now a run with an unread pin source
+ * deletes nothing.
  *
- * <p>So one story, one broken peer, and a diagram that says both halves at once: an arrow to
- * qits-ci carrying a 503, fifteen arrows to the peers that answered anyway, and <b>no arrow to
- * qits-artifacts that would have deleted anything</b> — the plan and the sweep are simply not there.
- * The registry IS reached, once, by the store measurement that needs no pin, so the honest claim is
- * about which calls are missing rather than about which peer is untouched; a presence check cannot
- * make either.
+ * <p>So one story, one broken peer, and a diagram that says it: an arrow to qits-ci carrying a 503,
+ * arrows for the reads that answered anyway, and <b>no arrow to any deleter</b>. The registry and
+ * the host ARE reached, once each, by the measurements that need no pin, so the honest claim is
+ * about which calls are missing rather than about which peer is untouched.
  *
  * <h2>How the peer is broken</h2>
  *
@@ -75,7 +73,7 @@ public class PeerFailureIT {
   static final String CATEGORY_SLUG = Slugs.slug(CATEGORY);
 
   static final String FAIL_CLOSED =
-      "A pin nobody could read deletes nothing, and stops nothing that needs no pin";
+      "A pin nobody could read deletes nothing in any store";
 
   static final String FAIL_CLOSED_SLUG = Slugs.slug(FAIL_CLOSED);
 
@@ -103,27 +101,25 @@ public class PeerFailureIT {
   @UserStoryDescription(
       """
       qits-ci is being redeployed at three in the morning, so the read that says which daemon binary
-      must survive the night answers 503. Everything that would delete on the strength of that pin
-      is skipped before its body runs — the registry plan, the registry sweep — and the run is
-      FAILED, because a peer that could not be read is a failure and not a footnote.
+      must survive the night answers 503. Every step that deletes is skipped before its body runs —
+      the registry plan and sweep, host images, orphan volumes, the build cache, merged branches,
+      retired configuration entries, decommissioned tags and unclaimed service clients — and the run
+      is FAILED, because a peer that could not be read is a failure and not a footnote.
 
-      Nothing else stops. The disk is still measured and so is the registry store, the five pin
-      reads that answered are still read, host images are still collected against the deployment
-      pins that DID answer, orphan volumes are still swept and the build cache is still pruned —
-      which is the largest reclaim of the night and has no keep-set anybody could have protected it
-      with. The repository catalogue is still read and merged branches are still swept. A night
-      where one broken peer stopped every unrelated reclaim would be a night of no reclaim for no
-      reason.
+      The reads still happen. The disk is still measured and so is the registry store, the five pin
+      reads that answered are still read, and so are the repository catalogue and the service-client
+      claims, so the night's record still says what the platform held. A run that cannot read its
+      whole keep-set deletes nothing, in any store: one night of no reclaim is cheap, and a wrong
+      delete is not.
 
       A skipped step names the step that actually FAILED rather than the skipped neighbour in
       between, so a reader does not have to walk the graph backwards to find the cause. And the
       whole of what "fail-closed" means is visible on the diagram rather than described: one arrow
-      to qits-ci carrying its 503, fifteen arrows to the peers that answered, and not one arrow to
-      qits-artifacts that would have deleted anything — the registry is read for its size and asked
-      for nothing else.
+      to qits-ci carrying its 503, nine arrows for the reads that answered, and not one arrow to a
+      deleter.
       """)
   @UserflowRunsAfter(GarbageCollectionRunIT.class)
-  void aBrokenPinReadSkipsOnlyWhatDeletesOnTheStrengthOfIt(Interactions story) {
+  void aBrokenPinReadSkipsEveryDeleter(Interactions story) {
     NetworkCapture.actor(StoryIdentities.OPERATOR);
 
     String id;
@@ -178,40 +174,32 @@ public class PeerFailureIT {
         .get(StoryTarget.runPath(id))
         .then()
         .statusCode(200)
-        // The other pin answered, so the keep-set it protects exists and the image sweep runs.
+        // The reads still run: the other five pins, the catalogue, the claims, the measurements.
         .body(StoryRuns.stepPath("pins.deployments") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("containers.images") + ".status", equalTo("SUCCEEDED"))
-        // The other four pin reads answered as well, and they are the sources no deployment could
-        // have stood in for: what repositories' mains reference, what the next deploy would
-        // configure, and what each launching service would pull today.
         .body(StoryRuns.stepPath("pins.dependencies") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.images") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.workspaces") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.projects") + ".status", equalTo("SUCCEEDED"))
-        // The registry's own opening measurement needs no pin either, so the night still has the
-        // one figure that would show the store growing.
+        .body(StoryRuns.stepPath("usage.before") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("artifacts.usage.before") + ".status", equalTo("SUCCEEDED"))
-        // No keep-set to lose: the two that hang off the disk measurement alone.
-        .body(StoryRuns.stepPath("containers.volumes") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("containers.build-cache") + ".status", equalTo("SUCCEEDED"))
-        .body(
-            StoryRuns.stepPath("containers.build-cache") + ".summary",
-            containsString("host 12.6 GB reclaimed"))
-        // A different pin pattern one store further out, and unaffected by this one's failure.
         .body(StoryRuns.stepPath("repos.catalogue") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SUCCEEDED"))
-        // configuration.entries depends on pins.deployments alone, which answered — so qits-ci's
-        // 503 leaves it untouched too, the same "only what needs a pin waits for one" shape.
-        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"))
-        // …and the service-client sweep waits on the deployer's claims alone, which no pin touches.
         .body(StoryRuns.stepPath("claims.idp-clients") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SUCCEEDED"));
+        // Every other deleter, in every store, skipped naming the read that failed (qits-1175).
+        .body(StoryRuns.stepPath("containers.images") + ".status", equalTo("SKIPPED"))
+        .body(StoryRuns.stepPath("containers.volumes") + ".status", equalTo("SKIPPED"))
+        .body(StoryRuns.stepPath("containers.build-cache") + ".status", equalTo("SKIPPED"))
+        .body(
+            StoryRuns.stepPath("containers.build-cache") + ".error",
+            equalTo("skipped: pins.ci failed"))
+        .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SKIPPED"))
+        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SKIPPED"))
+        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SKIPPED"));
     story
         .note(
-            "everything that needed no pin ran anyway: 12.6 GB of build cache reclaimed, orphan"
-                + " volumes swept, host images collected against the deployment pins that DID"
-                + " answer, and merged branches swept over a catalogue this failure never touched")
-        .as("independent-steps-still-run");
+            "the reads still ran — five pins, the catalogue, the claims and both opening"
+                + " measurements — and every other deleter was skipped too: host images, volumes,"
+                + " build cache, branches, configuration entries and service clients")
+        .as("every-deleter-skipped");
 
     operator()
         .get()
@@ -317,7 +305,7 @@ public class PeerFailureIT {
             "peer-is-down",
             "run-failed",
             "fail-closed-cascade",
-            "independent-steps-still-run",
+            "every-deleter-skipped",
             "failure-skip-cascades")) {
       ReportAssertions.assertStepId(CATEGORY_SLUG, FAIL_CLOSED_SLUG, step);
     }
@@ -327,44 +315,37 @@ public class PeerFailureIT {
 
     // The broken peer, drawn with the status it answered — evidence rather than a claim.
     to(StoryPeers.CI, StoryPeers.label("GET", StoryPeers.DAEMON_PATH, StoryPeers.REFUSED_STATUS));
-    // …and the fifteen calls that happened anyway. Each store was measured once rather than twice,
-    // because both after-steps were skipped — it is the same label either way, so the count is what
-    // says so and the step assertions above are what make it readable.
+    // …and the nine reads that happened anyway. Each store was measured once rather than twice,
+    // because both after-steps were skipped.
     to(StoryPeers.CONTAINERS, StoryPeers.read(StoryPeers.USAGE_PATH));
     to(StoryPeers.ARTIFACTS, StoryPeers.read(StoryPeers.STORE_PATH));
     to(StoryPeers.MAINTENANCE, StoryPeers.read(StoryPeers.DEPENDENCY_PINS_PATH));
     to(StoryPeers.CONFIGURATION, StoryPeers.read(StoryPeers.IMAGE_PINS_PATH));
     to(StoryPeers.WORKSPACES, StoryPeers.read(StoryPeers.WORKSPACE_LAUNCH_PINS_PATH));
     to(StoryPeers.PROJECTS, StoryPeers.read(StoryPeers.PROJECT_LAUNCH_PINS_PATH));
-    to(StoryPeers.CONTAINERS, StoryPeers.written(StoryPeers.IMAGES_PATH));
-    to(StoryPeers.CONTAINERS, StoryPeers.written(StoryPeers.VOLUMES_PATH));
-    to(StoryPeers.CONTAINERS, StoryPeers.written(StoryPeers.BUILD_CACHE_PATH));
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.PINS_PATH));
     to(StoryPeers.PROJECTS, StoryPeers.read(StoryPeers.REPOSITORIES_PATH));
-    to(StoryPeers.WORKSPACES, StoryPeers.written(StoryPeers.BRANCHES_PATH));
-    // configuration.entries only waits on pins.deployments, which answered — qits-ci's 503 does
-    // not touch it.
-    to(StoryPeers.CONFIGURATION, StoryPeers.written(StoryPeers.CONFIGURATION_ENTRIES_PATH));
-    // The service-client sweep waits on the claims read alone, which answered.
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.CLAIMS_PATH));
-    to(StoryPeers.IDP, StoryPeers.written(StoryPeers.SERVICE_CLIENTS_PATH));
 
-    // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES reached the registry — not the
-    // plan, not the sweep — because a pin that protects it could not be read. The registry is
-    // reached once, for its size, by a step that needs no pin at all, so the absence is stated over
-    // the calls rather than over the peer: `assertNoEdgesTo` would now be a claim this story cannot
-    // honestly make, and a narrower absence is worth more than a wider one that is false.
+    // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES was called, in any store, because
+    // a pin source could not be read. Every deleter's path has `/gc/` in it except the usage read,
+    // which is a measurement; the registry and the host are reached for their size only.
     UserflowReport report = ReportAssertions.read(CATEGORY_SLUG, FAIL_CLOSED_SLUG);
     assertTrue(
         report.network().stream()
             .noneMatch(
                 edge ->
-                    StoryPeers.ARTIFACTS.equals(edge.to()) && edge.label().contains("/gc/")),
-        () -> "a collection call reached the registry without its pins: " + report.network());
-    // Two in, sixteen out. The credential was minted an hour ago by the first run of the
+                    StoryTarget.SERVICE.equals(edge.from())
+                        && edge.label().contains("/gc/")
+                        && !edge.label().contains(StoryPeers.USAGE_PATH)),
+        () -> "a collection call was made without every pin: " + report.network());
+    assertTrue(
+        report.network().stream().noneMatch(edge -> StoryPeers.IDP.equals(edge.to())),
+        () -> "qits-idp was asked to delete without every pin: " + report.network());
+    // Two in, ten out. The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 18);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 12);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,

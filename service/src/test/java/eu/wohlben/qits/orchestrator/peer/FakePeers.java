@@ -32,19 +32,27 @@ public class FakePeers extends PeerClient {
   private static final ObjectMapper JSON = new ObjectMapper();
 
   /** One scripted answer: what the peer says to one method-and-path. */
-  public record Scripted(Integer status, String body, String transportError) {
+  public record Scripted(Integer status, String body, String transportError, boolean truncated) {
 
     public static Scripted ok(String body) {
-      return new Scripted(200, body, null);
+      return new Scripted(200, body, null, false);
     }
 
     public static Scripted status(int status, String body) {
-      return new Scripted(status, body, null);
+      return new Scripted(status, body, null, false);
     }
 
     /** A peer that cannot be reached at all — no status, a sentence instead. */
     public static Scripted unreachable(String message) {
-      return new Scripted(null, null, message);
+      return new Scripted(null, null, message, false);
+    }
+
+    /**
+     * A 200 whose answer was larger than the client's parse limit: what {@code PeerClient.send}
+     * hands back for one — the start of the text, no tree, {@code truncated} set.
+     */
+    public static Scripted truncated(String start) {
+      return new Scripted(200, start, null, true);
     }
   }
 
@@ -131,7 +139,12 @@ public class FakePeers extends PeerClient {
     }
     return new PeerExchange(
         call,
-        new PeerAnswer(scripted.status(), scripted.body(), parse(scripted.body()), null));
+        new PeerAnswer(
+            scripted.status(),
+            scripted.body(),
+            scripted.truncated() ? null : parse(scripted.body()),
+            null,
+            scripted.truncated()));
   }
 
   private static com.fasterxml.jackson.databind.JsonNode parse(String body) {

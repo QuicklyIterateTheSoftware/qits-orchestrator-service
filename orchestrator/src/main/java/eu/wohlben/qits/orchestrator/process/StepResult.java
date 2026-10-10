@@ -95,4 +95,44 @@ public record StepResult(
     }
     return new StepResult(RunStatus.SUCCEEDED, exchange.call(), answer, line, null, null);
   }
+
+  /**
+   * {@link #of}, for a read whose answer is a KEEP-SET: every {@code pins.*} step.
+   *
+   * <p><b>A 2xx that cannot be read whole is FAILED here, not SUCCEEDED.</b> A pin answer that was
+   * cut off, or that is not JSON, says nothing about what must survive. Read as success it reaches
+   * the deleters as an absent or empty source — run cd1c3349 summarised a cut-off dependency answer
+   * as "0 manifest pins across 0 repositories" (ticket qits-1175). FAILED makes the edges skip every
+   * step that deletes.
+   */
+  public static StepResult ofKeepSet(PeerExchange exchange, Function<PeerAnswer, String> summary) {
+    StepResult result = of(exchange, summary);
+    if (result.status() != RunStatus.SUCCEEDED) {
+      return result;
+    }
+    PeerAnswer answer = exchange.answer();
+    String url = exchange.call().url();
+    if (answer.truncated()) {
+      return new StepResult(
+          RunStatus.FAILED,
+          exchange.call(),
+          answer,
+          null,
+          url
+              + " answered more than the parse limit; a pin set that cannot be read whole is not"
+              + " a pin set",
+          null);
+    }
+    if (answer.json() == null) {
+      return new StepResult(
+          RunStatus.FAILED,
+          exchange.call(),
+          answer,
+          null,
+          url + " answered " + answer.httpStatus() + " with a body that is not JSON; a pin set"
+              + " that cannot be parsed is not a pin set",
+          null);
+    }
+    return result;
+  }
 }

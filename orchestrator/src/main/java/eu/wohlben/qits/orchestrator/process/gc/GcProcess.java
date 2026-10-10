@@ -54,13 +54,14 @@ import java.util.List;
  * what was 401-ing: a credential-less reader of a guarded peer. A supplied pin set moves that read
  * to the caller that can authenticate.
  *
- * <p><b>Fail-closed, and the edges are what makes it so.</b> A failed pin read skips every step that
- * would delete on the strength of that pin — the artifacts plan and sweep depend on all SIX pin
- * reads, the image sweep on the deployments one — while the volume sweep and the build-cache prune,
- * which need no pins, still run. Nothing deletes against a keep-set it could not read, and nothing
- * that needs no keep-set is stopped by one. A pin source added to the body is a pin source added to
- * those two dependency lists in the same commit, or the registry would collect against a keep-set
- * missing whatever that source protects.
+ * <p><b>Fail-closed, and the edges are what makes it so.</b> Every step that deletes depends on all
+ * SIX pin reads ({@link #PIN_SOURCES}), so one failed pin read skips every deleter in every store —
+ * the registry, host images, volumes, build cache, branches, configuration entries, tags and
+ * service clients alike. Only the reads and the opening measurements still run. A pin read FAILS
+ * not only when its peer cannot be reached or refuses, but also when its answer cannot be read
+ * whole — cut off, or not JSON ({@link StepResult#ofKeepSet}). Before ticket qits-1175 a cut-off
+ * answer SUCCEEDED as an empty pin set, and only qits-artifacts' own empty-source guard stopped a
+ * plan that condemned everything maintenance pins.
  *
  * <h2>The steps</h2>
  *
@@ -75,15 +76,15 @@ import java.util.List;
  * pins.projects          projects       GET  /projects/api/pins
  * artifacts.plan         artifacts      POST /artifacts/api/gc/plan {pins}   ← pins.*
  * artifacts.sweep        artifacts      POST /artifacts/api/gc/sweep {pins}  ← artifacts.plan, pins.*
- * containers.images      containers     POST /containers/api/gc/images       ← pins.deployments
- * containers.volumes     containers     POST /containers/api/gc/volumes      ← usage.before
- * containers.build-cache containers     POST /containers/api/gc/build-cache  ← usage.before
+ * containers.images      containers     POST /containers/api/gc/images       ← pins.*
+ * containers.volumes     containers     POST /containers/api/gc/volumes      ← usage.before, pins.*
+ * containers.build-cache containers     POST /containers/api/gc/build-cache  ← usage.before, pins.*
  * repos.catalogue        projects       GET  /projects/api/repositories
- * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue
- * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.deployments
+ * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue, pins.*
+ * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.*
  * tags.sweep             projects       POST /projects/api/gc/tags {pins}    ← pins.*, repos.catalogue
  * claims.idp-clients     deployments    GET  /deployments/api/claims/idp-clients
- * idp.service-clients    idp            POST /idp/api/gc/service-clients     ← claims.idp-clients
+ * idp.service-clients    idp            POST /idp/api/gc/service-clients     ← claims.idp-clients, pins.*
  * artifacts.usage.after  artifacts      GET  /artifacts/api/store/summary    ← artifacts.sweep
  * usage.after            containers     GET  /containers/api/gc/usage        ← everything that frees disk
  * </pre>
@@ -122,9 +123,8 @@ import java.util.List;
  * process hands it the one pin that answers the question its rule needs — {@code pins.deployments},
  * the serving and rollback shas — verbatim, the same discipline as {@link #pinsBody}. The other five
  * pin sources answer a different tense (what a launch would pull, what a manifest still references)
- * that has no bearing on whether a configuration key is still declared, so this step's only edge is
- * {@code pins.deployments}: fail-closed still applies, and an unread pin skips it before the body
- * runs. It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
+ * that has no bearing on whether a configuration key is still declared — but it still depends on
+ * all six, because a run with any pin source unread deletes nothing (qits-1175). It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
  * nightly dry figures are real figures, the same reasoning as {@code branches.sweep}.
  *
  * <p><b>{@code tags.sweep} decommissions git tags, on the platform's git host and on its backup
@@ -146,7 +146,8 @@ import java.util.List;
  * client ids are still claimed, so {@code claims.idp-clients} reads them and the sweep hands its
  * {@code claims} array to qits-idp VERBATIM — the owner of the store judges what is unclaimed,
  * what is still in its grace window and which client is the caller itself. Fail-closed is the same
- * edge as everywhere else: a failed claims read skips the sweep before its body runs. And it is
+ * edge as everywhere else: a failed claims read, or any failed pin read, skips the sweep before its
+ * body runs. And it is
  * stricter than an edge on one point: a read that SUCCEEDED with zero claims is refused in the body
  * rather than sent, because an empty claim set would condemn every service client on the platform —
  * this orchestrator's own included — and a live platform always has at least that one claim. It
@@ -180,6 +181,30 @@ public class GcProcess implements TechnicalProcess {
   static final String IDP_SERVICE_CLIENTS = "idp.service-clients";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
+
+  /**
+   * The six pin reads. Every step that deletes depends on ALL of them (ticket qits-1175): a run
+   * with one pin source unread deletes nothing in any store, not only in the stores that source
+   * protects. A pin source added here is an edge added to every deleter at once.
+   */
+  static final List<String> PIN_SOURCES =
+      List.of(
+          PINS_DEPLOYMENTS, PINS_CI, PINS_DEPENDENCIES, PINS_IMAGES, PINS_WORKSPACES, PINS_PROJECTS);
+
+  /** A deleter's own edge first, then every pin source. */
+  private static List<String> withPins(String own) {
+    List<String> edges = new java.util.ArrayList<>();
+    edges.add(own);
+    edges.addAll(PIN_SOURCES);
+    return edges;
+  }
+
+  /** Every pin source, then the deleter's own edge — the order tags.sweep has always listed. */
+  private static List<String> pinsThen(String own) {
+    List<String> edges = new java.util.ArrayList<>(PIN_SOURCES);
+    edges.add(own);
+    return edges;
+  }
 
   private static final String USAGE_PATH = "/containers/api/gc/usage";
 
@@ -235,7 +260,7 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.DEPLOYMENTS,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.DEPLOYMENTS, "/deployments/api/pins"),
                     answer -> GcSummaries.deploymentPins(answer.json()))),
         new StepDefinition(
@@ -244,7 +269,7 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.CI,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.CI, "/ci/api/daemon"),
                     answer -> GcSummaries.ciPin(answer.json()))),
         new StepDefinition(
@@ -253,7 +278,7 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.MAINTENANCE,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.MAINTENANCE, "/maintenance/api/pins"),
                     answer -> GcSummaries.dependencyPins(answer.json()))),
         new StepDefinition(
@@ -262,7 +287,7 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.CONFIGURATION,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.CONFIGURATION, "/configuration/api/pins"),
                     answer -> GcSummaries.imagePins(answer.json()))),
         new StepDefinition(
@@ -271,7 +296,7 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.WORKSPACES,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.WORKSPACES, "/workspaces/api/pins"),
                     answer -> GcSummaries.workspaceLaunchPins(answer.json()))),
         new StepDefinition(
@@ -280,20 +305,14 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.PROJECTS,
             List.of(),
             context ->
-                StepResult.of(
+                StepResult.ofKeepSet(
                     context.peers().get(PeerTarget.PROJECTS, "/projects/api/pins"),
                     answer -> GcSummaries.projectLaunchPins(answer.json()))),
         new StepDefinition(
             ARTIFACTS_PLAN,
             "Plan the registry collection",
             PeerTarget.ARTIFACTS,
-            List.of(
-                PINS_DEPLOYMENTS,
-                PINS_CI,
-                PINS_DEPENDENCIES,
-                PINS_IMAGES,
-                PINS_WORKSPACES,
-                PINS_PROJECTS),
+            PIN_SOURCES,
             context ->
                 StepResult.of(
                     context
@@ -309,14 +328,7 @@ public class GcProcess implements TechnicalProcess {
             // transitively; naming them here is the doctrine rather than the mechanism — a step that
             // deletes on the strength of a pin carries that pin's edge, so a source added to the
             // body is a source that cannot be added without this list noticing.
-            List.of(
-                ARTIFACTS_PLAN,
-                PINS_DEPLOYMENTS,
-                PINS_CI,
-                PINS_DEPENDENCIES,
-                PINS_IMAGES,
-                PINS_WORKSPACES,
-                PINS_PROJECTS),
+            withPins(ARTIFACTS_PLAN),
             context ->
                 context.dryRun()
                     ? StepResult.skipped("dry run")
@@ -330,7 +342,7 @@ public class GcProcess implements TechnicalProcess {
             CONTAINERS_IMAGES,
             "Collect host images",
             PeerTarget.CONTAINERS,
-            List.of(PINS_DEPLOYMENTS),
+            PIN_SOURCES,
             context ->
                 StepResult.of(
                     context
@@ -341,7 +353,7 @@ public class GcProcess implements TechnicalProcess {
             CONTAINERS_VOLUMES,
             "Collect orphan volumes",
             PeerTarget.CONTAINERS,
-            List.of(USAGE_BEFORE),
+            withPins(USAGE_BEFORE),
             context ->
                 StepResult.of(
                     context
@@ -355,11 +367,10 @@ public class GcProcess implements TechnicalProcess {
             CONTAINERS_BUILD_CACHE,
             "Prune the build cache",
             PeerTarget.CONTAINERS,
-            // usage.before, NOT containers.images. A prune needs no pin set of its own, so hanging
-            // it off the image sweep would have made a broken pin read cost the platform tens of
-            // gigabytes of cache reclaim for no reason. Declaration order still puts it after the
-            // image sweep, which is all the ordering it ever wanted.
-            List.of(USAGE_BEFORE),
+            // usage.before and the pins, NOT containers.images. A prune needs no pin set of its own,
+            // but a run with an unread pin source deletes nothing anywhere (qits-1175). Declaration
+            // order still puts it after the image sweep, which is all the ordering it ever wanted.
+            withPins(USAGE_BEFORE),
             context ->
                 StepResult.of(
                     context
@@ -382,7 +393,7 @@ public class GcProcess implements TechnicalProcess {
             BRANCHES_SWEEP,
             "Sweep merged branches",
             PeerTarget.WORKSPACES,
-            List.of(REPOS_CATALOGUE),
+            withPins(REPOS_CATALOGUE),
             context ->
                 StepResult.of(
                     context
@@ -396,7 +407,7 @@ public class GcProcess implements TechnicalProcess {
             CONFIGURATION_ENTRIES,
             "Retired configuration entries",
             PeerTarget.CONFIGURATION,
-            List.of(PINS_DEPLOYMENTS),
+            PIN_SOURCES,
             context ->
                 StepResult.of(
                     context
@@ -410,14 +421,7 @@ public class GcProcess implements TechnicalProcess {
             TAGS_SWEEP,
             "Decommissioned git tags",
             PeerTarget.PROJECTS,
-            List.of(
-                PINS_DEPLOYMENTS,
-                PINS_CI,
-                PINS_DEPENDENCIES,
-                PINS_IMAGES,
-                PINS_WORKSPACES,
-                PINS_PROJECTS,
-                REPOS_CATALOGUE),
+            pinsThen(REPOS_CATALOGUE),
             context ->
                 StepResult.of(
                     context
@@ -443,7 +447,7 @@ public class GcProcess implements TechnicalProcess {
             IDP_SERVICE_CLIENTS,
             "Unclaimed service clients",
             PeerTarget.IDP,
-            List.of(CLAIMS_IDP_CLIENTS),
+            withPins(CLAIMS_IDP_CLIENTS),
             GcProcess::serviceClients),
         new StepDefinition(
             ARTIFACTS_USAGE_AFTER,

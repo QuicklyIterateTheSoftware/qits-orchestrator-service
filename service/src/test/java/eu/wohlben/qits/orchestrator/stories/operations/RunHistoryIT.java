@@ -147,15 +147,24 @@ public class RunHistoryIT {
                 "pins.images",
                 "pins.workspaces",
                 "pins.projects"))
-        // …and the one that deliberately is NOT there: a prune has no keep-set, so hanging it off
-        // the image sweep would cost the platform its largest reclaim on a broken pin read.
-        .body(step("containers.build-cache") + ".dependsOn", contains("usage.before"))
+        // …and the prune too: it has no keep-set of its own, but a run with any pin read failed
+        // deletes nothing anywhere (qits-1175). It still does not hang off the image sweep.
+        .body(
+            step("containers.build-cache") + ".dependsOn",
+            contains(
+                "usage.before",
+                "pins.deployments",
+                "pins.ci",
+                "pins.dependencies",
+                "pins.images",
+                "pins.workspaces",
+                "pins.projects"))
         .body(step("usage.after") + ".dependsOn", hasItem("artifacts.sweep"));
     story
         .note(
-            "the edges are the reading: the registry plan waits on all six pin reads, while the"
-                + " build cache prune waits on the disk measurement alone — a step with no keep-set must"
-                + " not be stopped by a pin it never needed")
+            "the edges are the reading: the registry plan waits on all six pin reads, and so does"
+                + " every other step that deletes — the build cache prune included — so a run with"
+                + " one pin read failed deletes nothing in any store")
         .as("edges-are-the-contract");
   }
 
