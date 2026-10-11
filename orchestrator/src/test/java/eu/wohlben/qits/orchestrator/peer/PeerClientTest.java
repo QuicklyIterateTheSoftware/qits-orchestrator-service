@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import eu.wohlben.qits.http.QitsHttpClients;
+import io.opentelemetry.api.OpenTelemetry;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -53,6 +55,7 @@ class PeerClientTest {
     client.ciUrl = base;
     client.deploymentsUrl = base;
     client.callTimeout = Duration.ofSeconds(10);
+    client.clients = QitsHttpClients.of(OpenTelemetry.noop(), null);
     client.tokens =
         new PeerTokens() {
           @Override

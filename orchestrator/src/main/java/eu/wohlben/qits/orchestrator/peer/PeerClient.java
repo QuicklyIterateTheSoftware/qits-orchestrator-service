@@ -2,6 +2,7 @@ package eu.wohlben.qits.orchestrator.peer;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import eu.wohlben.qits.http.QitsHttpClients;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.InputStream;
@@ -22,6 +23,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * stays an opaque JSON document rather than a bound record, so nothing here is a second copy of
  * four other repositories' response shapes, and there is no build-time reflection list to keep in
  * step with them.
+ *
+ * <p><b>The lazily built client is wrapped through {@link QitsHttpClients}</b> (qits-1198): a CLIENT
+ * span per call and {@code X-Qits-Caller} alongside the forward-auth pair, the same two things a
+ * REST client gets from Quarkus and this one otherwise would not.
  *
  * <p><b>Two credentials on every call, and they are not alternatives.</b> {@code X-Qits-User} /
  * {@code X-Qits-Roles} are the forward-auth pair a peer accepts on the platform's own network; the
@@ -94,6 +99,8 @@ public class PeerClient {
   Duration callTimeout;
 
   @Inject PeerTokens tokens;
+
+  @Inject QitsHttpClients clients;
 
   /** One client for the life of the process — a run is many calls and a new pool per call is waste. */
   private volatile HttpClient client;
@@ -200,7 +207,7 @@ public class PeerClient {
       synchronized (this) {
         existing = client;
         if (existing == null) {
-          existing = HttpClient.newBuilder().connectTimeout(callTimeout).build();
+          existing = clients.wrap(HttpClient.newBuilder().connectTimeout(callTimeout).build());
           client = existing;
         }
       }
