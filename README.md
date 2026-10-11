@@ -233,7 +233,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.gc.deploy-trigger.enabled` | `true` | whether a DEPLOYMENT may start a run |
 | `qits.orchestrator.gc.deploy-trigger.quiet-period` | `PT10M` | how long after the LAST deployment of a wave that run fires |
 | `qits.orchestrator.gc.image-keep-prefixes` | `qits/build-images/,qits/graalvmce-musl-builder` | tag prefixes no rule may condemn |
-| `qits.orchestrator.gc.branch-keep-prefixes` | `environment/` | branch prefixes the merged-branch sweep may never condemn (additive to qits-workspaces' own refusals) |
+| `qits.orchestrator.gc.branch-keep-prefixes` | `environment/,release/` | branch prefixes the merged-branch sweep may never condemn (additive to qits-workspaces' own refusals); `release/` keeps an open release request's backing branch, which a fold equal to `main` makes look merged (qits-1167) |
 | `qits.orchestrator.gc.image-min-age` | `PT6H` | the build-then-push grace for an image |
 | `qits.orchestrator.gc.volume-min-age` | `PT24H` | the stop-then-start grace for a volume |
 | `qits.orchestrator.gc.build-cache-keep-bytes` | `10737418240` | what the HOST buildkit cache may keep after a prune |

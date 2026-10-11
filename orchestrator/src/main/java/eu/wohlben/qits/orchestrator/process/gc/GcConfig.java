@@ -93,7 +93,8 @@ public class GcConfig {
   /**
    * Branch prefixes the merged-branch sweep may never condemn. Additive to qits-workspaces' own
    * hard refusals (the main branch, {@code environment/*}, workspace-backed branches) — this key
-   * can widen the protection and never narrow it.
+   * can widen the protection and never narrow it. Shipped with {@code release/}, the open release
+   * requests' backing branches, which qits-projects deletes itself (qits-1167).
    */
   public List<String> branchKeepPrefixes() {
     return List.copyOf(branchKeepPrefixes);

@@ -801,7 +801,8 @@ class GcProcessTest {
     assertTrue(branches.get("dryRun").asBoolean());
     assertEquals("r-1", branches.get("repositories").get(0).get("id").asText());
     assertEquals("main", branches.get("repositories").get(0).get("mainBranch").asText());
-    assertEquals(List.of("environment/"), texts(branches.get("keepPrefixes")));
+    // release/ is a release request's fold, which qits-projects deletes itself (qits-1167).
+    assertEquals(List.of("environment/", "release/"), texts(branches.get("keepPrefixes")));
     // AND THE MEASUREMENT STILL HAPPENS. usage.after depends on the sweep, but a POLICY skip is
     // not a failure: the run did exactly what it was asked, so nothing after it has a reason not to
     // run. The live dry run that reported "skipped: artifacts.sweep failed" here — with all nine

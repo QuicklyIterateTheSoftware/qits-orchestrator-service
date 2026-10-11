@@ -339,6 +339,7 @@ class ProcessApiTest {
         .body("steps[13].request.body", containsString("\"dryRun\":true"))
         .body("steps[13].request.body", containsString("\"mainBranch\":\"main\""))
         .body("steps[13].request.body", containsString("environment/"))
+        .body("steps[13].request.body", containsString("release/"))
         .body("steps[13].summary", containsString("removed 1 of 4 branches"))
         // configuration.entries is not withheld either — qits-configuration has a real dry mode,
         // the same reasoning as the branch sweep.
