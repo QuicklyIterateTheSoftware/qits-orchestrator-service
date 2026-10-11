@@ -88,7 +88,7 @@ keys:
 
   env.QITS_ORCHESTRATOR_TARGETS_CONFIGURATION_URL:
     type: string
-    description: "Where qits-configuration is: the configured image pins. Scheme, host and port, no path."
+    description: "Where qits-configuration is: the retired-entry sweep. Scheme, host and port, no path."
 
   env.QITS_ORCHESTRATOR_TARGETS_IDP_URL:
     type: string

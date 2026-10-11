@@ -27,27 +27,23 @@ import java.util.List;
  *
  * <p>A pin is something that must survive a collection: an image sha a restart or a rollback would
  * pull ({@code pins.deployments}), the ci daemon binary a run would launch ({@code pins.ci}), a
- * version a repository's main still references in a manifest ({@code pins.dependencies}), a
- * container image the NEXT deploy would configure ({@code pins.images}) and the image a launch
- * would pull TODAY ({@code pins.workspaces}, {@code pins.projects}). They are read ONCE per run and
+ * version a repository's main still references in a manifest ({@code pins.dependencies}) and the
+ * image a launch would pull TODAY ({@code pins.workspaces}, {@code pins.projects}). They are read ONCE per run and
  * handed to every deleter, so every deleter judges against one answer taken at one moment.
  *
- * <p><b>The last four are CONSUMPTION rather than deployment</b>, which is why neither of the first
+ * <p><b>The last three are CONSUMPTION rather than deployment</b>, which is why neither of the first
  * two could stand in for them: nothing deploys a library a pom pins, and nothing deploys the
  * workspace image a person's next click pulls. A release-age rule cannot see either, so before
  * these steps existed the only thing keeping them alive was how recently somebody happened to ask
  * for them.
  *
- * <p><b>Six sources because they are in six TENSES, and no two of them are the same claim.</b>
- * {@code pins.deployments} is what serves right now; {@code pins.ci} is what a run launches;
- * {@code pins.dependencies} is what source still references; {@code pins.images} is what the NEXT
- * deploy will configure; {@code pins.workspaces} and {@code pins.projects} are what a launch pulls
- * TODAY — the EFFECTIVE value, read by the service that would do the pulling, out of the config it
- * is actually running with. The effective value lags the configured one until that service is
- * redeployed, and it was exactly that gap the fifth source could not close: a qits-workspaces still
- * running last week's {@code QITS_WORKSPACE_IMAGE_VERSION} pulls an image qits-configuration has
- * already moved past, and nothing but access was keeping it alive. Each launching service therefore
- * answers for itself.
+ * <p><b>Five sources, and no two of them are the same claim.</b> {@code pins.deployments} is what
+ * serves right now; {@code pins.ci} is what a run launches; {@code pins.dependencies} is what source
+ * still references; {@code pins.workspaces} and {@code pins.projects} are what a launch pulls TODAY,
+ * read by the service that would do the pulling, out of the config it is actually running with.
+ * Image versions come from each service's own config, built from its pom, so each launching service
+ * answers for itself. (A sixth source, {@code pins.images} from qits-configuration, was removed in
+ * qits-1176: that service no longer holds image names.)
  *
  * <p><b>They are read here because this is the one component that holds an idp client for every
  * peer.</b> qits-artifacts' own HTTP pin readers stay as its no-body fallback, and they are exactly
@@ -55,7 +51,7 @@ import java.util.List;
  * to the caller that can authenticate.
  *
  * <p><b>Fail-closed, and the edges are what makes it so.</b> Every step that deletes depends on all
- * SIX pin reads ({@link #PIN_SOURCES}), so one failed pin read skips every deleter in every store —
+ * FIVE pin reads ({@link #PIN_SOURCES}), so one failed pin read skips every deleter in every store —
  * the registry, host images, volumes, build cache, branches, configuration entries, tags and
  * service clients alike. Only the reads and the opening measurements still run. A pin read FAILS
  * not only when its peer cannot be reached or refuses, but also when its answer cannot be read
@@ -71,7 +67,6 @@ import java.util.List;
  * pins.deployments       deployments    GET  /deployments/api/pins
  * pins.ci                ci             GET  /ci/api/daemon
  * pins.dependencies      maintenance    GET  /maintenance/api/pins
- * pins.images            configuration  GET  /configuration/api/pins
  * pins.workspaces        workspaces     GET  /workspaces/api/pins
  * pins.projects          projects       GET  /projects/api/pins
  * artifacts.plan         artifacts      POST /artifacts/api/gc/plan {pins}   ← pins.*
@@ -121,20 +116,20 @@ import java.util.List;
  * declaration of an application used to state and no surviving declaration states any longer. The
  * rule for what counts as retired lives with qits-configuration, the owner of the store; this
  * process hands it the one pin that answers the question its rule needs — {@code pins.deployments},
- * the serving and rollback shas — verbatim, the same discipline as {@link #pinsBody}. The other five
+ * the serving and rollback shas — verbatim, the same discipline as {@link #pinsBody}. The other four
  * pin sources answer a different tense (what a launch would pull, what a manifest still references)
  * that has no bearing on whether a configuration key is still declared — but it still depends on
- * all six, because a run with any pin source unread deletes nothing (qits-1175). It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
+ * all five, because a run with any pin source unread deletes nothing (qits-1175). It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
  * nightly dry figures are real figures, the same reasoning as {@code branches.sweep}.
  *
  * <p><b>{@code tags.sweep} decommissions git tags, on the platform's git host and on its backup
  * twin alike.</b> qits-projects owns the repository catalogue and is the one peer that can reach
  * both addresses, so it is the one asked, the same reasoning that put {@code repos.catalogue} and
- * {@code branches.sweep} on their own owners. It carries every pin this run read — all SIX, the
+ * {@code branches.sweep} on their own owners. It carries every pin this run read — all FIVE, the
  * same {@code pins} object {@link #pinsBody} sends — because a tag can be the thing any one of them
  * protects: a sha a deployment still serves, a version a dependency manifest references, or an
  * image a launch would pull. {@code repos.catalogue} is the iteration set, the same role it plays
- * for the branch sweep. Fail-closed applies to all seven edges alike: an unread pin, or an unread
+ * for the branch sweep. Fail-closed applies to all six edges alike: an unread pin, or an unread
  * catalogue, skips the sweep before its body runs. It is not a {@code usage.after} dependency either
  * — a decommissioned tag frees no docker disk — and it runs on a dry run too, the same reasoning as
  * {@code branches.sweep} and {@code configuration.entries}.
@@ -165,7 +160,6 @@ public class GcProcess implements TechnicalProcess {
   static final String PINS_DEPLOYMENTS = "pins.deployments";
   static final String PINS_CI = "pins.ci";
   static final String PINS_DEPENDENCIES = "pins.dependencies";
-  static final String PINS_IMAGES = "pins.images";
   static final String PINS_WORKSPACES = "pins.workspaces";
   static final String PINS_PROJECTS = "pins.projects";
   static final String ARTIFACTS_PLAN = "artifacts.plan";
@@ -183,13 +177,13 @@ public class GcProcess implements TechnicalProcess {
   static final String USAGE_AFTER = "usage.after";
 
   /**
-   * The six pin reads. Every step that deletes depends on ALL of them (ticket qits-1175): a run
+   * The five pin reads. Every step that deletes depends on ALL of them (ticket qits-1175): a run
    * with one pin source unread deletes nothing in any store, not only in the stores that source
    * protects. A pin source added here is an edge added to every deleter at once.
    */
   static final List<String> PIN_SOURCES =
       List.of(
-          PINS_DEPLOYMENTS, PINS_CI, PINS_DEPENDENCIES, PINS_IMAGES, PINS_WORKSPACES, PINS_PROJECTS);
+          PINS_DEPLOYMENTS, PINS_CI, PINS_DEPENDENCIES, PINS_WORKSPACES, PINS_PROJECTS);
 
   /** A deleter's own edge first, then every pin source. */
   private static List<String> withPins(String own) {
@@ -282,15 +276,6 @@ public class GcProcess implements TechnicalProcess {
                     context.peers().get(PeerTarget.MAINTENANCE, "/maintenance/api/pins"),
                     answer -> GcSummaries.dependencyPins(answer.json()))),
         new StepDefinition(
-            PINS_IMAGES,
-            "Configured image pins",
-            PeerTarget.CONFIGURATION,
-            List.of(),
-            context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.CONFIGURATION, "/configuration/api/pins"),
-                    answer -> GcSummaries.imagePins(answer.json()))),
-        new StepDefinition(
             PINS_WORKSPACES,
             "Workspace launch pins",
             PeerTarget.WORKSPACES,
@@ -324,7 +309,7 @@ public class GcProcess implements TechnicalProcess {
             "Sweep the registry",
             PeerTarget.ARTIFACTS,
             // Every pin read as well as the plan, because this is the step that DELETES and its body
-            // is its own pinsBody rather than the plan's. The plan edge already carries all six
+            // is its own pinsBody rather than the plan's. The plan edge already carries all five
             // transitively; naming them here is the doctrine rather than the mechanism — a step that
             // deletes on the strength of a pin carries that pin's edge, so a source added to the
             // body is a source that cannot be added without this list noticing.
@@ -480,21 +465,19 @@ public class GcProcess implements TechnicalProcess {
    * {"pins": {"deployments":      &lt;the deployments answer, verbatim&gt;,
    *           "ciDaemon":         &lt;the ci answer, verbatim&gt;,
    *           "dependencies":     &lt;the maintenance answer, verbatim&gt;,
-   *           "configuredImages": &lt;the configuration answer, verbatim&gt;,
    *           "workspaceLaunches":&lt;the workspaces answer, verbatim&gt;,
    *           "projectLaunches":  &lt;the projects answer, verbatim&gt;}}
    * </pre>
    *
    * <p><b>Verbatim means the bytes the peer sent.</b> Each member is the other service's whole
-   * response document, re-embedded rather than re-shaped: the six contracts belong to
-   * qits-platform-deployments, qits-ci, qits-platform-maintenance, qits-configuration,
-   * qits-workspaces and qits-projects, and a projection here would be a seventh copy of them to keep
-   * in step.
+   * response document, re-embedded rather than re-shaped: the five contracts belong to
+   * qits-platform-deployments, qits-ci, qits-platform-maintenance, qits-workspaces and qits-projects,
+   * and a projection here would be a sixth copy of them to keep in step.
    *
    * <p><b>A member this run could not read is ABSENT, not null.</b> qits-artifacts reads a missing
    * member as that pin source being unanswered, which makes the plan not executable and aborts a
    * sweep — the fail-closed rule, unchanged. In practice the edges mean this step never runs
-   * without all six, so the absent case is the belt.
+   * without all five, so the absent case is the belt.
    */
   private static String pinsBody(RunContext context) {
     ObjectNode body = JSON.createObjectNode();
@@ -503,16 +486,15 @@ public class GcProcess implements TechnicalProcess {
   }
 
   /**
-   * The six pin answers, re-embedded verbatim under the names qits-artifacts (and now
+   * The five pin answers, re-embedded verbatim under the names qits-artifacts (and now
    * qits-projects' tag sweep) take them by. Shared by every step that sends the whole pin set
-   * rather than a single source of it, so the six lines live in exactly one place.
+   * rather than a single source of it, so the five lines live in exactly one place.
    */
   private static ObjectNode pinsObject(RunContext context) {
     ObjectNode pins = JSON.createObjectNode();
     context.answer(PINS_DEPLOYMENTS).ifPresent(node -> pins.set("deployments", node));
     context.answer(PINS_CI).ifPresent(node -> pins.set("ciDaemon", node));
     context.answer(PINS_DEPENDENCIES).ifPresent(node -> pins.set("dependencies", node));
-    context.answer(PINS_IMAGES).ifPresent(node -> pins.set("configuredImages", node));
     context.answer(PINS_WORKSPACES).ifPresent(node -> pins.set("workspaceLaunches", node));
     context.answer(PINS_PROJECTS).ifPresent(node -> pins.set("projectLaunches", node));
     return pins;
@@ -622,14 +604,14 @@ public class GcProcess implements TechnicalProcess {
    * The tag-decommission request:
    *
    * <pre>{@code {"dryRun":…, "pins": {"deployments":…, "ciDaemon":…, "dependencies":…,
-   * "configuredImages":…, "workspaceLaunches":…, "projectLaunches":…}}}</pre>
+   * "workspaceLaunches":…, "projectLaunches":…}}}</pre>
    *
    * <p><b>The same {@code pins} object {@link #pinsBody} sends, built by {@link #pinsObject} so the
-   * six lines live once.</b> A git tag can be the thing any one of the six protects — a sha a
+   * five lines live once.</b> A git tag can be the thing any one of the five protects — a sha a
    * deployment still serves, a version a manifest references, an image a launch would pull — so
    * qits-projects is handed every source rather than one, unlike {@link #entriesBody}'s single pin.
    * A member this run could not read is simply absent, the same fail-closed discipline as the
-   * artifacts plan — but this step never runs with one missing, because all six pin reads are its
+   * artifacts plan — but this step never runs with one missing, because all five pin reads are its
    * declared dependencies.
    */
   private String tagsSweepBody(RunContext context) {

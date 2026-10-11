@@ -122,13 +122,13 @@ public class RunHistoryIT {
         .body("kind", hasItem(StoryTarget.GC))
         .body(gc() + ".name", equalTo("Garbage collection"))
         .body(gc() + ".description", notNullValue())
-        .body(gc() + ".steps.size()", equalTo(21))
+        .body(gc() + ".steps.size()", equalTo(20))
         .body(gc() + ".steps.id[0]", equalTo("usage.before"))
         .body(gc() + ".steps.id", hasItem("branches.sweep"))
         .body(gc() + ".steps.target", hasItem("workspaces"));
     story
         .note(
-            "the catalogue: one process, twenty-one steps, each naming the peer it calls — the graph"
+            "the catalogue: one process, twenty steps, each naming the peer it calls — the graph"
                 + " the client draws before a run exists")
         .as("plan-served");
 
@@ -144,7 +144,6 @@ public class RunHistoryIT {
                 "pins.deployments",
                 "pins.ci",
                 "pins.dependencies",
-                "pins.images",
                 "pins.workspaces",
                 "pins.projects"))
         // …and the prune too: it has no keep-set of its own, but a run with any pin read failed
@@ -156,13 +155,12 @@ public class RunHistoryIT {
                 "pins.deployments",
                 "pins.ci",
                 "pins.dependencies",
-                "pins.images",
                 "pins.workspaces",
                 "pins.projects"))
         .body(step("usage.after") + ".dependsOn", hasItem("artifacts.sweep"));
     story
         .note(
-            "the edges are the reading: the registry plan waits on all six pin reads, and so does"
+            "the edges are the reading: the registry plan waits on all five pin reads, and so does"
                 + " every other step that deletes — the build cache prune included — so a run with"
                 + " one pin read failed deletes nothing in any store")
         .as("edges-are-the-contract");
@@ -226,7 +224,7 @@ public class RunHistoryIT {
         .body("kind", equalTo(StoryTarget.GC))
         .body("trigger", equalTo("manual"))
         .body("finishedAt", notNullValue())
-        .body("steps.size()", equalTo(21))
+        .body("steps.size()", equalTo(20))
         .body(StoryRuns.stepPath("usage.before") + ".target", equalTo("containers"))
         .body(StoryRuns.stepPath("usage.before") + ".request.method", equalTo("GET"))
         .body(

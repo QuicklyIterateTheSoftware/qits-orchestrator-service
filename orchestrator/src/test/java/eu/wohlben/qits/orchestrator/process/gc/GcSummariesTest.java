@@ -78,27 +78,8 @@ class GcSummariesTest {
   }
 
   @Test
-  void theImagePinsAreCountedAndAnEmptySetIsAValidAnswer() {
-    assertEquals(
-        "2 configured container images",
-        GcSummaries.imagePins(
-            json(
-                """
-                {"pins":[{"image":"qits/project-agent","version":"2026.904.160152"},
-                         {"image":"qits/workspace","version":"2026.904.160522"}]}
-                """)));
-    assertEquals("1 configured container image", GcSummaries.imagePins(json("{\"pins\":[{}]}")));
-    // Nothing released is nothing to keep, and it is an answer rather than a fault.
-    assertEquals("0 configured container images", GcSummaries.imagePins(json("{\"pins\":[]}")));
-    assertEquals("0 configured container images", GcSummaries.imagePins(null));
-  }
-
-  @Test
   void theLaunchPinsSayWhoseStartTheyAreAboutAndThatItIsTodays() {
-    // "today" rather than "configured", because that IS the distinction the two sources exist for:
-    // qits-configuration says what the next deploy will hand a service, and these say what the
-    // service running now would actually pull. A caption that read the same as imagePins would hide
-    // the only reason there are six pin sources rather than four.
+    // "today": these say what the service running now would actually pull.
     assertEquals(
         "2 launch images — what a workspace/editor start would pull today",
         GcSummaries.workspaceLaunchPins(

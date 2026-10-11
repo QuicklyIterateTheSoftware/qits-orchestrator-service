@@ -35,7 +35,7 @@ public final class PeerTarget {
   /** qits-platform-maintenance — the dependency pins every repository's main still references. */
   public static final String MAINTENANCE = "maintenance";
 
-  /** qits-configuration — the container images a workspace, editor or agent launch would pull. */
+  /** qits-configuration — the retired-entry sweep. */
   public static final String CONFIGURATION = "configuration";
 
   /**

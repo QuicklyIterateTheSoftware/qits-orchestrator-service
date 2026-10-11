@@ -37,7 +37,6 @@ import java.util.Optional;
  * pins.deployments             qits-platform-deployments     GET  /deployments/api/pins
  * pins.ci                      qits-ci                       GET  /ci/api/daemon
  * pins.dependencies            qits-platform-maintenance     GET  /maintenance/api/pins
- * pins.images                  qits-configuration            GET  /configuration/api/pins
  * pins.workspaces              qits-workspaces               GET  /workspaces/api/pins
  * pins.projects                qits-projects                 GET  /projects/api/pins
  * artifacts.plan               qits-artifacts                POST /artifacts/api/gc/plan
@@ -101,8 +100,8 @@ import java.util.Optional;
  * <p>quarkus-oidc-client caches the token it acquires and re-mints only when it expires, so the
  * {@code POST /idp/token} arrow belongs to the <b>first run of the whole catalogue</b> and to no
  * other. That is a real property of this service rather than an artefact here: {@code PeerTokens}
- * holds one {@code TokensHelper} for the one named client precisely so that a twenty-one-step run is
- * not twenty-one token requests.
+ * holds one {@code TokensHelper} for the one named client precisely so that a twenty-step run is
+ * not twenty token requests.
  *
  * <p>What this stand-in chooses is only that the horizon is the whole run: the token says {@code
  * expires_in: 3600}, so the mint lands in exactly one story and every other story's edge count is
@@ -145,7 +144,7 @@ public final class StoryPeers {
   /** The dependency pins: what every repository's main still references in its manifests. */
   public static final String MAINTENANCE = "qits-platform-maintenance";
 
-  /** The configured container image versions the NEXT deploy of a launching service would get. */
+  /** The retired-entry sweep. */
   public static final String CONFIGURATION = "qits-configuration";
 
   /**
@@ -164,7 +163,6 @@ public final class StoryPeers {
   public static final String USAGE_PATH = "/containers/api/gc/usage";
   public static final String STORE_PATH = "/artifacts/api/store/summary";
   public static final String DEPENDENCY_PINS_PATH = "/maintenance/api/pins";
-  public static final String IMAGE_PINS_PATH = "/configuration/api/pins";
   public static final String WORKSPACE_LAUNCH_PINS_PATH = "/workspaces/api/pins";
   public static final String PROJECT_LAUNCH_PINS_PATH = "/projects/api/pins";
   public static final String IMAGES_PATH = "/containers/api/gc/images";
@@ -212,18 +210,9 @@ public final class StoryPeers {
    */
   public static final String MANIFEST_PIN_VERSION = "2026.903.85122";
 
-  /** The workspace image version the next deploy would configure, from qits-configuration. */
-  public static final String CONFIGURED_IMAGE_VERSION = "2026.904.160522";
-
   /**
    * The version a workspace start would pull TODAY, answered by qits-workspaces out of the config it
    * is actually running with.
-   *
-   * <p><b>It deliberately lags {@link #CONFIGURED_IMAGE_VERSION}</b>, because that lag is the whole
-   * reason the two effective sources exist: a service keeps launching the version it was deployed
-   * with until it is redeployed, and until then the configured answer names an image nobody pulls
-   * while the one everybody pulls is unpinned. Two different versions in one run is what makes the
-   * story readable — a stub that answered the same string twice would prove nothing.
    */
   public static final String LAUNCHED_IMAGE_VERSION = "2026.903.120000";
 
@@ -360,12 +349,7 @@ public final class StoryPeers {
               + "\",\"repository\":\""
               + CATALOGUE_REPOSITORY
               + "\",\"manifestPath\":\"pom.xml\"}]}";
-      case IMAGE_PINS_PATH ->
-          "{\"pins\":[{\"image\":\"qits/workspace\",\"version\":\""
-              + CONFIGURED_IMAGE_VERSION
-              + "\",\"application\":\"qits-workspaces\","
-              + "\"key\":\"env.QITS_WORKSPACE_IMAGE_VERSION\"}]}";
-      // The EFFECTIVE pins, and the version is the older one on purpose — see the constant.
+      // The launch pins.
       case WORKSPACE_LAUNCH_PINS_PATH ->
           "{\"pins\":[{\"image\":\"qits/workspace\",\"version\":\""
               + LAUNCHED_IMAGE_VERSION

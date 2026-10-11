@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the twenty-one steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the twenty steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -43,7 +43,6 @@ class GcProcessTest {
   private static final String DEPLOYMENT_PINS = "/deployments/api/pins";
   private static final String CI_PIN = "/ci/api/daemon";
   private static final String DEPENDENCY_PINS = "/maintenance/api/pins";
-  private static final String IMAGE_PINS = "/configuration/api/pins";
   private static final String WORKSPACE_LAUNCH_PINS = "/workspaces/api/pins";
   private static final String PROJECT_LAUNCH_PINS = "/projects/api/pins";
   private static final String PLAN = "/artifacts/api/gc/plan";
@@ -59,7 +58,7 @@ class GcProcessTest {
   private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
 
   private static final String PIN_EDGES =
-      "pins.deployments,pins.ci,pins.dependencies,pins.images,pins.workspaces,pins.projects";
+      "pins.deployments,pins.ci,pins.dependencies,pins.workspaces,pins.projects";
 
   /** Every path a deleting step calls. A run with an unread pin source calls none of them. */
   private static final List<String> DELETERS =
@@ -113,19 +112,8 @@ class GcProcessTest {
                      {"ecosystem":"docker","name":"qits/workspace-base","version":"2026.902.143920",
                       "repository":"qits-workspace-daemon","manifestPath":"docker/Dockerfile"}]}
             """));
-    peers.answer(
-        IMAGE_PINS,
-        FakePeers.Scripted.ok(
-            """
-            {"generatedAt":"2026-09-04T20:00:00Z",
-             "pins":[{"image":"qits/project-agent","version":"2026.904.160152",
-                      "application":"qits-projects","key":"env.QITS_PROJECTS_AGENT_IMAGE_VERSION"},
-                     {"image":"qits/workspace","version":"2026.904.160522",
-                      "application":"qits-workspaces","key":"env.QITS_WORKSPACE_IMAGE_VERSION"}]}
-            """));
-    // THE EFFECTIVE PINS, and they are a different tense from the configured ones above: each
-    // launching service reads its OWN resolved config and says what a start would pull TODAY. The
-    // versions here deliberately LAG qits-configuration's — that is the gap the two steps close.
+    // THE LAUNCH PINS: each launching service reads its OWN resolved config and says what a start
+    // would pull TODAY.
     peers.answer(
         WORKSPACE_LAUNCH_PINS,
         FakePeers.Scripted.ok(
@@ -327,7 +315,6 @@ class GcProcessTest {
             "pins.deployments",
             "pins.ci",
             "pins.dependencies",
-            "pins.images",
             "pins.workspaces",
             "pins.projects",
             "artifacts.plan",
@@ -363,7 +350,6 @@ class GcProcessTest {
     assertEquals(
         "qits-ci-daemon 2026.815.120000 (previous 2026.814.101010)", steps.get("pins.ci").summary);
     assertEquals("3 manifest pins across 2 repositories", steps.get("pins.dependencies").summary);
-    assertEquals("2 configured container images", steps.get("pins.images").summary);
     assertEquals(
         "2 launch images — what a workspace/editor start would pull today",
         steps.get("pins.workspaces").summary);
@@ -408,9 +394,6 @@ class GcProcessTest {
     assertEquals(
         "http://dev-qits-platform-maintenance:8080/maintenance/api/pins",
         steps.get("pins.dependencies").requestUrl);
-    assertEquals(
-        "http://dev-qits-configuration:8080/configuration/api/pins",
-        steps.get("pins.images").requestUrl);
     assertEquals(
         "http://dev-qits-workspaces:8080/workspaces/api/pins", steps.get("pins.workspaces").requestUrl);
     assertEquals(
@@ -526,13 +509,12 @@ class GcProcessTest {
   }
 
   @Test
-  void theTagsSweepStepDependsOnAllSixPinsAndTheCatalogueAndEmbedsThePinsVerbatim() {
+  void theTagsSweepStepDependsOnAllFivePinsAndTheCatalogueAndEmbedsThePinsVerbatim() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     awaitClosed(id);
 
     assertEquals(
-        "pins.deployments,pins.ci,pins.dependencies,pins.images,pins.workspaces,pins.projects,"
-            + "repos.catalogue",
+        "pins.deployments,pins.ci,pins.dependencies,pins.workspaces,pins.projects,repos.catalogue",
         runs.steps(id).stream()
             .filter(step -> "tags.sweep".equals(step.stepId))
             .findFirst()
@@ -542,7 +524,7 @@ class GcProcessTest {
     JsonNode body = json(peers.bodiesFor(TAGS).getFirst());
     assertFalse(body.get("dryRun").asBoolean());
     JsonNode pins = body.get("pins");
-    // The same pins object artifacts.plan sends, verbatim — all six sources, not just the one
+    // The same pins object artifacts.plan sends, verbatim — all five sources, not just the one
     // configuration.entries carries.
     assertEquals(
         "qits-ci", pins.get("deployments").get("pins").get(0).get("applicationName").asText());
@@ -551,12 +533,11 @@ class GcProcessTest {
         "eu.wohlben.qits:qits-blobstore",
         pins.get("dependencies").get("pins").get(0).get("name").asText());
     assertEquals(
-        "qits/project-agent", pins.get("configuredImages").get("pins").get(0).get("image").asText());
-    assertEquals(
         "2026.903.120000",
         pins.get("workspaceLaunches").get("pins").get(0).get("version").asText());
     assertEquals(
         "refinement", pins.get("projectLaunches").get("pins").get(1).get("launches").asText());
+    assertFalse(pins.has("configuredImages"), "qits-configuration holds no image pins (qits-1176)");
   }
 
   @Test
@@ -626,7 +607,7 @@ class GcProcessTest {
   }
 
   @Test
-  void thePinsGoToArtifactsVerbatimUnderTheSixNamesItReads() {
+  void thePinsGoToArtifactsVerbatimUnderTheFiveNamesItReads() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     awaitClosed(id);
 
@@ -643,16 +624,14 @@ class GcProcessTest {
     assertEquals(
         "qits-workspace-daemon",
         pins.get("dependencies").get("repositories").get(1).get("name").asText());
-    assertEquals(
-        "qits/project-agent", pins.get("configuredImages").get("pins").get(0).get("image").asText());
-    // …and the two EFFECTIVE ones, which no other member can stand in for: the workspace version
-    // here is 2026.903.120000 while `configuredImages` already says 2026.904.160522, because
-    // qits-workspaces has not been redeployed since. Both must survive the collection.
+    // …and the two launch ones, which no other member can stand in for.
     assertEquals(
         "2026.903.120000",
         pins.get("workspaceLaunches").get("pins").get(0).get("version").asText());
     assertEquals(
         "refinement", pins.get("projectLaunches").get("pins").get(1).get("launches").asText());
+    assertFalse(pins.has("configuredImages"), "qits-configuration holds no image pins (qits-1176)");
+    assertEquals(5, pins.size());
     // The sweep is handed the same document, not a re-read of the peers.
     assertEquals(planBody, json(peers.bodiesFor(SWEEP).getFirst()));
   }
@@ -661,15 +640,16 @@ class GcProcessTest {
   void aPinSourceThatAnsweredSomethingUnreadableFailsAndNothingDeletes() {
     // 200 with a body that is not JSON. Before qits-1175 the step SUCCEEDED and the member was simply
     // absent from the deleters' bodies; now it is a failed read, and the edges skip every deleter.
-    peers.answer(IMAGE_PINS, FakePeers.Scripted.status(200, "{\"pins\":[…truncated"));
+    peers.answer(PROJECT_LAUNCH_PINS, FakePeers.Scripted.status(200, "{\"pins\":[…truncated"));
 
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
     assertEquals(RunStatus.FAILED.name(), run.status);
     Map<String, OpStep> steps = stepsOf(id);
-    assertEquals(RunStatus.FAILED.name(), steps.get("pins.images").status);
-    assertTrue(steps.get("pins.images").error.contains("not JSON"), steps.get("pins.images").error);
+    assertEquals(RunStatus.FAILED.name(), steps.get("pins.projects").status);
+    assertTrue(
+        steps.get("pins.projects").error.contains("not JSON"), steps.get("pins.projects").error);
     assertNoDeleterWasCalled();
   }
 
@@ -723,7 +703,6 @@ class GcProcessTest {
             "pins.deployments",
             "pins.ci",
             "pins.dependencies",
-            "pins.images",
             "pins.workspaces",
             "pins.projects",
             "repos.catalogue",
@@ -758,7 +737,7 @@ class GcProcessTest {
     assertEquals("skipped: pins.workspaces failed", steps.get("artifacts.plan").error);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("artifacts.sweep").status);
     assertTrue(peers.bodiesFor(PLAN).isEmpty(), "no plan may be asked for without every pin source");
-    // tags.sweep carries all six pin edges too, so the same broken source skips it.
+    // tags.sweep carries all five pin edges too, so the same broken source skips it.
     assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
     assertEquals("skipped: pins.workspaces failed", steps.get("tags.sweep").error);
     assertTrue(peers.bodiesFor(TAGS).isEmpty(), "no tag may be decommissioned without every pin source");
@@ -910,7 +889,7 @@ class GcProcessTest {
     assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
     assertEquals("skipped: pins.dependencies failed", steps.get("tags.sweep").error);
 
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.images").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("pins.projects").status);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.images").status);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("containers.build-cache").status);
     assertNoDeleterWasCalled();

@@ -127,22 +127,8 @@ final class GcSummaries {
   }
 
   /**
-   * {@code 4 configured container images} — the configuration pin answer: the versions the NEXT
-   * deploy of a launching service would be given.
-   */
-  static String imagePins(JsonNode body) {
-    int images = body == null ? 0 : body.path("pins").size();
-    return images
-        + (images == 1 ? " configured container image" : " configured container images");
-  }
-
-  /**
    * {@code 2 launch images — what a workspace/editor start would pull today} — qits-workspaces'
    * own answer, read out of the config it is actually running with.
-   *
-   * <p><b>"Today" is the whole distinction from {@link #imagePins}.</b> The configured version is
-   * what the next deploy will hand a service; the effective one is what the service running now
-   * would pull, and it lags until that deploy happens. Only the consumer can say which it is.
    */
   static String workspaceLaunchPins(JsonNode body) {
     return launchPins(body, "a workspace/editor start");

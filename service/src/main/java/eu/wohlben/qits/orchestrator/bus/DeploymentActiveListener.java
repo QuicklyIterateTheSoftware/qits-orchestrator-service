@@ -80,7 +80,7 @@ public class DeploymentActiveListener implements QitsDurableEventListener {
    * {@code containerName}, {@code endpoints}, {@code navigation} and the rest all travel.
    *
    * <p><b>All three are the log line and nothing more.</b> This trigger does not care WHICH
-   * application deployed: the keep-set the run reads is recomputed from all six pin sources, so no
+   * application deployed: the keep-set the run reads is recomputed from all five pin sources, so no
    * decision here is a function of the payload. They are bound rather than dropped so that a run in
    * the history can be traced back to the wave that caused it, and so that a payload which is not a
    * {@code DeploymentActive} at all fails to bind instead of being acted on.

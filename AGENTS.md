@@ -96,7 +96,7 @@ close, and no second run of that kind would ever be allowed again.
 ## Fail-closed is an edge, not an `if`
 
 Nothing deletes against a keep-set it could not read, and the mechanism is the dependency, not a
-check inside a step. `artifacts.plan` and `artifacts.sweep` depend on all six pin reads and
+check inside a step. `artifacts.plan` and `artifacts.sweep` depend on all five pin reads and
 `containers.images` on the deployment one, so a failed pin read skips what it protects before a body
 runs. `GcProcess.imagesBody` would build
 an empty `keep` from an unreadable pin answer — and never gets the chance to. Keep both: the edge is

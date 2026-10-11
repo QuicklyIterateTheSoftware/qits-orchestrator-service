@@ -39,7 +39,7 @@ import org.junit.jupiter.api.BeforeAll;
  * <p>"Fail-closed is an edge, not an {@code if}" is the sentence this repository's working notes
  * open the executor section with, and it is the hardest thing here to see from the outside. Nothing
  * deletes against a keep-set it could not read, and the mechanism is the DEPENDENCY rather than a
- * check inside a step: every step that deletes declares all six pin reads as edges, so a failed pin
+ * check inside a step: every step that deletes declares all five pin reads as edges, so a failed pin
  * read skips every one of them before a body runs (ticket qits-1175). The empty-keep-set path in
  * {@code GcProcess.imagesBody} is kept as a belt and never gets the chance.
  *
@@ -58,7 +58,7 @@ import org.junit.jupiter.api.BeforeAll;
  * <h2>How the peer is broken</h2>
  *
  * <p>{@link StoryPeers#refuse} is the one piece of state in the stand-in, and the class javadoc over
- * there says why it has to be state here and can be a path elsewhere: a gc run's nineteen paths are
+ * there says why it has to be state here and can be a path elsewhere: a gc run's eighteen paths are
  * fixed by {@code GcProcess.steps()} and identical in every run, so "qits-ci is down tonight" cannot be
  * spelled as a url the story addresses. It is armed inside a {@code try} and cleared in a {@code
  * finally}, and cleared again in {@code @AfterEach} — a refusal that outlived its story would be a
@@ -157,7 +157,7 @@ public class PeerFailureIT {
         .body(StoryRuns.stepPath("artifacts.plan") + ".error", equalTo("skipped: pins.ci failed"))
         .body(StoryRuns.stepPath("artifacts.sweep") + ".status", equalTo("SKIPPED"))
         .body(StoryRuns.stepPath("artifacts.sweep") + ".error", equalTo("skipped: pins.ci failed"))
-        // tags.sweep carries all six pin edges too, so the same broken read skips it before its
+        // tags.sweep carries all five pin edges too, so the same broken read skips it before its
         // body — carrying every pin, not just pins.deployments — is ever built.
         .body(StoryRuns.stepPath("tags.sweep") + ".status", equalTo("SKIPPED"))
         .body(StoryRuns.stepPath("tags.sweep") + ".error", equalTo("skipped: pins.ci failed"));
@@ -174,10 +174,9 @@ public class PeerFailureIT {
         .get(StoryTarget.runPath(id))
         .then()
         .statusCode(200)
-        // The reads still run: the other five pins, the catalogue, the claims, the measurements.
+        // The reads still run: the other four pins, the catalogue, the claims, the measurements.
         .body(StoryRuns.stepPath("pins.deployments") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.dependencies") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("pins.images") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.workspaces") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("pins.projects") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("usage.before") + ".status", equalTo("SUCCEEDED"))
@@ -315,12 +314,11 @@ public class PeerFailureIT {
 
     // The broken peer, drawn with the status it answered — evidence rather than a claim.
     to(StoryPeers.CI, StoryPeers.label("GET", StoryPeers.DAEMON_PATH, StoryPeers.REFUSED_STATUS));
-    // …and the nine reads that happened anyway. Each store was measured once rather than twice,
+    // …and the eight reads that happened anyway. Each store was measured once rather than twice,
     // because both after-steps were skipped.
     to(StoryPeers.CONTAINERS, StoryPeers.read(StoryPeers.USAGE_PATH));
     to(StoryPeers.ARTIFACTS, StoryPeers.read(StoryPeers.STORE_PATH));
     to(StoryPeers.MAINTENANCE, StoryPeers.read(StoryPeers.DEPENDENCY_PINS_PATH));
-    to(StoryPeers.CONFIGURATION, StoryPeers.read(StoryPeers.IMAGE_PINS_PATH));
     to(StoryPeers.WORKSPACES, StoryPeers.read(StoryPeers.WORKSPACE_LAUNCH_PINS_PATH));
     to(StoryPeers.PROJECTS, StoryPeers.read(StoryPeers.PROJECT_LAUNCH_PINS_PATH));
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.PINS_PATH));
@@ -342,10 +340,10 @@ public class PeerFailureIT {
     assertTrue(
         report.network().stream().noneMatch(edge -> StoryPeers.IDP.equals(edge.to())),
         () -> "qits-idp was asked to delete without every pin: " + report.network());
-    // Two in, ten out. The credential was minted an hour ago by the first run of the
+    // Two in, nine out. The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 12);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 11);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,
@@ -366,9 +364,9 @@ public class PeerFailureIT {
     // THE CLAIM. Not one request reached qits-idp — no sweep, and no token either: the credential
     // was minted by the first run of the catalogue and is cached for the hour.
     ReportAssertions.assertNoEdgesTo(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, StoryPeers.IDP);
-    // Two in, eighteen out: the seventeen calls that need no claim, the claims read as its 503 —
+    // Two in, seventeen out: the sixteen calls that need no claim, the claims read as its 503 —
     // and no service-client sweep.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 20);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 19);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         CLAIMS_UNREAD_SLUG,

@@ -29,18 +29,17 @@ so what comes after it still runs.
 | `pins.deployments` | deployments | `GET /deployments/api/pins` | — |
 | `pins.ci` | ci | `GET /ci/api/daemon` | — |
 | `pins.dependencies` | maintenance | `GET /maintenance/api/pins` | — |
-| `pins.images` | configuration | `GET /configuration/api/pins` | — |
 | `pins.workspaces` | workspaces | `GET /workspaces/api/pins` | — |
 | `pins.projects` | projects | `GET /projects/api/pins` | — |
-| `artifacts.plan` | artifacts | `POST /artifacts/api/gc/plan {pins}` | pins.deployments, pins.ci, pins.dependencies, pins.images, pins.workspaces, pins.projects |
-| `artifacts.sweep` | artifacts | `POST /artifacts/api/gc/sweep {pins}` — SKIPPED `dry run` on a dry run | artifacts.plan, pins.deployments, pins.ci, pins.dependencies, pins.images, pins.workspaces, pins.projects |
+| `artifacts.plan` | artifacts | `POST /artifacts/api/gc/plan {pins}` | pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects |
+| `artifacts.sweep` | artifacts | `POST /artifacts/api/gc/sweep {pins}` — SKIPPED `dry run` on a dry run | artifacts.plan, pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects |
 | `containers.images` | containers | `POST /containers/api/gc/images` | pins.deployments |
 | `containers.volumes` | containers | `POST /containers/api/gc/volumes` | usage.before |
 | `containers.build-cache` | containers | `POST /containers/api/gc/build-cache` | usage.before |
 | `repos.catalogue` | projects | `GET /projects/api/repositories` | — |
 | `branches.sweep` | workspaces | `POST /workspaces/api/gc/branches {dryRun, repositories, keepPrefixes}` | repos.catalogue |
 | `configuration.entries` | configuration | `POST /configuration/api/gc/entries {dryRun, deployments}` | pins.deployments |
-| `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.images, pins.workspaces, pins.projects, repos.catalogue |
+| `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects, repos.catalogue |
 | `claims.idp-clients` | deployments | `GET /deployments/api/claims/idp-clients` | — |
 | `idp.service-clients` | idp | `POST /idp/api/gc/service-clients {dryRun, claims}` — FAILED, no request, when the read answered no claims | claims.idp-clients |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
@@ -52,7 +51,6 @@ so what comes after it still runs.
 {"pins": {"deployments":       <the deployments answer, verbatim>,
           "ciDaemon":          <the ci answer, verbatim>,
           "dependencies":      <the maintenance answer, verbatim>,
-          "configuredImages":  <the configuration answer, verbatim>,
           "workspaceLaunches": <the workspaces answer, verbatim>,
           "projectLaunches":   <the projects answer, verbatim>}}
 ```
@@ -62,21 +60,19 @@ unanswered, which makes the plan not executable and aborts a sweep. The readers 
 this is the one component holding an idp client for every peer — theirs had no credential and were
 401-ing.
 
-**Four of the six sources are CONSUMPTION rather than deployment**, and that is why the first two
+**Three of the five sources are CONSUMPTION rather than deployment**, and that is why the first two
 could not stand in for them: nothing deploys the library a pom pins, and nothing deploys the
 workspace image a person's next click pulls. `pins.dependencies` is what every repository's main
-still references in its manifests (qits-platform-maintenance); `pins.images` is the configured
-container image versions a workspace, editor or agent launch resolves (qits-configuration). Before
-they were read, all that kept either alive was how recently somebody happened to ask for it.
+still references in its manifests (qits-platform-maintenance). Before it was read, all that kept
+such a version alive was how recently somebody happened to ask for it.
 
-**Six sources because they are in six tenses.** `pins.deployments` is what serves right now,
-`pins.ci` what a run launches, `pins.dependencies` what source still references, `pins.images` what
-the NEXT deploy will configure — and `pins.workspaces` / `pins.projects` what a launch pulls TODAY.
-That last one is the EFFECTIVE value, answered by the service that would do the pulling out of the
-config it is actually running with, and it lags the configured one until that service is redeployed.
-A qits-workspaces still running last week's `QITS_WORKSPACE_IMAGE_VERSION` pulls an image
-qits-configuration has already moved past, and nothing but access was keeping it alive. Both ride
-peers this process already drives — no new target url, no new oidc client, only a second path on a
+**Five sources, and no two are the same claim.** `pins.deployments` is what serves right now,
+`pins.ci` what a run launches, `pins.dependencies` what source still references, and
+`pins.workspaces` / `pins.projects` what a launch pulls TODAY, answered by the service that would do
+the pulling out of the config it is actually running with. Image versions come from each service's
+own config, built from its pom, so each launching service answers for itself. (`pins.images`, the
+configured versions from qits-configuration, was removed in qits-1176: that service no longer holds
+image names.) Both launch reads ride peers this process already drives — no new target url, no new oidc client, only a second path on a
 socket that was already open.
 
 **The registry plane is measured too, and it has its own pair.** `artifacts.usage.before` and
@@ -91,7 +87,7 @@ prune that failed still leaves the registry's own before-and-after in the run.
 keys — a key some declaration of an application used to state and that no surviving declaration
 states any longer, neither a serving nor a rollback version. The rule for what counts as retired
 lives with qits-configuration, the owner of the store; this process hands it `pins.deployments`
-verbatim, the one pin its rule needs, and that is the step's only edge — the other five pin sources
+verbatim, the one pin its rule needs, and that is the step's only edge — the other four pin sources
 answer a different tense that has no bearing on whether a configuration key is still declared. It
 frees no disk, so it hangs off neither `usage.after` plane, and it runs on a dry run too, the same
 reasoning as `branches.sweep`.
@@ -108,10 +104,10 @@ reached with the same `qits` bearer as every other peer.
 
 **`tags.sweep` decommissions git tags, on the platform's git host and its backup twin alike.**
 qits-projects is the one peer that can reach both addresses, so it is the one asked, carrying the
-same `{"pins": {...}}` object `artifacts.plan` sends — every one of the six sources, because a tag
+same `{"pins": {...}}` object `artifacts.plan` sends — every one of the five sources, because a tag
 can be the thing any of them protects: a sha a deployment still serves, a version a manifest
 references, or an image a launch would pull. `repos.catalogue` is its iteration set, the same role
-it plays for `branches.sweep`. All seven are fail-closed edges: an unread pin or an unread catalogue
+it plays for `branches.sweep`. All six are fail-closed edges: an unread pin or an unread catalogue
 skips the sweep before its body is built. It frees no disk either, so it is not a `usage.after`
 dependency, and it runs on a dry run too. This is also the one call slow enough to need its own
 budget: `qits.orchestrator.gc.tags-sweep-call-timeout` (15 minutes, PeerClient's four-argument
@@ -228,7 +224,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.targets.projects-url` | `http://qits-projects:8080` | where the repository catalogue is |
 | `qits.orchestrator.targets.workspaces-url` | `http://qits-workspaces:8080` | where branch semantics live |
 | `qits.orchestrator.targets.maintenance-url` | `http://qits-platform-maintenance:8080` | where the dependency pins are |
-| `qits.orchestrator.targets.configuration-url` | `http://qits-configuration:8080` | where the configured image pins are |
+| `qits.orchestrator.targets.configuration-url` | `http://qits-configuration:8080` | where the retired-entry sweep is |
 | `qits.orchestrator.targets.idp-url` | `http://${QITS_ENVIRONMENT:dev}-qits-idp:8080` | where the service-client store is |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
