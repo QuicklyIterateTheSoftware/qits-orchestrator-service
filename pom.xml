@@ -61,7 +61,7 @@
              .qits-maven-settings.xml. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
         <qits.auth-core.version>2026.1002.70617</qits.auth-core.version>
-        <qits.arch-rules.version>2026.1002.70617</qits.arch-rules.version>
+        <qits.arch-rules.version>2026.1011.185745</qits.arch-rules.version>
         <!-- Service-to-service HTTP that says who is calling: QitsHttpClients.wrap turns a raw
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
              X-Qits-Caller; the server filter (jandex-discovered off this jar alone) records an
@@ -79,7 +79,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1011.64434</qits.eventstream.version>
+        <qits.eventstream.version>2026.1011.202648</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
