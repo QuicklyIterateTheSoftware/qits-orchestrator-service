@@ -60,13 +60,13 @@
              address the builder container can actually reach — see docker/Dockerfile and
              .qits-maven-settings.xml. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
-        <qits.auth-core.version>2026.1002.70617</qits.auth-core.version>
+        <qits.auth-core.version>2026.1012.173247</qits.auth-core.version>
         <qits.arch-rules.version>2026.1011.185745</qits.arch-rules.version>
         <!-- Service-to-service HTTP that says who is calling: QitsHttpClients.wrap turns a raw
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
              X-Qits-Caller; the server filter (jandex-discovered off this jar alone) records an
              inbound caller on the server span. Not released yet (qits-1198). -->
-        <qits.http-core.version>2026.1011.185745</qits.http-core.version>
+        <qits.http-core.version>2026.1012.153509</qits.http-core.version>
         <!-- THE PLATFORM EVENT BUS, and this repository's first consumption of it: the outbox, the
              idempotent PUT, the durable listener and CausationScope, published by
              components/qits-eventstream into the same platform Maven repository as the three
