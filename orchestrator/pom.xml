@@ -97,6 +97,14 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- qits-http-core's CallerRouteRecorder observes a Vert.x Router and takes vertx-web as
+                 provided. The service module brings it through its REST layer; this module has
+                 none, so its @QuarkusTest boot needs it here or ArC fails on the missing class. -->
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- The store every @QuarkusTest in this module boots against. Zonky spawns real
                  postgres binaries as a child process — a maven dependency rather than a container —
                  which is what keeps the clone-alone, docker-free rule true.
