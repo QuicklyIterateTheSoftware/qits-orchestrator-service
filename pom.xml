@@ -66,7 +66,7 @@
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
              X-Qits-Caller; the server filter (jandex-discovered off this jar alone) records an
              inbound caller on the server span. Not released yet (qits-1198). -->
-        <qits.http-core.version>2026.1012.153509</qits.http-core.version>
+        <qits.http-core.version>2026.1013.64811</qits.http-core.version>
         <!-- THE PLATFORM EVENT BUS, and this repository's first consumption of it: the outbox, the
              idempotent PUT, the durable listener and CausationScope, published by
              components/qits-eventstream into the same platform Maven repository as the three
@@ -79,7 +79,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1011.202648</qits.eventstream.version>
+        <qits.eventstream.version>2026.1014.223716</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
