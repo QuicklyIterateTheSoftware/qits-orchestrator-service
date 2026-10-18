@@ -392,7 +392,7 @@ class GcProcessTest {
     // service was actually asked. That matters most for the two effective reads: they ride peers
     // this process already drives, so a path typo is the only thing that could send them astray.
     assertEquals(
-        "http://dev-qits-platform-maintenance:8080/maintenance/api/pins",
+        "http://dev-qits-maintenance:8080/maintenance/api/pins",
         steps.get("pins.dependencies").requestUrl);
     assertEquals(
         "http://dev-qits-workspaces:8080/workspaces/api/pins", steps.get("pins.workspaces").requestUrl);
