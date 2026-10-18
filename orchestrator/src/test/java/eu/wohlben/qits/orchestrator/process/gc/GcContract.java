@@ -16,6 +16,7 @@ import eu.wohlben.qits.pact.consumer.ConsumerPact;
 import eu.wohlben.qits.pact.consumer.GoldenInteraction;
 import eu.wohlben.qits.pact.consumer.GoldenMasters;
 import eu.wohlben.qits.pact.consumer.GoldenMasters.Operation;
+import eu.wohlben.qits.pact.consumer.ProviderStateMissing;
 import eu.wohlben.qits.pact.consumer.Trigger;
 import java.io.IOException;
 import java.io.InputStream;
@@ -190,6 +191,39 @@ final class GcContract {
   static final GoldenInteraction TOKEN_MINT =
       GoldenInteraction.of(Trigger.operation("PeerTokens.token"), A_PEER_CALLER, "issueToken")
           .consumes("access_token");
+
+  // --- the pending rows ----------------------------------------------------------------------------
+
+  /**
+   * A row waiting on a provider state that is not on the classpath yet — the same reason {@link
+   * GoldenMasters#operation} would throw {@link ProviderStateMissing}, raised here instead of from
+   * inside a running pact so the row can be reported as skipped rather than erroring the whole
+   * suite. Not in {@link #ROWS}: {@link #pact} never embeds it, and {@code GcCallCoverageTest}'s
+   * guard never looks for its call, because nothing here can resolve what to call it against
+   * without the state's frozen example. Once the provider publishes the state, move the row into
+   * {@link #ROWS} with a real {@code consumes} list built the same way every live row's is.
+   */
+  record Pending(String target, String stepId, String state, String operationId, List<String> consumes) {
+    String reason() {
+      return ProviderStateMissing.message(PEERS.get(target).repository(), state, operationId);
+    }
+  }
+
+  /**
+   * {@code artifacts.sweep}, on the state qits-artifacts calls "a registry handed a pin it cannot
+   * file" (ticket qits-1149): the sweep answers {@code aborted} set when a pin source it was handed
+   * could not be filed into a plan — the same fail-closed abort {@link GcSummaries#artifactsSweep}
+   * now reads regardless of whether {@code sweep} is also present. {@code aborted} is the only field
+   * {@link GcSummaries#artifactsSweep} reads once it is set, so that is the whole {@code consumes}.
+   */
+  static final List<Pending> PENDING =
+      List.of(
+          new Pending(
+              PeerTarget.ARTIFACTS,
+              GcProcess.ARTIFACTS_SWEEP,
+              "a registry handed a pin it cannot file",
+              "sweepGc",
+              List.of("aborted")));
 
   private static Row row(
       String target, String stepId, String state, String operationId, Arrange arrange,
