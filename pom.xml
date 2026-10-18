@@ -92,6 +92,21 @@
              idp.MockIdp), published by qits-integrations-quarkus beside qits-auth-core,
              qits-arch-rules and qits-db-core. -->
         <qits.service-mock.version>2026.1002.70617</qits.service-mock.version>
+        <!-- The consumer pacts of the gc process (ticket qits-1149, epic qits-546): qits-pact-consumer
+             reads each peer's published golden masters off the test classpath and turns a recorded
+             (provider state, operation) into a pact interaction — orchestrator/src/test/.../
+             process/gc/GcContract. One pin per peer GcProcess calls; each moves like every internal
+             pin. The pact-jvm version comes with qits-pact-consumer. -->
+        <qits.pact-consumer.version>2026.1018.135552</qits.pact-consumer.version>
+        <qits.containers-golden-masters.version>2026.1010.134141</qits.containers-golden-masters.version>
+        <qits.artifacts-golden-masters.version>2026.1018.73956</qits.artifacts-golden-masters.version>
+        <qits.deployments-golden-masters.version>2026.1010.145913</qits.deployments-golden-masters.version>
+        <qits.ci-golden-masters.version>2026.1010.174604</qits.ci-golden-masters.version>
+        <qits.maintenance-golden-masters.version>2026.1011.122834</qits.maintenance-golden-masters.version>
+        <qits.workspaces-golden-masters.version>2026.1016.90656</qits.workspaces-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1016.112931</qits.projects-golden-masters.version>
+        <qits.configuration-golden-masters.version>2026.1011.84651</qits.configuration-golden-masters.version>
+        <qits.idp-golden-masters.version>2026.1018.142635</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -240,6 +255,58 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>qits-service-mock</artifactId>
                 <version>${qits.service-mock.version}</version>
+            </dependency>
+            <dependency>
+                <!-- The golden-master reader and row builder of the consumer pacts. Test scope,
+                     `orchestrator/` only. -->
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-pact-consumer</artifactId>
+                <version>${qits.pact-consumer.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-containers-golden-masters</artifactId>
+                <version>${qits.containers-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-artifacts-golden-masters</artifactId>
+                <version>${qits.artifacts-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-deployments-golden-masters</artifactId>
+                <version>${qits.deployments-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-ci-golden-masters</artifactId>
+                <version>${qits.ci-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-maintenance-golden-masters</artifactId>
+                <version>${qits.maintenance-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-workspaces-golden-masters</artifactId>
+                <version>${qits.workspaces-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-projects-golden-masters</artifactId>
+                <version>${qits.projects-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-configuration-golden-masters</artifactId>
+                <version>${qits.configuration-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-idp-golden-masters</artifactId>
+                <version>${qits.idp-golden-masters.version}</version>
             </dependency>
             <dependency>
                 <!-- Managed here rather than versioned at the use site because Quinoa is in no BOM;

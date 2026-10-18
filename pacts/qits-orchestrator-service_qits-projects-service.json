@@ -1,0 +1,389 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-projects-service",
+            "operationId": "collectTags"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: collectTags",
+      "key": "83ea2f17",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "repositories with decommissionable tags",
+          "params": {
+            "projectId": "00000000-0000-4000-8000-000000000001",
+            "repositoryId": "00000000-0000-4000-8000-000000000002"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "dryRun": false,
+            "pins": {
+              "ciDaemon": {},
+              "dependencies": {
+                "pins": []
+              },
+              "deployments": {
+                "pins": []
+              },
+              "projectLaunches": {
+                "pins": []
+              },
+              "workspaceLaunches": {
+                "pins": []
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/projects/api/gc/tags"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "deleted": [
+              {
+                "host": true,
+                "twin": false
+              }
+            ],
+            "dryRun": false,
+            "errors": [],
+            "kept": {
+              "gitlink": 0,
+              "inFlight": 0,
+              "newest": 5,
+              "pinnedVersion": 0,
+              "young": 0
+            },
+            "repositories": 2
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.deleted": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 1,
+                  "min": 1
+                }
+              ]
+            },
+            "$.deleted[*].host": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.deleted[*].twin": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.dryRun": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.kept.gitlink": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.kept.inFlight": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.kept.newest": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.kept.pinnedVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.kept.young": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.repositories": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-projects-service",
+            "operationId": "listLaunchPins"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: listLaunchPins",
+      "key": "d6bc2f82",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "an agent launch image in use"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/projects/api/pins"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "pins": [
+              {},
+              {}
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.pins": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 2,
+                  "min": 2
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-projects-service",
+            "operationId": "listRepositories"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: listRepositories",
+      "key": "5646117",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a project with 3 repositories",
+          "params": {
+            "projectId": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/projects/api/repositories"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "repositories": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "mainBranch": "main",
+                "name": "contract-00000001-contract-00000001"
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "mainBranch": "main",
+                "name": "contract-00000001-contract-00000001"
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "mainBranch": "main",
+                "name": "contract-00000001-contract-00000001"
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "mainBranch": "main",
+                "name": "contract-00000001-contract-00000001"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.repositories": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 4
+                }
+              ]
+            },
+            "$.repositories[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.repositories[*].mainBranch": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.repositories[*].name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-projects-service"
+  }
+}

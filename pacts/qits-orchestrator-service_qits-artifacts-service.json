@@ -1,0 +1,417 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "getStoreSummary"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: getStoreSummary",
+      "key": "7993487a",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a registry store with content"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/artifacts/api/store/summary"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "diskTotalBytes": 0,
+            "docsBytes": 0,
+            "ociUnionBytes": 0,
+            "sbomBytes": 0
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.diskTotalBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.docsBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.ociUnionBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.sbomBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "planGcWithSuppliedPins"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: planGcWithSuppliedPins",
+      "key": "cbda74a5",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a registry with unpinned identities"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "maven",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/plan"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "summary": {
+              "executable": true,
+              "identitiesCondemned": 0,
+              "reclaimable": "",
+              "reclaimableBytes": 0
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.summary.executable": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.summary.identitiesCondemned": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.summary.reclaimable": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.summary.reclaimableBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "sweepGc"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: sweepGc",
+      "key": "37da15b6",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a registry with unpinned identities"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "maven",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/sweep"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "sweep": {
+              "blobsUnlinked": 0,
+              "bytesReclaimed": 0
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.sweep.blobsUnlinked": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.sweep.bytesReclaimed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-artifacts-service"
+  }
+}
