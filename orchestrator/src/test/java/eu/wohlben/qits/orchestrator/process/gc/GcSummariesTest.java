@@ -219,6 +219,54 @@ class GcSummariesTest {
   }
 
   @Test
+  void theArtifactsSweepReportsBlobsUnlinkedAndBytesReclaimed() {
+    assertEquals(
+        "91 blobs unlinked, 17.8 GB reclaimed",
+        GcSummaries.artifactsSweep(
+            json(
+                """
+                {"dryRun":false,"aborted":null,
+                 "sweep":{"blobsUnlinked":91,"bytesReclaimed":17800000000,
+                          "withheldByGraceWindow":4,"withheldBytes":100,"stillReferenced":7,
+                          "alreadyGone":0,"unlinkedBlobIds":[]}}
+                """)));
+  }
+
+  @Test
+  void anAbortedSweepReportsTheAbortEvenThoughSweepIsPresentAndZeroed() {
+    // qits-artifacts answers an aborted run 200 with "aborted" set AND a "sweep" section — every
+    // figure in it zero, because the run never took a census. Reading "sweep" before "aborted"
+    // misreads this as a real outcome: "0 blobs unlinked, 0 B reclaimed" rather than the abort it
+    // was.
+    assertEquals(
+        "aborted: the run was aborted before anything was deleted: pins.deployments unread",
+        GcSummaries.artifactsSweep(
+            json(
+                """
+                {"dryRun":false,
+                 "aborted":"the run was aborted before anything was deleted: pins.deployments unread",
+                 "sweep":{"blobsUnlinked":0,"bytesReclaimed":0,"withheldByGraceWindow":0,
+                          "withheldBytes":0,"stillReferenced":0,"alreadyGone":0,
+                          "unlinkedBlobIds":[]}}
+                """)));
+  }
+
+  @Test
+  void anAbortedSweepWithNoSweepSectionAtAllStillReportsTheAbort() {
+    assertEquals(
+        "aborted: pins.deployments unread",
+        GcSummaries.artifactsSweep(json("{\"dryRun\":false,\"aborted\":\"pins.deployments unread\"}")));
+  }
+
+  @Test
+  void anArtifactsSweepAnswerThisReaderDoesNotRecogniseIsStillASentence() {
+    assertEquals("no sweep outcome in the answer", GcSummaries.artifactsSweep(null));
+    assertEquals(
+        "no sweep outcome in the answer",
+        GcSummaries.artifactsSweep(json("{\"message\":\"never ran\"}")));
+  }
+
+  @Test
   void theClaimsReadCountsClaimsAndTheApplicationsHoldingThem() {
     assertEquals(
         "3 service-client claims across 2 applications",
