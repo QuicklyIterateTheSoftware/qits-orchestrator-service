@@ -163,14 +163,29 @@ final class GcSummaries {
         + summary.path("executable").asBoolean();
   }
 
-  /** {@code 91 blobs unlinked, 17.8 GB reclaimed} — the artifacts sweep answer. */
+  /**
+   * {@code 91 blobs unlinked, 17.8 GB reclaimed} — the artifacts sweep answer, or {@code aborted:
+   * …} when the run deleted nothing.
+   *
+   * <p><b>{@code aborted} is checked before {@code sweep} is read, never after.</b> qits-artifacts
+   * answers an aborted sweep 200 with {@code aborted} set AND a {@code sweep} section present —
+   * every figure in it zero, because the run never took a census — rather than omitting {@code
+   * sweep}. A reader that only fell back to {@code aborted} when {@code sweep} was absent therefore
+   * read the abort as "0 blobs unlinked, 0 B reclaimed": a real outcome rather than the aborted run
+   * it was. {@code aborted} is the one field that answers the question, present or absent, and is
+   * read first.
+   */
   static String artifactsSweep(JsonNode body) {
-    JsonNode sweep = body == null ? null : body.get("sweep");
+    if (body == null) {
+      return "no sweep outcome in the answer";
+    }
+    String aborted = text(body, "aborted", "");
+    if (!aborted.isBlank()) {
+      return "aborted: " + aborted;
+    }
+    JsonNode sweep = body.get("sweep");
     if (sweep == null) {
-      String aborted = body == null ? null : text(body, "aborted", "");
-      return aborted == null || aborted.isBlank()
-          ? "no sweep outcome in the answer"
-          : "aborted: " + aborted;
+      return "no sweep outcome in the answer";
     }
     return sweep.path("blobsUnlinked").asInt()
         + " blobs unlinked, "
