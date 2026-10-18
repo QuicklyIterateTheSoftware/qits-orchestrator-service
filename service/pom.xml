@@ -90,6 +90,13 @@
             <artifactId>qits-eventstream</artifactId>
         </dependency>
         <dependency>
+            <!-- contracts/eventstream/EventstreamPactTest: this service pacts the catch-up reads
+                 qits-eventstream makes of qits-events on its behalf (qits-1163). -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-eventstream-contracts</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- The orchestrator client. Quinoa runs the npm build in src/main/webui (the
                  qits-platform-spa-orchestrator submodule) during augmentation and serves the result
                  as static resources at /orchestrator/ — see the quarkus.quinoa.* block in

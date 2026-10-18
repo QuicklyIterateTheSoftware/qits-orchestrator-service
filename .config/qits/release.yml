@@ -1,6 +1,15 @@
 archetype: java-service
 artifacts:
   - { type: docker, name: qits/qits-orchestrator, sbom: .sbom/sbom.json }
+# THE PACTS (qits-1163): what qits-eventstream asks qits-events on qits-orchestrator's behalf (the
+# durable listener's catch-up reads; it publishes nothing), flat in `pacts/` as
+# `qits-orchestrator-service_qits-eventstream-javalib_qits-events-service.json`, written by
+# contracts/eventstream/EventstreamPactTest from the library's kit. The platform packs it for
+# qits-events-service, published only when it changed.
+contracts:
+  application: qits-orchestrator
+  pacts:
+    qits-events-service: { packages: [maven] }
 # THE SITE IS SPELLED, AND IT NAMES THE COMPONENT. `true` derives it from the REPOSITORY name,
 # which would put the retired tier modifier in a storage id and then MOVE that id the day the
 # repository is renamed — a bundle's history stranded under a name nothing publishes to any
