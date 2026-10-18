@@ -1,0 +1,244 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-workspaces-service",
+            "operationId": "listLaunchPins"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: listLaunchPins",
+      "key": "49fdf1c5",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a configured workspace image"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/workspaces/api/pins"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "pins": [
+              {},
+              {}
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.pins": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 2,
+                  "min": 2
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-workspaces-service",
+            "operationId": "sweepBranches"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: sweepBranches",
+      "key": "960ee1bc",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "repositories with merged branches",
+          "params": {
+            "mergedBranch": "merged-work",
+            "repositoryId": "00000000-0000-4000-8000-000000000016",
+            "repositoryName": "contract-service"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "dryRun": false,
+            "keepPrefixes": [],
+            "repositories": [
+              {
+                "id": "00000000-0000-4000-8000-000000000016",
+                "mainBranch": "master",
+                "name": "contract-service"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "generators": {
+          "body": {
+            "$.repositories[0].id": {
+              "dataType": "STRING",
+              "expression": "${repositoryId}",
+              "type": "ProviderState"
+            },
+            "$.repositories[0].name": {
+              "dataType": "STRING",
+              "expression": "${repositoryName}",
+              "type": "ProviderState"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.repositories[0].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.repositories[0].name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/workspaces/api/gc/branches"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "branchesExamined": 3,
+            "dryRun": false,
+            "errors": [],
+            "removed": [
+              {}
+            ],
+            "repositoriesExamined": 1
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.branchesExamined": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.dryRun": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.removed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 1,
+                  "min": 1
+                }
+              ]
+            },
+            "$.repositoriesExamined": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-workspaces-service"
+  }
+}

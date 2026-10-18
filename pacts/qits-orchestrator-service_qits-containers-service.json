@@ -1,0 +1,421 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-containers-service",
+            "operationId": "collectImages"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: collectImages",
+      "key": "4b39ef6c",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a host with reclaimable storage"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "dryRun": false,
+            "keep": [
+              "qits/qits-ci:2026.1001.120000"
+            ],
+            "keepPrefixes": [
+              "qits/build-images/",
+              "qits/graalvmce-musl-builder"
+            ],
+            "minAge": "PT6H"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/containers/api/gc/images"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "bytesReclaimed": 490000000,
+            "kept": [
+              {}
+            ],
+            "removed": [
+              {},
+              {}
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.bytesReclaimed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.kept": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 1,
+                  "min": 1
+                }
+              ]
+            },
+            "$.removed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 2,
+                  "min": 2
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-containers-service",
+            "operationId": "collectVolumes"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: collectVolumes",
+      "key": "618ff655",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a host with reclaimable storage"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "dryRun": false,
+            "minAge": "PT24H"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/containers/api/gc/volumes"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "kept": [
+              {}
+            ],
+            "removed": [
+              {}
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.kept": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 1,
+                  "min": 1
+                }
+              ]
+            },
+            "$.removed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 1,
+                  "min": 1
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-containers-service",
+            "operationId": "getGcUsage"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: getGcUsage",
+      "key": "79cf6d75",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a host with reclaimable storage"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/containers/api/gc/usage"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "buildCache": {
+              "sizeBytes": 7000000000
+            },
+            "images": {
+              "reclaimableBytes": 3000000000,
+              "sizeBytes": 9000000000
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.buildCache.sizeBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.images.reclaimableBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.images.sizeBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-containers-service",
+            "operationId": "pruneBuildCache"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: pruneBuildCache",
+      "key": "d543d6c0",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a host with reclaimable storage"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "builderKeepStorageBytes": 1073741824,
+            "dryRun": false,
+            "keepStorageBytes": 10737418240
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/containers/api/gc/build-cache"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "builders": [
+              {
+                "reclaimedBytes": 0
+              },
+              {
+                "reclaimedBytes": 0
+              }
+            ],
+            "host": {
+              "reclaimedBytes": 2000000000
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.builders": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "max": 2,
+                  "min": 2
+                }
+              ]
+            },
+            "$.builders[*].reclaimedBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.host.reclaimedBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-containers-service"
+  }
+}

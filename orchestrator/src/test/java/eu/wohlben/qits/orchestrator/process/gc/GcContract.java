@@ -1,0 +1,432 @@
+package eu.wohlben.qits.orchestrator.process.gc;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import eu.wohlben.qits.orchestrator.peer.ContractPeers;
+import eu.wohlben.qits.orchestrator.peer.FakePeers;
+import eu.wohlben.qits.orchestrator.peer.PeerClient;
+import eu.wohlben.qits.orchestrator.peer.PeerTarget;
+import eu.wohlben.qits.orchestrator.process.RunContext;
+import eu.wohlben.qits.orchestrator.process.StepDefinition;
+import eu.wohlben.qits.orchestrator.process.StepResult;
+import eu.wohlben.qits.pact.consumer.ConsumerPact;
+import eu.wohlben.qits.pact.consumer.GoldenInteraction;
+import eu.wohlben.qits.pact.consumer.GoldenMasters;
+import eu.wohlben.qits.pact.consumer.GoldenMasters.Operation;
+import eu.wohlben.qits.pact.consumer.Trigger;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
+
+/**
+ * <b>What the gc process asks its peers, and what it reads from each answer</b> (ticket qits-1149,
+ * epic qits-546): one {@link ConsumerPact} per peer, built with qits-pact-consumer from that peer's
+ * published golden masters, and the table {@code GcConsumerPactTest}, {@code IdpTokenMintPactTest}
+ * and {@code GcCallCoverageTest} are all built from.
+ *
+ * <p><b>One row per call.</b> Every call is a step of {@link GcProcess}; the trigger named is the
+ * nightly {@code GcSchedule.onSchedule}. A manual {@code POST /processes/gc/runs} and the {@code
+ * DeploymentActive} trigger run the identical steps, so they would only repeat each interaction.
+ * {@code usage.before}/{@code usage.after} and the two {@code artifacts.usage.*} steps are one call
+ * each, made twice in a run: one row each.
+ *
+ * <p><b>{@code consumes} is what this service reads</b>: the fields {@link GcSummaries} turns into
+ * the step's line, and the fields a later step's request is built from ({@code pins[].shas} for the
+ * image keep-set, {@code repositories[].id} for the branch sweep, {@code claims[]} for qits-idp). A
+ * pin answer is also forwarded WHOLE to qits-artifacts, qits-projects and qits-configuration: that
+ * part is a contract between the pin source and its reader, not this service's, so it is not bound
+ * here.
+ *
+ * <p><b>The request is the provider's recording</b>, values exact. A row's {@link Arrange} is what
+ * makes the step send exactly that: the earlier steps' answers the body is built from, taken from
+ * the recorded request, and — where the recording was made under another setting than the one
+ * shipped — that setting.
+ */
+final class GcContract {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+
+  /** This repository, as every pact names its consumer. */
+  static final String CONSUMER = "qits-orchestrator-service";
+
+  /** The trigger every gc row is reached from. */
+  static final Trigger NIGHTLY = Trigger.schedule("GcSchedule.onSchedule");
+
+  /** What a row needs in place before its step sends the recorded request. */
+  @FunctionalInterface
+  interface Arrange {
+    /**
+     * @param recorded the recorded request body, every {@code {param}} its example; null for a GET
+     */
+    void apply(JsonNode recorded, GcConfig config, RunContext context);
+  }
+
+  private static final Arrange NOTHING = (recorded, config, context) -> {};
+
+  /**
+   * One call.
+   *
+   * @param target the {@link PeerTarget} the step calls
+   * @param stepId the {@link GcProcess} step that makes the call
+   */
+  record Row(String target, String stepId, GoldenInteraction interaction, Arrange arrange) {}
+
+  // --- the peers ---------------------------------------------------------------------------------
+
+  static final GoldenMasters CONTAINERS =
+      GoldenMasters.of("qits-containers-service", "qits-containers");
+  static final GoldenMasters ARTIFACTS = GoldenMasters.of("qits-artifacts-service", "qits-artifacts");
+  static final GoldenMasters DEPLOYMENTS =
+      GoldenMasters.of("qits-deployments-service", "qits-deployments");
+  static final GoldenMasters CI = GoldenMasters.of("qits-ci-service", "qits-ci");
+  static final GoldenMasters MAINTENANCE =
+      GoldenMasters.of("qits-maintenance-service", "qits-maintenance");
+  static final GoldenMasters WORKSPACES =
+      GoldenMasters.of("qits-workspaces-service", "qits-workspaces");
+  static final GoldenMasters PROJECTS = GoldenMasters.of("qits-projects-service", "qits-projects");
+  static final GoldenMasters CONFIGURATION =
+      GoldenMasters.of("qits-configuration-service", "qits-configuration");
+  static final GoldenMasters IDP = GoldenMasters.of("qits-idp-service", "qits-idp");
+
+  /** The peer each {@link PeerTarget} is. */
+  static final Map<String, GoldenMasters> PEERS =
+      Map.of(
+          PeerTarget.CONTAINERS, CONTAINERS,
+          PeerTarget.ARTIFACTS, ARTIFACTS,
+          PeerTarget.DEPLOYMENTS, DEPLOYMENTS,
+          PeerTarget.CI, CI,
+          PeerTarget.MAINTENANCE, MAINTENANCE,
+          PeerTarget.WORKSPACES, WORKSPACES,
+          PeerTarget.PROJECTS, PROJECTS,
+          PeerTarget.CONFIGURATION, CONFIGURATION,
+          PeerTarget.IDP, IDP);
+
+  // --- the rows ----------------------------------------------------------------------------------
+
+  private static final String RECLAIMABLE_HOST = "a host with reclaimable storage";
+  private static final String UNPINNED_REGISTRY = "a registry with unpinned identities";
+
+  static final List<Row> ROWS =
+      List.of(
+          // qits-containers-service
+          row(PeerTarget.CONTAINERS, GcProcess.USAGE_BEFORE, RECLAIMABLE_HOST, "getGcUsage", NOTHING,
+              "images.sizeBytes", "images.reclaimableBytes", "buildCache.sizeBytes"),
+          row(PeerTarget.CONTAINERS, GcProcess.CONTAINERS_IMAGES, RECLAIMABLE_HOST, "collectImages",
+              GcContract::deploymentPinsFromKeep, "removed[]", "bytesReclaimed", "kept[]"),
+          row(PeerTarget.CONTAINERS, GcProcess.CONTAINERS_VOLUMES, RECLAIMABLE_HOST,
+              "collectVolumes", NOTHING, "removed[]", "kept[]"),
+          row(PeerTarget.CONTAINERS, GcProcess.CONTAINERS_BUILD_CACHE, RECLAIMABLE_HOST,
+              "pruneBuildCache", NOTHING, "host.reclaimedBytes", "builders[].reclaimedBytes"),
+          // qits-artifacts-service
+          row(PeerTarget.ARTIFACTS, GcProcess.ARTIFACTS_USAGE_BEFORE, "a registry store with content",
+              "getStoreSummary", NOTHING,
+              "diskTotalBytes", "ociUnionBytes", "docsBytes", "sbomBytes"),
+          row(PeerTarget.ARTIFACTS, GcProcess.ARTIFACTS_PLAN, UNPINNED_REGISTRY,
+              "planGcWithSuppliedPins", GcContract::pinsFromBody,
+              "summary.identitiesCondemned", "summary.reclaimable", "summary.reclaimableBytes",
+              "summary.executable"),
+          row(PeerTarget.ARTIFACTS, GcProcess.ARTIFACTS_SWEEP, UNPINNED_REGISTRY, "sweepGc",
+              GcContract::pinsFromBody, "sweep.blobsUnlinked", "sweep.bytesReclaimed"),
+          // qits-deployments-service
+          row(PeerTarget.DEPLOYMENTS, GcProcess.PINS_DEPLOYMENTS,
+              "an application serving with a rollback version", "listPins", NOTHING,
+              "pins[].applicationName", "pins[].shas"),
+          row(PeerTarget.DEPLOYMENTS, GcProcess.CLAIMS_IDP_CLIENTS,
+              "an application holding a service client", "listIdpClientClaims", NOTHING,
+              "claims[].clientId", "claims[].applicationName"),
+          // qits-ci-service
+          row(PeerTarget.CI, GcProcess.PINS_CI, "a pinned daemon", "getDaemonPin", NOTHING,
+              "daemonName", "daemonVersion", "previousDaemonVersion"),
+          // qits-maintenance-service
+          row(PeerTarget.MAINTENANCE, GcProcess.PINS_DEPENDENCIES, "manifests that pin artifacts",
+              "listDependencyPins", NOTHING, "pins[]", "repositories[]"),
+          // qits-workspaces-service
+          row(PeerTarget.WORKSPACES, GcProcess.PINS_WORKSPACES, "a configured workspace image",
+              "listLaunchPins", NOTHING, "pins[]"),
+          row(PeerTarget.WORKSPACES, GcProcess.BRANCHES_SWEEP, "repositories with merged branches",
+              "sweepBranches", GcContract::catalogueFromBody,
+              "removed[]", "branchesExamined", "repositoriesExamined", "errors[]", "dryRun"),
+          // qits-projects-service
+          row(PeerTarget.PROJECTS, GcProcess.PINS_PROJECTS, "an agent launch image in use",
+              "listLaunchPins", NOTHING, "pins[]"),
+          row(PeerTarget.PROJECTS, GcProcess.REPOS_CATALOGUE, "a project with 3 repositories",
+              "listRepositories", NOTHING,
+              "repositories[].id", "repositories[].name", "repositories[].mainBranch"),
+          row(PeerTarget.PROJECTS, GcProcess.TAGS_SWEEP, "repositories with decommissionable tags",
+              "collectTags", GcContract::pinsFromBody,
+              "deleted[].host", "deleted[].twin", "repositories", "errors[]", "dryRun",
+              "kept.newest", "kept.pinnedVersion", "kept.gitlink", "kept.inFlight", "kept.young"),
+          // qits-configuration-service
+          row(PeerTarget.CONFIGURATION, GcProcess.CONFIGURATION_ENTRIES,
+              "entries of a retired configuration key", "collectEntries",
+              GcContract::deploymentPinsFromBody,
+              "removed[]", "examined", "errors[]", "dryRun", "kept.unpinned",
+              "kept.undeclaredPinnedVersion", "kept.pinned", "kept.inFlight", "kept.neverDeclared",
+              "kept.staged"),
+          // qits-idp-service
+          row(PeerTarget.IDP, GcProcess.IDP_SERVICE_CLIENTS, "a service client nothing claims",
+              "collectServiceClients", GcContract::claimsFromBody,
+              "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed", "keptCounts.grace",
+              "keptCounts.caller"));
+
+  /**
+   * The client-credentials mint {@code PeerTokens} makes through quarkus-oidc-client's {@code
+   * qits} client before a peer call: Basic client auth and {@code
+   * grant_type=client_credentials&audience=qits-platform}. Not a gc step, so not in {@link #ROWS};
+   * {@code IdpTokenMintPactTest} runs it.
+   */
+  static final String A_PEER_CALLER = "a service client calling its peers";
+
+  static final GoldenInteraction TOKEN_MINT =
+      GoldenInteraction.of(Trigger.operation("PeerTokens.token"), A_PEER_CALLER, "issueToken")
+          .consumes("access_token");
+
+  private static Row row(
+      String target, String stepId, String state, String operationId, Arrange arrange,
+      String... consumes) {
+    return new Row(
+        target,
+        stepId,
+        GoldenInteraction.of(NIGHTLY, state, operationId).consumes(consumes),
+        arrange);
+  }
+
+  /** The pact against each peer, its rows in table order (the pact file sorts). */
+  static ConsumerPact pact(String target) {
+    List<GoldenInteraction> rows = new ArrayList<>();
+    for (Row row : ROWS) {
+      if (row.target().equals(target)) {
+        rows.add(row.interaction());
+      }
+    }
+    if (target.equals(PeerTarget.IDP)) {
+      rows.add(TOKEN_MINT);
+    }
+    return ConsumerPact.of(CONSUMER, PEERS.get(target), rows);
+  }
+
+  static GoldenMasters masters(Row row) {
+    return PEERS.get(row.target());
+  }
+
+  static Operation recorded(Row row) {
+    return masters(row).operation(row.interaction().state(), row.interaction().operationId());
+  }
+
+  // --- what a row arranges -----------------------------------------------------------------------
+
+  /** {@code keep: ["qits/<application>:<sha>", …]} back into the deployment pins it was built from. */
+  private static void deploymentPinsFromKeep(JsonNode recorded, GcConfig config, RunContext context) {
+    ObjectNode answer = JSON.createObjectNode();
+    ArrayNode pins = answer.putArray("pins");
+    for (JsonNode keep : recorded.path("keep")) {
+      String image = keep.asText().substring("qits/".length());
+      int colon = image.lastIndexOf(':');
+      ObjectNode pin = pins.addObject();
+      pin.put("applicationName", image.substring(0, colon));
+      pin.putArray("shas").add(image.substring(colon + 1));
+    }
+    seed(context, GcProcess.PINS_DEPLOYMENTS, answer);
+  }
+
+  /** {@code pins: {deployments, ciDaemon, dependencies, workspaceLaunches, projectLaunches}}. */
+  private static void pinsFromBody(JsonNode recorded, GcConfig config, RunContext context) {
+    JsonNode pins = recorded.path("pins");
+    seedIfPresent(context, GcProcess.PINS_DEPLOYMENTS, pins.get("deployments"));
+    seedIfPresent(context, GcProcess.PINS_CI, pins.get("ciDaemon"));
+    seedIfPresent(context, GcProcess.PINS_DEPENDENCIES, pins.get("dependencies"));
+    seedIfPresent(context, GcProcess.PINS_WORKSPACES, pins.get("workspaceLaunches"));
+    seedIfPresent(context, GcProcess.PINS_PROJECTS, pins.get("projectLaunches"));
+  }
+
+  /** {@code deployments}: the deployment pin answer, forwarded whole. */
+  private static void deploymentPinsFromBody(
+      JsonNode recorded, GcConfig config, RunContext context) {
+    seedIfPresent(context, GcProcess.PINS_DEPLOYMENTS, recorded.get("deployments"));
+  }
+
+  /**
+   * {@code repositories} is the catalogue the step read; {@code keepPrefixes} is the recording's
+   * setting, which is not the shipped one ({@code environment/,release/}).
+   */
+  private static void catalogueFromBody(JsonNode recorded, GcConfig config, RunContext context) {
+    ObjectNode catalogue = JSON.createObjectNode();
+    catalogue.set("repositories", recorded.path("repositories").deepCopy());
+    seed(context, GcProcess.REPOS_CATALOGUE, catalogue);
+    List<String> prefixes = new ArrayList<>();
+    recorded.path("keepPrefixes").forEach(prefix -> prefixes.add(prefix.asText()));
+    config.branchKeepPrefixes = prefixes;
+  }
+
+  /** {@code claims}: the claim set qits-deployments answered, sent whole. */
+  private static void claimsFromBody(JsonNode recorded, GcConfig config, RunContext context) {
+    ObjectNode answer = JSON.createObjectNode();
+    answer.set("claims", recorded.path("claims").deepCopy());
+    seed(context, GcProcess.CLAIMS_IDP_CLIENTS, answer);
+  }
+
+  private static void seedIfPresent(RunContext context, String stepId, JsonNode answer) {
+    if (answer != null) {
+      seed(context, stepId, answer);
+    }
+  }
+
+  private static void seed(RunContext context, String stepId, JsonNode answer) {
+    context.record(stepId, answer, answer.toString());
+  }
+
+  // --- running a row -----------------------------------------------------------------------------
+
+  /** The gc process as shipped: {@code META-INF/microprofile-config.properties}, outside CDI. */
+  static GcProcess process(GcConfig config) {
+    GcProcess process = new GcProcess();
+    process.config = config;
+    return process;
+  }
+
+  /** The shipped gc settings, read from the file the jar ships them in. */
+  static GcConfig shippedConfig() {
+    Properties shipped = new Properties();
+    try (InputStream in =
+        GcContract.class.getResourceAsStream("/META-INF/microprofile-config.properties")) {
+      shipped.load(in);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    String prefix = "qits.orchestrator.gc.";
+    GcConfig config = new GcConfig();
+    config.imageKeepPrefixes = list(shipped.getProperty(prefix + "image-keep-prefixes"));
+    config.branchKeepPrefixes = list(shipped.getProperty(prefix + "branch-keep-prefixes"));
+    config.imageMinAge = Duration.parse(shipped.getProperty(prefix + "image-min-age"));
+    config.volumeMinAge = Duration.parse(shipped.getProperty(prefix + "volume-min-age"));
+    config.buildCacheKeepBytes =
+        Long.parseLong(shipped.getProperty(prefix + "build-cache-keep-bytes"));
+    config.builderCacheKeepBytes =
+        Long.parseLong(shipped.getProperty(prefix + "builder-cache-keep-bytes"));
+    config.tagsSweepCallTimeout =
+        Duration.parse(shipped.getProperty(prefix + "tags-sweep-call-timeout"));
+    return config;
+  }
+
+  private static List<String> list(String value) {
+    return Arrays.stream(value.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+  }
+
+  static StepDefinition step(GcProcess process, String stepId) {
+    return process.steps().stream()
+        .filter(s -> s.id().equals(stepId))
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("no gc step " + stepId));
+  }
+
+  /** {@code row}'s step, arranged to send the recorded request, calling {@code peers}. */
+  static StepResult run(Row row, PeerClient peers) {
+    Operation op = recorded(row);
+    GcConfig config = shippedConfig();
+    RunContext context = new RunContext(UUID.randomUUID(), false, peers);
+    row.arrange().apply(op.body() == null ? null : examples(op.body(), op), config, context);
+    return step(process(config), row.stepId()).body().run(context);
+  }
+
+  /** The step run against the provider's WHOLE recorded answer, through a fake. */
+  static StepResult againstRecording(Row row) {
+    FakePeers fake = ContractPeers.fake();
+    fake.answer(
+        recorded(row).examplePath(),
+        FakePeers.Scripted.ok(
+            masters(row).body(row.interaction().state(), row.interaction().operationId())));
+    return run(row, fake);
+  }
+
+  /**
+   * The step run against the provider's recorded answer cut to what the row {@code consumes}: the
+   * same line as {@link #againstRecording}, or {@code consumes} misses a field the step reads.
+   */
+  static StepResult againstConsumed(Row row) {
+    JsonNode whole =
+        masters(row).json(row.interaction().state(), row.interaction().operationId());
+    List<List<String>> paths = new ArrayList<>();
+    for (String path : row.interaction().consumes()) {
+      List<String> steps = new ArrayList<>();
+      for (String key : path.split("\\.")) {
+        if (key.endsWith("[]")) {
+          steps.add(key.substring(0, key.length() - 2));
+          steps.add("[]");
+        } else {
+          steps.add(key);
+        }
+      }
+      paths.add(steps);
+    }
+    FakePeers fake = ContractPeers.fake();
+    fake.answer(
+        recorded(row).examplePath(), FakePeers.Scripted.ok(consumed(whole, paths).toString()));
+    return run(row, fake);
+  }
+
+  /** {@code node} holding only {@code paths}; an array read without fields keeps empty elements. */
+  private static JsonNode consumed(JsonNode node, List<List<String>> paths) {
+    if (paths.stream().anyMatch(List::isEmpty)) {
+      return node;
+    }
+    if (node.isArray()) {
+      List<List<String>> rest = new ArrayList<>();
+      for (List<String> path : paths) {
+        if (path.getFirst().equals("[]")) {
+          rest.add(path.subList(1, path.size()));
+        }
+      }
+      ArrayNode out = JSON.createArrayNode();
+      for (JsonNode element : node) {
+        boolean bare = rest.stream().allMatch(List::isEmpty);
+        out.add(bare && element.isContainerNode() ? JSON.createObjectNode() : consumed(element, rest));
+      }
+      return out;
+    }
+    ObjectNode out = JSON.createObjectNode();
+    node.properties()
+        .forEach(
+            field -> {
+              List<List<String>> rest = new ArrayList<>();
+              for (List<String> path : paths) {
+                if (path.getFirst().equals(field.getKey())) {
+                  rest.add(path.subList(1, path.size()));
+                }
+              }
+              if (!rest.isEmpty()) {
+                out.set(field.getKey(), consumed(field.getValue(), rest));
+              }
+            });
+    return out;
+  }
+
+  /** {@code value} with every {@code "{param}"} string replaced by the state's example. */
+  private static JsonNode examples(JsonNode value, Operation op) {
+    if (value.isTextual()) {
+      return TextNode.valueOf(op.example(value.asText()));
+    }
+    if (value.isArray()) {
+      ArrayNode out = JSON.createArrayNode();
+      value.forEach(element -> out.add(examples(element, op)));
+      return out;
+    }
+    if (value.isObject()) {
+      ObjectNode out = JSON.createObjectNode();
+      value.properties().forEach(field -> out.set(op.example(field.getKey()), examples(field.getValue(), op)));
+      return out;
+    }
+    return value;
+  }
+
+  private GcContract() {}
+}

@@ -1,0 +1,100 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-ci-service",
+            "operationId": "getDaemonPin"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: getDaemonPin",
+      "key": "45954369",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a pinned daemon"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/ci/api/daemon"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "daemonName": "qits-ci-daemon",
+            "daemonVersion": "frozen-token-1",
+            "previousDaemonVersion": ""
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.daemonName": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.daemonVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.previousDaemonVersion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-ci-service"
+  }
+}

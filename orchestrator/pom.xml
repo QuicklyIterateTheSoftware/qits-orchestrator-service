@@ -97,6 +97,58 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- The consumer pacts of the gc process (process/gc/GcContract): every call a gc step
+                 makes to a peer, bound to that peer's golden masters below. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-pact-consumer</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-containers-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-artifacts-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-deployments-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-ci-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-maintenance-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-workspaces-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-projects-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-configuration-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-idp-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- qits-http-core's CallerRouteRecorder observes a Vert.x Router and takes vertx-web as
                  provided. The service module brings it through its REST layer; this module has
                  none, so its @QuarkusTest boot needs it here or ArC fails on the missing class. -->
