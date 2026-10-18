@@ -35,9 +35,16 @@ import org.junit.jupiter.api.Test;
  * answer otherwise; every step must have made exactly one call, so a step that would only call
  * on some other answer cannot hide behind this pass.
  *
- * <p><b>Not peer calls, and so not here</b>: the {@code DeploymentActive} catch-up against
- * qits-events, which {@code service/}'s listener makes through qits-eventstream-javalib, and the
- * service's own health probes.
+ * <p><b>Excluded, by name</b>:
+ *
+ * <ul>
+ *   <li>the {@code DeploymentActive} catch-up against qits-events ({@code GET /events/api/events}),
+ *       which {@code service/}'s listener makes through qits-eventstream-javalib. That call is the
+ *       library's, so its pact is owned and verified as qits-eventstream-javalib's pact ({@code
+ *       qits-eventstream-javalib_qits-events-service.json}, which qits-events-service pins and
+ *       verifies); this service commits no events pact of its own.
+ *   <li>the service's own health probes, which call no peer.
+ * </ul>
  */
 class GcCallCoverageTest {
 
