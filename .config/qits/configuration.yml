@@ -84,7 +84,7 @@ keys:
 
   env.QITS_ORCHESTRATOR_TARGETS_MAINTENANCE_URL:
     type: string
-    description: "Where qits-maintenance is: the dependency pins. Scheme, host and port, no path."
+    description: "Where qits-platform-maintenance is: the dependency pins. Scheme, host and port, no path."
 
   env.QITS_ORCHESTRATOR_TARGETS_CONFIGURATION_URL:
     type: string
