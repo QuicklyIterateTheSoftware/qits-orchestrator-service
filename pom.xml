@@ -40,7 +40,7 @@
          is meant to be edited by hand. Deliberately NOT a -SNAPSHOT: the image build resolves this
          reactor from source, so a snapshot coordinate would only invite a resolver to look for one
          in a repository that will never hold it. -->
-    <version>2026.1018.193131</version>
+    <version>2026.1018.203201</version>
     <packaging>pom</packaging>
     <name>qits-platform-orchestrator</name>
 
@@ -104,7 +104,7 @@
         <qits.ci-golden-masters.version>2026.1018.180637</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1018.165353</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1016.90656</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1016.112931</qits.projects-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1018.195756</qits.projects-golden-masters.version>
         <qits.configuration-golden-masters.version>2026.1011.84651</qits.configuration-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1018.175524</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
