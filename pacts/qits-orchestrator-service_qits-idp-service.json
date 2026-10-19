@@ -8,186 +8,6 @@
         "references": {
           "qits-call": {
             "app": "qits-idp-service",
-            "operationId": "collectServiceClients"
-          },
-          "qits-trigger": {
-            "app": "qits-orchestrator-service",
-            "kind": "schedule",
-            "schedule": "GcSchedule.onSchedule"
-          }
-        }
-      },
-      "description": "GcSchedule.onSchedule: collectServiceClients",
-      "key": "1c27b4d",
-      "pending": false,
-      "providerStates": [
-        {
-          "name": "a service client nothing claims",
-          "params": {
-            "authorization": "Basic dGVzdC1icm9hZDp0ZXN0LWJyb2FkLXNlY3JldA==",
-            "callerClientId": "test-broad",
-            "claimedClientId": "contract-claimed-00000001",
-            "unclaimedClientId": "contract-unclaimed-00000001"
-          }
-        }
-      ],
-      "request": {
-        "body": {
-          "content": {
-            "claims": [
-              {
-                "applicationName": "contract",
-                "clientId": "contract-claimed-00000001"
-              }
-            ],
-            "dryRun": false
-          },
-          "contentType": "application/json",
-          "encoded": false
-        },
-        "generators": {
-          "body": {
-            "$.claims[0].clientId": {
-              "dataType": "STRING",
-              "expression": "${claimedClientId}",
-              "type": "ProviderState"
-            }
-          }
-        },
-        "headers": {
-          "Content-Type": [
-            "application/json"
-          ]
-        },
-        "matchingRules": {
-          "body": {
-            "$.claims[0].clientId": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            }
-          }
-        },
-        "method": "POST",
-        "path": "/idp/api/gc/service-clients"
-      },
-      "response": {
-        "body": {
-          "content": {
-            "dryRun": false,
-            "kept": [
-              {},
-              {},
-              {},
-              {},
-              {}
-            ],
-            "keptCounts": {
-              "caller": 0,
-              "claimed": 1,
-              "grace": 4
-            },
-            "removed": [
-              {
-                "clientId": "contract-unclaimed-00000001"
-              }
-            ]
-          },
-          "contentType": "application/json",
-          "encoded": false
-        },
-        "headers": {
-          "Content-Type": [
-            "application/json"
-          ]
-        },
-        "matchingRules": {
-          "body": {
-            "$.dryRun": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.kept": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type",
-                  "max": 5,
-                  "min": 5
-                }
-              ]
-            },
-            "$.keptCounts.caller": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "number"
-                }
-              ]
-            },
-            "$.keptCounts.claimed": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "number"
-                }
-              ]
-            },
-            "$.keptCounts.grace": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "number"
-                }
-              ]
-            },
-            "$.removed": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type",
-                  "max": 1,
-                  "min": 1
-                }
-              ]
-            },
-            "$.removed[*].clientId": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            }
-          },
-          "header": {
-            "Content-Type": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "regex",
-                  "regex": "application/json.*"
-                }
-              ]
-            }
-          }
-        },
-        "status": 200
-      },
-      "type": "Synchronous/HTTP"
-    },
-    {
-      "comments": {
-        "references": {
-          "qits-call": {
-            "app": "qits-idp-service",
             "operationId": "issueToken"
           },
           "qits-trigger": {
@@ -217,7 +37,19 @@
           "contentTypeHint": "DEFAULT",
           "encoded": false
         },
+        "generators": {
+          "header": {
+            "Authorization": {
+              "dataType": "RAW",
+              "expression": "${authorization}",
+              "type": "ProviderState"
+            }
+          }
+        },
         "headers": {
+          "Authorization": [
+            "Basic dGVzdC1icm9hZDp0ZXN0LWJyb2FkLXNlY3JldA=="
+          ],
           "Content-Type": [
             "application/x-www-form-urlencoded"
           ]

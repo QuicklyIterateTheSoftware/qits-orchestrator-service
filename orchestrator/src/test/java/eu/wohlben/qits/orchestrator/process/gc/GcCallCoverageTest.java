@@ -33,7 +33,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The pass answers each call with the provider's recording where a row names one, and with no
  * answer otherwise; every step must have made exactly one call, so a step that would only call
- * on some other answer cannot hide behind this pass.
+ * on some other answer cannot hide behind this pass. A {@link GcContract#PENDING} row's call counts
+ * as a row: it is written down, waiting only on its provider's state, and it names its call itself
+ * because there is no recording to read it from.
  *
  * <p><b>Excluded, by name</b>:
  *
@@ -82,6 +84,9 @@ class GcCallCoverageTest {
       Operation op = GcContract.recorded(row);
       rows.add(row.target() + " " + op.method() + " " + op.examplePath());
     }
+    for (GcContract.Pending pending : GcContract.PENDING) {
+      rows.add(pending.target() + " " + pending.method() + " " + pending.path());
+    }
     assertEquals(rows, made, "the calls a gc pass makes against the rows of GcContract");
   }
 
@@ -111,6 +116,11 @@ class GcCallCoverageTest {
     for (GcContract.Row row : GcContract.ROWS) {
       StepDefinition step = GcContract.step(process, row.stepId());
       assertEquals(step.target(), row.target(), row.stepId() + ": the row names the step's peer");
+    }
+    for (GcContract.Pending pending : GcContract.PENDING) {
+      StepDefinition step = GcContract.step(process, pending.stepId());
+      assertEquals(
+          step.target(), pending.target(), pending.stepId() + ": the pending row names the step's peer");
     }
   }
 
