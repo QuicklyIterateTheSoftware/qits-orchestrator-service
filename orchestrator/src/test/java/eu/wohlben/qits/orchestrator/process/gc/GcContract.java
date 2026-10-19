@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -178,7 +179,24 @@ final class GcContract {
               GcContract::deploymentPinsFromBody,
               "removed[]", "examined", "errors[]", "dryRun", "kept.unpinned",
               "kept.undeclaredPinnedVersion", "kept.pinned", "kept.inFlight", "kept.neverDeclared",
-              "kept.staged"));
+              "kept.staged"),
+          // qits-idp-service. The GC door is called, like every peer, with this service's own
+          // BEARER (PeerClient sends `Authorization: Bearer <PeerTokens' token>`), which that door
+          // alone accepts for a qits:system service client: the state is the one judged by the
+          // caller's bearer, its `authorization` bound as a provider-state generator, and the test
+          // hands the token it carries to PeerTokens (#bearer).
+          new Row(
+              PeerTarget.IDP,
+              GcProcess.IDP_SERVICE_CLIENTS,
+              GoldenInteraction.of(
+                      NIGHTLY,
+                      "a service client nothing claims, calling with its bearer",
+                      "collectServiceClients")
+                  .header("Authorization", "{authorization}")
+                  .consumes(
+                      "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed",
+                      "keptCounts.grace", "keptCounts.caller"),
+              GcContract::claimsFromBody));
 
   /**
    * The client-credentials mint {@code PeerTokens} makes through quarkus-oidc-client's {@code
@@ -223,31 +241,10 @@ final class GcContract {
   }
 
   /**
-   * {@code idp.service-clients}: qits-idp's GC door, called — like every peer — with this service's
-   * own BEARER ({@code PeerClient} sends {@code Authorization: Bearer <PeerTokens' token>}), which
-   * that door alone accepts for a {@code qits:system} service client. qits-idp records {@code
-   * collectServiceClients} only under {@code a service client nothing claims}, whose {@code
-   * authorization} is a Basic pair: a header this service never sends, so binding it would verify a
-   * request the gc process does not make, and the row without it is an honest 401. It waits on the
-   * same answer judged by the caller's bearer; once recorded, the row sends {@code Authorization:
-   * {authorization}} and {@code ContractPeers} hands the state's token to {@code PeerTokens}.
+   * None: every call the gc process makes binds a recorded state. The mechanism stays for the next
+   * row a provider has not recorded yet.
    */
-  static final List<Pending> PENDING =
-      List.of(
-          new Pending(
-              PeerTarget.IDP,
-              GcProcess.IDP_SERVICE_CLIENTS,
-              "a service client nothing claims, calling with its bearer",
-              "collectServiceClients",
-              "POST",
-              "/idp/api/gc/service-clients",
-              List.of(
-                  "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed",
-                  "keptCounts.grace", "keptCounts.caller"),
-              "the answer of 'a service client nothing claims' (params claimedClientId and"
-                  + " unclaimedClientId, the request {dryRun, claims} as recorded there) with"
-                  + " authorization 'Bearer <a token this idp minted for a qits:system service"
-                  + " client>', recorded with Authorization: {authorization}"));
+  static final List<Pending> PENDING = List.of();
 
   private static Row row(
       String target, String stepId, String state, String operationId, Arrange arrange,
@@ -279,6 +276,24 @@ final class GcContract {
 
   static Operation recorded(Row row) {
     return masters(row).operation(row.interaction().state(), row.interaction().operationId());
+  }
+
+  /**
+   * The token {@code PeerTokens} must hand {@code PeerClient} for {@code row}: the {@code Bearer}
+   * the state's {@code authorization} param carries, where the row sends that header; none
+   * otherwise.
+   */
+  static Optional<String> bearer(Row row) {
+    if (!row.interaction().requestHeaders().containsKey("Authorization")) {
+      return Optional.empty();
+    }
+    String authorization =
+        masters(row).params(row.interaction().state()).get("authorization");
+    if (authorization == null || !authorization.startsWith("Bearer ")) {
+      throw new IllegalStateException(
+          row.interaction().description() + ": the state's authorization is no Bearer");
+    }
+    return Optional.of(authorization.substring("Bearer ".length()));
   }
 
   // --- what a row arranges -----------------------------------------------------------------------

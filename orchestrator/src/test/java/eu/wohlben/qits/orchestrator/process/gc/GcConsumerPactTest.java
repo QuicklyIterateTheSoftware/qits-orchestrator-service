@@ -73,7 +73,8 @@ class GcConsumerPactTest {
         .run(
             row.interaction(),
             (url, recorded) -> {
-              StepResult actual = GcContract.run(row, ContractPeers.against(url));
+              StepResult actual =
+                  GcContract.run(row, ContractPeers.against(url, GcContract.bearer(row)));
               assertEquals(RunStatus.SUCCEEDED, actual.status(), String.valueOf(actual.error()));
               assertNotNull(actual.summary(), "the step reads the pact's answer");
             });

@@ -16,8 +16,23 @@ public final class ContractPeers {
 
   /** The real client with every peer at {@code baseUrl}. No token: the mock checks the request. */
   public static PeerClient against(String baseUrl) {
+    return against(baseUrl, Optional.empty());
+  }
+
+  /**
+   * The real client with every peer at {@code baseUrl}, {@link PeerTokens} handing it {@code
+   * bearer} where there is one: the token a provider state's {@code Authorization} carries.
+   */
+  public static PeerClient against(String baseUrl, Optional<String> bearer) {
     PeerClient client = wire(new PeerClient(), target -> baseUrl);
     client.clients = QitsHttpClients.of(OpenTelemetry.noop(), null);
+    client.tokens =
+        new PeerTokens() {
+          @Override
+          public Optional<String> token(String target) {
+            return bearer;
+          }
+        };
     return client;
   }
 
