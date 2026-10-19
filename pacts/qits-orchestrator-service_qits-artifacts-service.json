@@ -274,6 +274,140 @@
         }
       },
       "description": "GcSchedule.onSchedule: sweepGc",
+      "key": "920b7acf",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a registry handed a pin it cannot file"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "cargo",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/sweep"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "aborted": "the run was aborted before anything was deleted: supplied: qits-platform-maintenance dependency pins: IllegalStateException: qits-platform-maintenance returned a pin for an ecosystem this store cannot file: cargo"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.aborted": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "sweepGc"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: sweepGc",
       "key": "37da15b6",
       "pending": false,
       "providerStates": [

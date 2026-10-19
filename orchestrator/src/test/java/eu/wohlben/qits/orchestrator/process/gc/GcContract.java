@@ -138,6 +138,11 @@ final class GcContract {
               "summary.executable"),
           row(PeerTarget.ARTIFACTS, GcProcess.ARTIFACTS_SWEEP, UNPINNED_REGISTRY, "sweepGc",
               GcContract::pinsFromBody, "sweep.blobsUnlinked", "sweep.bytesReclaimed"),
+          // The fail-closed abort: a pin source the sweep could not file. {@code aborted} is the
+          // only field GcSummaries#artifactsSweep reads once it is set, sweep section or not.
+          row(PeerTarget.ARTIFACTS, GcProcess.ARTIFACTS_SWEEP,
+              "a registry handed a pin it cannot file", "sweepGc", GcContract::pinsFromBody,
+              "aborted"),
           // qits-deployments-service
           row(PeerTarget.DEPLOYMENTS, GcProcess.PINS_DEPLOYMENTS,
               "an application serving with a rollback version", "listPins", NOTHING,
@@ -173,23 +178,25 @@ final class GcContract {
               GcContract::deploymentPinsFromBody,
               "removed[]", "examined", "errors[]", "dryRun", "kept.unpinned",
               "kept.undeclaredPinnedVersion", "kept.pinned", "kept.inFlight", "kept.neverDeclared",
-              "kept.staged"),
-          // qits-idp-service
-          row(PeerTarget.IDP, GcProcess.IDP_SERVICE_CLIENTS, "a service client nothing claims",
-              "collectServiceClients", GcContract::claimsFromBody,
-              "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed", "keptCounts.grace",
-              "keptCounts.caller"));
+              "kept.staged"));
 
   /**
    * The client-credentials mint {@code PeerTokens} makes through quarkus-oidc-client's {@code
    * qits} client before a peer call: Basic client auth and {@code
    * grant_type=client_credentials&audience=qits-platform}. Not a gc step, so not in {@link #ROWS};
    * {@code IdpTokenMintPactTest} runs it.
+   *
+   * <p><b>The Basic pair is the state's caller.</b> qits-idp records the mint with the {@code
+   * Authorization} its state names as {@code {authorization}}; the row sends that header as a
+   * provider-state generator, and the test configures the oidc client with the pair the header
+   * encodes, so what quarkus-oidc-client puts on the wire is exactly the credential the provider's
+   * state honours. Without it the idp's honest answer is 401.
    */
   static final String A_PEER_CALLER = "a service client calling its peers";
 
   static final GoldenInteraction TOKEN_MINT =
       GoldenInteraction.of(Trigger.operation("PeerTokens.token"), A_PEER_CALLER, "issueToken")
+          .header("Authorization", "{authorization}")
           .consumes("access_token");
 
   // --- the pending rows ----------------------------------------------------------------------------
@@ -199,31 +206,48 @@ final class GcContract {
    * GoldenMasters#operation} would throw {@link ProviderStateMissing}, raised here instead of from
    * inside a running pact so the row can be reported as skipped rather than erroring the whole
    * suite. Not in {@link #ROWS}: {@link #pact} never embeds it, and {@code GcCallCoverageTest}'s
-   * guard never looks for its call, because nothing here can resolve what to call it against
-   * without the state's frozen example. Once the provider publishes the state, move the row into
-   * {@link #ROWS} with a real {@code consumes} list built the same way every live row's is.
+   * guard cannot resolve its request from a recording, so a pending row names its call itself
+   * ({@code method} and {@code path}, as the step sends it) and the guard counts that instead. Once
+   * the provider publishes the state, move the row into {@link #ROWS} with a real {@code consumes}
+   * list built the same way every live row's is.
+   *
+   * @param needs what the provider's state must carry, beyond the state existing
    */
-  record Pending(String target, String stepId, String state, String operationId, List<String> consumes) {
+  record Pending(
+      String target, String stepId, String state, String operationId, String method, String path,
+      List<String> consumes, String needs) {
     String reason() {
-      return ProviderStateMissing.message(PEERS.get(target).repository(), state, operationId);
+      return ProviderStateMissing.message(PEERS.get(target).repository(), state, operationId)
+          + " — needs: " + needs;
     }
   }
 
   /**
-   * {@code artifacts.sweep}, on the state qits-artifacts calls "a registry handed a pin it cannot
-   * file" (ticket qits-1149): the sweep answers {@code aborted} set when a pin source it was handed
-   * could not be filed into a plan — the same fail-closed abort {@link GcSummaries#artifactsSweep}
-   * now reads regardless of whether {@code sweep} is also present. {@code aborted} is the only field
-   * {@link GcSummaries#artifactsSweep} reads once it is set, so that is the whole {@code consumes}.
+   * {@code idp.service-clients}: qits-idp's GC door, called — like every peer — with this service's
+   * own BEARER ({@code PeerClient} sends {@code Authorization: Bearer <PeerTokens' token>}), which
+   * that door alone accepts for a {@code qits:system} service client. qits-idp records {@code
+   * collectServiceClients} only under {@code a service client nothing claims}, whose {@code
+   * authorization} is a Basic pair: a header this service never sends, so binding it would verify a
+   * request the gc process does not make, and the row without it is an honest 401. It waits on the
+   * same answer judged by the caller's bearer; once recorded, the row sends {@code Authorization:
+   * {authorization}} and {@code ContractPeers} hands the state's token to {@code PeerTokens}.
    */
   static final List<Pending> PENDING =
       List.of(
           new Pending(
-              PeerTarget.ARTIFACTS,
-              GcProcess.ARTIFACTS_SWEEP,
-              "a registry handed a pin it cannot file",
-              "sweepGc",
-              List.of("aborted")));
+              PeerTarget.IDP,
+              GcProcess.IDP_SERVICE_CLIENTS,
+              "a service client nothing claims, calling with its bearer",
+              "collectServiceClients",
+              "POST",
+              "/idp/api/gc/service-clients",
+              List.of(
+                  "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed",
+                  "keptCounts.grace", "keptCounts.caller"),
+              "the answer of 'a service client nothing claims' (params claimedClientId and"
+                  + " unclaimedClientId, the request {dryRun, claims} as recorded there) with"
+                  + " authorization 'Bearer <a token this idp minted for a qits:system service"
+                  + " client>', recorded with Authorization: {authorization}"));
 
   private static Row row(
       String target, String stepId, String state, String operationId, Arrange arrange,
