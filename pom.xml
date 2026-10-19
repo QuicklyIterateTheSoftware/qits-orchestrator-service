@@ -97,7 +97,7 @@
              (provider state, operation) into a pact interaction — orchestrator/src/test/.../
              process/gc/GcContract. One pin per peer GcProcess calls; each moves like every internal
              pin. The pact-jvm version comes with qits-pact-consumer. -->
-        <qits.pact-consumer.version>2026.1019.81701</qits.pact-consumer.version>
+        <qits.pact-consumer.version>2026.1019.82625</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1018.185227</qits.containers-golden-masters.version>
         <qits.artifacts-golden-masters.version>2026.1019.62657</qits.artifacts-golden-masters.version>
         <qits.deployments-golden-masters.version>2026.1010.145913</qits.deployments-golden-masters.version>
