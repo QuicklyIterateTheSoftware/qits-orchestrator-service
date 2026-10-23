@@ -157,9 +157,19 @@ final class GcContract {
           // qits-maintenance-service
           row(PeerTarget.MAINTENANCE, GcProcess.PINS_DEPENDENCIES, "manifests that pin artifacts",
               "listDependencyPins", NOTHING, "pins[]", "repositories[]"),
-          // qits-workspaces-service
-          row(PeerTarget.WORKSPACES, GcProcess.PINS_WORKSPACES, "a configured workspace image",
-              "listLaunchPins", NOTHING, "pins[]"),
+          // qits-workspaces-service. anyLength("pins"): this service reads no field of a pin, only
+          // the array's presence (GcSummaries#workspaceLaunchPins counts it for the step's line, and
+          // the whole answer rides to qits-artifacts verbatim — see pinsFromBody). Pinning the count
+          // would bind this consumer to how many image kinds qits-workspaces happens to launch today
+          // — qits-1532 drops its runner row from this very answer — which is not a contract either
+          // side means to hold.
+          new Row(
+              PeerTarget.WORKSPACES,
+              GcProcess.PINS_WORKSPACES,
+              GoldenInteraction.of(NIGHTLY, "a configured workspace image", "listLaunchPins")
+                  .consumes("pins[]")
+                  .anyLength("pins"),
+              NOTHING),
           row(PeerTarget.WORKSPACES, GcProcess.BRANCHES_SWEEP, "repositories with merged branches",
               "sweepBranches", GcContract::catalogueFromBody,
               "removed[]", "branchesExamined", "repositoriesExamined", "errors[]", "dryRun"),
