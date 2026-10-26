@@ -92,4 +92,24 @@ class AdminAgentAccessTest {
         .then()
         .statusCode(403);
   }
+
+  /** {@code qits:desk-admin} (epic qits-1621): admitted wherever {@code qits:admin-agent} is. */
+  @Test
+  void aDeskAdminStartsAGcRun() {
+    String id =
+        as("qits:desk-admin")
+            .contentType(ContentType.JSON)
+            .body("{\"dryRun\":true}")
+            .post(BASE + "/processes/gc/runs")
+            .then()
+            .statusCode(202)
+            .extract()
+            .path("id");
+    awaitClosed(UUID.fromString(id));
+  }
+
+  @Test
+  void aDeskAdminReadsTheProcesses() {
+    as("qits:desk-admin").get(BASE + "/processes").then().statusCode(200);
+  }
 }
