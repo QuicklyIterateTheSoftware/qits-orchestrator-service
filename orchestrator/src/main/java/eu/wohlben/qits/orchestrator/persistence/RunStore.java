@@ -12,10 +12,13 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 /**
  * The only writer of {@code op_run} and {@code op_step}, and the reader the API uses.
@@ -38,12 +41,27 @@ import java.util.UUID;
 @ApplicationScoped
 public class RunStore implements PanacheRepositoryBase<OpRun, UUID> {
 
+  private static final Logger LOG = Logger.getLogger(RunStore.class);
+
+  /**
+   * How long a RUNNING run may stand before {@link #open} treats it as abandoned.
+   *
+   * <p>A run whose process died (a crash, a full disk, a kill) keeps its RUNNING row forever, and
+   * without this every later run of the kind was refused — the gc stopped for good on 2026-10-27
+   * (qits-1663). Every step's call has its own timeout, so a live run ends far sooner than this.
+   */
+  @ConfigProperty(name = "qits.orchestrator.runs.abandon-after")
+  Duration abandonAfter;
+
   /**
    * Opens a run: the run row, plus one PENDING step row per definition, in one transaction.
    *
    * <p><b>The active-run check is inside that transaction</b> rather than a read before it. Two
    * callers pressing the button at once is the ordinary case — a person and the cron — and a check
    * outside the write is a race with a very expensive prize.
+   *
+   * <p><b>An active run older than {@code abandon-after} does not refuse.</b> Its process is gone,
+   * so the run is closed FAILED as abandoned, its unfinished steps with it, and the new run opens.
    */
   @ActivateRequestContext
   public UUID open(
@@ -54,7 +72,10 @@ public class RunStore implements PanacheRepositoryBase<OpRun, UUID> {
           OpRun active =
               find("kind = ?1 and status = ?2", kind, RunStatus.RUNNING.name()).firstResult();
           if (active != null) {
-            throw new RunAlreadyActiveException(kind, active.id);
+            if (!active.startedAt.isBefore(now.minus(abandonAfter))) {
+              throw new RunAlreadyActiveException(kind, active.id);
+            }
+            abandon(active, now);
           }
           OpRun run = new OpRun();
           run.id = UUID.randomUUID();
@@ -81,6 +102,27 @@ public class RunStore implements PanacheRepositoryBase<OpRun, UUID> {
           getEntityManager().flush();
           return run.id;
         });
+  }
+
+  /**
+   * Closes a run whose process is gone. Its finish time stays null: nobody knows when, or whether,
+   * its last call ended. A step that was RUNNING is FAILED, a PENDING one SKIPPED.
+   */
+  private void abandon(OpRun run, Instant now) {
+    String reason =
+        "abandoned: still RUNNING after " + abandonAfter + "; the process that ran it is gone";
+    for (OpStep step : OpStep.<OpStep>list("runId", run.id)) {
+      if (RunStatus.RUNNING.name().equals(step.status)) {
+        step.status = RunStatus.FAILED.name();
+        step.error = reason;
+      } else if (RunStatus.PENDING.name().equals(step.status)) {
+        step.status = RunStatus.SKIPPED.name();
+        step.error = reason;
+      }
+    }
+    run.status = RunStatus.FAILED.name();
+    run.summary = reason;
+    LOG.warnf("The %s run %s started %s was %s.", run.kind, run.id, run.startedAt, reason);
   }
 
   /** Marks one step RUNNING, so the UI's next poll shows it working. */

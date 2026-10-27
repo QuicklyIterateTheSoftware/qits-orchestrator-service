@@ -216,6 +216,54 @@ class RunExecutorTest {
   }
 
   @Test
+  void aRunWhoseProcessDiedIsAbandonedOnceItIsOlderThanTheLimitAndNoLonger() {
+    // A run opened and never executed is what a crashed process leaves: a RUNNING row nothing will
+    // ever close (qits-1663).
+    ProbeProcess.script = List.of(ProbeProcess.succeeding("first"), ProbeProcess.succeeding("second"));
+    UUID dead =
+        runs.open(
+            ProbeProcess.KIND,
+            RunTrigger.SCHEDULED,
+            false,
+            ProbeProcess.script,
+            Instant.now().minus(Duration.ofHours(4)));
+    runs.stepRunning(dead, "first", Instant.now().minus(Duration.ofHours(4)));
+
+    UUID next = executor.start(ProbeProcess.KIND, RunTrigger.MANUAL, false);
+    assertEquals(RunStatus.SUCCEEDED.name(), awaitClosed(next).status);
+
+    nextPoll();
+    OpRun abandoned = runs.run(dead).orElseThrow();
+    assertEquals(RunStatus.FAILED.name(), abandoned.status);
+    assertTrue(abandoned.summary.startsWith("abandoned"), abandoned.summary);
+    assertNull(abandoned.finishedAt);
+    Map<String, OpStep> steps = stepsOf(dead);
+    assertEquals(RunStatus.FAILED.name(), steps.get("first").status);
+    assertEquals(RunStatus.SKIPPED.name(), steps.get("second").status);
+  }
+
+  @Test
+  void aRunYoungerThanTheAbandonLimitStillRefusesASecond() {
+    ProbeProcess.script = List.of(ProbeProcess.succeeding("only"));
+    UUID young =
+        runs.open(
+            ProbeProcess.KIND,
+            RunTrigger.SCHEDULED,
+            false,
+            ProbeProcess.script,
+            Instant.now().minus(Duration.ofMinutes(30)));
+    try {
+      RunAlreadyActiveException refused =
+          assertThrows(
+              RunAlreadyActiveException.class,
+              () -> executor.start(ProbeProcess.KIND, RunTrigger.MANUAL, false));
+      assertEquals(young, refused.activeRunId());
+    } finally {
+      runs.close(young, RunStatus.FAILED, "closed by the test", Instant.now());
+    }
+  }
+
+  @Test
   void anUnknownKindIsRefusedBeforeAnyRowIsWritten() {
     assertThrows(
         NoSuchProcessException.class,
