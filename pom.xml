@@ -79,7 +79,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1019.123026</qits.eventstream.version>
+        <qits.eventstream.version>2026.1027.101950</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
@@ -87,7 +87,7 @@
              OBSERVED rather than narrated. This version ships NetworkTaps.restAssured, which
              replaced the StoryNetworkFilter this repo had hand-copied. Published by qits-userflows
              into the same platform Maven repository as the three above. -->
-        <qits.userflows.version>2026.1002.72731</qits.userflows.version>
+        <qits.userflows.version>2026.1028.231715</qits.userflows.version>
         <!-- The recording service mocks those ITs boot against (the generic MockService plus
              idp.MockIdp), published by qits-integrations-quarkus beside qits-auth-core,
              qits-arch-rules and qits-db-core. -->
@@ -99,14 +99,14 @@
              pin. The pact-jvm version comes with qits-pact-consumer. -->
         <qits.pact-consumer.version>2026.1019.82625</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1019.103940</qits.containers-golden-masters.version>
-        <qits.artifacts-golden-masters.version>2026.1019.62657</qits.artifacts-golden-masters.version>
+        <qits.artifacts-golden-masters.version>2026.1027.103538</qits.artifacts-golden-masters.version>
         <qits.deployments-golden-masters.version>2026.1010.145913</qits.deployments-golden-masters.version>
         <qits.ci-golden-masters.version>2026.1026.163551</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1023.5649</qits.maintenance-golden-masters.version>
-        <qits.workspaces-golden-masters.version>2026.1024.141209</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1027.63255</qits.projects-golden-masters.version>
+        <qits.workspaces-golden-masters.version>2026.1028.163502</qits.workspaces-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1029.90027</qits.projects-golden-masters.version>
         <qits.configuration-golden-masters.version>2026.1011.84651</qits.configuration-golden-masters.version>
-        <qits.idp-golden-masters.version>2026.1022.183304</qits.idp-golden-masters.version>
+        <qits.idp-golden-masters.version>2026.1027.165632</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
