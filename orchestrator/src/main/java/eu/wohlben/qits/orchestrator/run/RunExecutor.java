@@ -59,6 +59,10 @@ import org.jboss.logging.Logger;
  *
  * <p><b>The run is FAILED if any step FAILED.</b> A SKIPPED step does not fail it: a skip is the
  * consequence of a failure already counted.
+ *
+ * <p><b>A FAILED run is a WARN, naming every step that failed</b> (ticket qits-1733): its id, its
+ * peer, its error and the start of what the peer said. At INFO, twelve gc runs in one week deleted
+ * nothing over one transient 503 and nobody noticed; a SUCCEEDED run stays INFO.
  */
 @ApplicationScoped
 public class RunExecutor {
@@ -126,6 +130,7 @@ public class RunExecutor {
     // skip stop being contagious.
     Map<String, String> failureOrigin = new LinkedHashMap<>();
     List<String> lines = new ArrayList<>();
+    List<String> failures = new ArrayList<>();
     boolean anyFailed = false;
 
     try {
@@ -142,6 +147,7 @@ public class RunExecutor {
         if (result.status() == RunStatus.FAILED) {
           anyFailed = true;
           failureOrigin.put(step.id(), step.id());
+          failures.add(failure(step, result));
         } else if (result.skip() == SkipKind.FAILURE) {
           failureOrigin.put(step.id(), blocker == null ? step.id() : blocker);
         }
@@ -166,7 +172,48 @@ public class RunExecutor {
       // Nothing else can be done here: the account of the run is what could not be written.
       LOG.errorf(e, "The %s run %s finished %s but could not be closed", process.kind(), runId, status);
     }
-    LOG.infof("%s run %s %s: %s", process.kind(), runId, status, summary);
+    if (status == RunStatus.FAILED) {
+      // The steps that failed, not the whole summary: twenty clauses of which nineteen say "ok" or
+      // "skipped" is the line nobody reads. A run that threw before any step failed has no such
+      // step, and its summary — which ends in the exception — is the account instead.
+      LOG.warn(
+          process.kind()
+              + " run "
+              + runId
+              + " FAILED: "
+              + (failures.isEmpty() ? summary : String.join("; ", failures)));
+    } else {
+      LOG.infof("%s run %s %s: %s", process.kind(), runId, status, summary);
+    }
+  }
+
+  /** How much of a failed step's response body the WARN line carries. */
+  static final int FAILURE_BODY_CHARS = 300;
+
+  /**
+   * One FAILED step, as the WARN line names it: {@code <id> (<peer>): <error>[: <body start>]}.
+   *
+   * <p>The body because the error is this service's sentence and the body is the peer's: a 503 from
+   * qits-maintenance says in its own words whether it is healing or broken, and that is what decides
+   * whether a person needs to act.
+   */
+  static String failure(StepDefinition step, StepResult result) {
+    StringBuilder line =
+        new StringBuilder(step.id())
+            .append(" (")
+            .append(step.target())
+            .append("): ")
+            .append(result.error() == null ? result.status().name() : result.error());
+    String body = result.answer() == null ? null : result.answer().body();
+    if (body != null && !body.isBlank()) {
+      String flat = body.strip().replaceAll("\\s+", " ");
+      line.append(": ")
+          .append(
+              flat.length() <= FAILURE_BODY_CHARS
+                  ? flat
+                  : flat.substring(0, FAILURE_BODY_CHARS) + "…");
+    }
+    return line.toString();
   }
 
   /**

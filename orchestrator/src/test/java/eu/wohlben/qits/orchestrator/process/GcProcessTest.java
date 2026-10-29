@@ -896,6 +896,85 @@ class GcProcessTest {
     assertNoDeleterWasCalled();
   }
 
+  private static final String NOT_COMPLETE =
+      "{\"message\":\"the pin set is not complete yet; the next read answers once it is\"}";
+
+  /** The shipped attempt count: the suite's config moves only the delay, to zero. */
+  private static final int ATTEMPTS = 6;
+
+  @Test
+  void aPinReadThatAnswers503IsAskedAgainAndTheRunDeletesOnceItHeals() {
+    // qits-1733: maintenance answers 503 for the seconds its pin set heals. Read once, that window
+    // was a FAILED run; asked again, it is a pin set like any other and the deleters run.
+    peers.answerInSequence(
+        DEPENDENCY_PINS,
+        FakePeers.Scripted.status(503, NOT_COMPLETE),
+        FakePeers.Scripted.ok("{\"repositories\":[],\"pins\":[]}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.SUCCEEDED.name(), run.status, run.summary);
+    assertEquals(2, peers.callsTo(DEPENDENCY_PINS), "the 503 was asked again, once");
+    Map<String, OpStep> steps = stepsOf(id);
+    OpStep pin = steps.get("pins.dependencies");
+    assertEquals(RunStatus.SUCCEEDED.name(), pin.status);
+    // The row is the last read's.
+    assertEquals(200, pin.httpStatus);
+    assertTrue(pin.summary.endsWith("(after 2 attempts)"), pin.summary);
+    for (String path : DELETERS) {
+      assertEquals(1, peers.callsTo(path), path + " runs once the pin read healed");
+    }
+  }
+
+  @Test
+  void aPinReadThatAnswers503EveryTimeFailsAfterEveryAttemptAndNothingDeletes() {
+    peers.answer(DEPENDENCY_PINS, FakePeers.Scripted.status(503, NOT_COMPLETE));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    assertEquals(ATTEMPTS, peers.callsTo(DEPENDENCY_PINS), "asked exactly the configured times");
+    Map<String, OpStep> steps = stepsOf(id);
+    OpStep pin = steps.get("pins.dependencies");
+    assertEquals(RunStatus.FAILED.name(), pin.status);
+    assertEquals(503, pin.httpStatus);
+    assertTrue(pin.error.contains("/maintenance/api/pins answered 503"), pin.error);
+    assertTrue(pin.error.endsWith("(" + ATTEMPTS + " attempts, 0s apart)"), pin.error);
+    assertTrue(pin.responseBody.contains("not complete yet"), pin.responseBody);
+    assertEquals("skipped: pins.dependencies failed", steps.get("artifacts.plan").error);
+    assertEquals("skipped: pins.dependencies failed", steps.get("tags.sweep").error);
+    assertNoDeleterWasCalled();
+  }
+
+  @Test
+  void aPinReadThatAnswersAnythingButA503FailsOnTheFirstRead() {
+    // A 500 is an answer about the peer, not about a moment: no second ask, fail-closed at once.
+    peers.answer(DEPENDENCY_PINS, FakePeers.Scripted.status(500, "{\"message\":\"boom\"}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    assertEquals(1, peers.callsTo(DEPENDENCY_PINS), "a 500 is not asked again");
+    OpStep pin = stepsOf(id).get("pins.dependencies");
+    assertEquals(RunStatus.FAILED.name(), pin.status);
+    assertTrue(pin.error.endsWith("answered 500"), pin.error);
+    assertNoDeleterWasCalled();
+  }
+
+  @Test
+  void anUnreachablePinPeerIsNotAskedAgainEither() {
+    peers.answer(DEPLOYMENT_PINS, FakePeers.Scripted.unreachable("qits-deployments: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(1, peers.callsTo(DEPLOYMENT_PINS), "a transport error is not asked again");
+    assertNoDeleterWasCalled();
+  }
+
   @Test
   void aPeerThatRefusesTheCallIsAFailedStepNamingTheStatus() {
     peers.answer(PLAN, FakePeers.Scripted.status(401, "{\"message\":\"unauthorized\"}"));

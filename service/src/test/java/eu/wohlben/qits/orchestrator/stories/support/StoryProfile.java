@@ -124,6 +124,12 @@ public class StoryProfile extends PackagedSurfaceIT.PackagedUnderTarget {
     overrides.put("quarkus.oidc-client.qits.auth-server-url", peers + "/idp");
     overrides.put("quarkus.oidc-client.qits.credentials.secret", CLIENT_SECRET);
     overrides.put("quarkus.oidc-client.qits.grant-options.client.audience", "qits-platform");
+
+    // A pin read that answers 503 is asked again, the shipped six times thirty seconds apart
+    // (qits-1733). PeerFailureIT's broken qits-ci answers 503 on every ask, so the shipped delay
+    // would hold that story for two and a half minutes; the asks still happen, only without the wait.
+    // The edge count is unchanged: six identical GETs are one arrow on the diagram.
+    overrides.put("qits.orchestrator.gc.pins.retry.delay", "PT0S");
     return overrides;
   }
 }

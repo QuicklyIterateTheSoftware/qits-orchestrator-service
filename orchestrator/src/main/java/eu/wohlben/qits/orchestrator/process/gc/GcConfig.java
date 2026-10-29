@@ -50,6 +50,12 @@ public class GcConfig {
   @ConfigProperty(name = "qits.orchestrator.gc.tags-sweep-call-timeout")
   Duration tagsSweepCallTimeout;
 
+  @ConfigProperty(name = "qits.orchestrator.gc.pins.retry.attempts")
+  int pinsRetryAttempts;
+
+  @ConfigProperty(name = "qits.orchestrator.gc.pins.retry.delay")
+  Duration pinsRetryDelay;
+
   /** Whether the CLOCK may start a run. A manual run ignores this — a person is the trigger. */
   public boolean enabled() {
     return enabled;
@@ -133,5 +139,20 @@ public class GcConfig {
    */
   public Duration tagsSweepCallTimeout() {
     return tagsSweepCallTimeout;
+  }
+
+  /**
+   * How many times a {@code pins.*} read is made in all — the first ask included — while its peer
+   * answers 503 (ticket qits-1733). Only a 503 is asked again: qits-maintenance answers one for the
+   * seconds its pin set is being healed, and a single read made every deploy-triggered run in a
+   * week delete nothing. Anything else fails at once. Never less than one.
+   */
+  public int pinsRetryAttempts() {
+    return Math.max(1, pinsRetryAttempts);
+  }
+
+  /** How long a {@code pins.*} read waits after a 503 before it asks again. */
+  public Duration pinsRetryDelay() {
+    return pinsRetryDelay;
   }
 }

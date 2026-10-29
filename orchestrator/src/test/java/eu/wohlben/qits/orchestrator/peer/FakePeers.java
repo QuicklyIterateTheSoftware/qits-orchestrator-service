@@ -58,6 +58,9 @@ public class FakePeers extends PeerClient {
 
   private final Map<String, Scripted> script = new ConcurrentHashMap<>();
 
+  /** Answers handed out once each, in order, before {@link #script}'s standing answer applies. */
+  private final Map<String, java.util.Queue<Scripted>> sequences = new ConcurrentHashMap<>();
+
   /** Every call made, in order, so a test can assert what a body carried. */
   public final List<PeerCall> calls = new CopyOnWriteArrayList<>();
 
@@ -66,13 +69,32 @@ public class FakePeers extends PeerClient {
 
   public void reset() {
     script.clear();
+    sequences.clear();
     calls.clear();
     gate = null;
   }
 
   /** Scripts one answer. The key is the path, which is unique across the four peers here. */
   public void answer(String path, Scripted scripted) {
+    sequences.remove(path);
     script.put(path, scripted);
+  }
+
+  /**
+   * Scripts a sequence: each answer once, in order, then the last one for every call after it — a
+   * peer that answers 503 and then heals is {@code answerInSequence(path, status(503, …), ok(…))}.
+   */
+  public void answerInSequence(String path, Scripted first, Scripted... then) {
+    java.util.Queue<Scripted> queue = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    queue.add(first);
+    queue.addAll(List.of(then));
+    script.put(path, then.length == 0 ? first : then[then.length - 1]);
+    sequences.put(path, queue);
+  }
+
+  /** How many calls were made to one path. */
+  public int callsTo(String path) {
+    return bodiesFor(path).size();
   }
 
   /** Blocks every call until {@link #release()}, so a test can catch a run mid-flight. */
@@ -129,7 +151,9 @@ public class FakePeers extends PeerClient {
         Thread.currentThread().interrupt();
       }
     }
-    Scripted scripted = script.get(path);
+    java.util.Queue<Scripted> sequence = sequences.get(path);
+    Scripted next = sequence == null ? null : sequence.poll();
+    Scripted scripted = next != null ? next : script.get(path);
     if (scripted == null) {
       return new PeerExchange(
           call, new PeerAnswer(null, null, null, "no scripted answer for " + path));

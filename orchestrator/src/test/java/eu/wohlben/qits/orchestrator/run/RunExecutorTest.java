@@ -302,4 +302,86 @@ class RunExecutorTest {
     assertEquals("scheduled", run.trigger);
     assertTrue(run.dryRun);
   }
+
+  /**
+   * qits-1733: a FAILED run is a WARN naming each failed step and its peer. At INFO, twelve gc runs
+   * in a week deleted nothing and nobody saw it. Captured at the executor's own logger, the way any
+   * handler under the JBoss log manager would see it.
+   */
+  @Test
+  void aFailedRunLogsAWarnNamingEachFailedStepAndItsPeer() throws InterruptedException {
+    java.util.logging.Logger logger = java.util.logging.Logger.getLogger(RunExecutor.class.getName());
+    java.util.List<java.util.logging.LogRecord> records =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
+    java.util.logging.Handler capture =
+        new java.util.logging.Handler() {
+          @Override
+          public void publish(java.util.logging.LogRecord record) {
+            records.add(record);
+          }
+
+          @Override
+          public void flush() {}
+
+          @Override
+          public void close() {}
+        };
+    logger.addHandler(capture);
+    try {
+      ProbeProcess.script =
+          List.of(
+              ProbeProcess.succeeding("root"),
+              ProbeProcess.failing("broken", "root"),
+              ProbeProcess.succeeding("child", "broken"));
+      UUID id = executor.start(ProbeProcess.KIND, RunTrigger.MANUAL, false);
+      awaitClosed(id);
+
+      // The line is written after the row is closed, so it may land a moment after the poll.
+      String expected = "probe run " + id + " FAILED: broken (containers): broken broke";
+      Instant deadline = Instant.now().plus(Duration.ofSeconds(10));
+      java.util.logging.LogRecord line = null;
+      while (line == null && Instant.now().isBefore(deadline)) {
+        line =
+            records.stream()
+                .filter(record -> record.getMessage().contains(id.toString()))
+                .findFirst()
+                .orElse(null);
+        if (line == null) {
+          Thread.sleep(20);
+        }
+      }
+      assertNotNull(line, "the failed run was logged");
+      assertEquals(java.util.logging.Level.WARNING.intValue(), line.getLevel().intValue());
+      assertEquals(expected, line.getMessage());
+    } finally {
+      logger.removeHandler(capture);
+    }
+  }
+
+  @Test
+  void aFailedStepsWarnClauseCarriesItsPeerItsErrorAndTheStartOfTheBody() {
+    var step = ProbeProcess.failing("pins.dependencies");
+    String body = "{\"message\":\"" + "x".repeat(400) + "\"}";
+    var result =
+        new eu.wohlben.qits.orchestrator.process.StepResult(
+            RunStatus.FAILED,
+            null,
+            new eu.wohlben.qits.orchestrator.peer.PeerAnswer(503, body, null, null),
+            null,
+            "http://dev-qits-maintenance:8080/maintenance/api/pins answered 503 (6 attempts, 30s apart)",
+            null);
+
+    String clause = RunExecutor.failure(step, result);
+
+    String prefix =
+        "pins.dependencies (containers): http://dev-qits-maintenance:8080/maintenance/api/pins"
+            + " answered 503 (6 attempts, 30s apart): ";
+    assertTrue(clause.startsWith(prefix), clause);
+    assertEquals(body.substring(0, RunExecutor.FAILURE_BODY_CHARS) + "…", clause.substring(prefix.length()));
+    assertEquals(
+        "pins.ci (containers): unreachable",
+        RunExecutor.failure(
+            ProbeProcess.failing("pins.ci"),
+            new StepResultBuilder().failed("unreachable")));
+  }
 }

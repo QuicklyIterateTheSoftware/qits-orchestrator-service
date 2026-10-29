@@ -90,6 +90,66 @@ class GcCallCoverageTest {
     assertEquals(rows, made, "the calls a gc pass makes against the rows of GcContract");
   }
 
+  /**
+   * The one exception to "one call per step" (qits-1733): a pin read whose peer answers 503 is asked
+   * again — the same call, so it adds no row — with the configured wait between asks, and nothing
+   * but a 503 earns a second ask.
+   */
+  @Test
+  void aPinReadIsAskedAgainOnlyOnA503AndWaitsTheConfiguredDelayBetweenAsks() {
+    String path = "/maintenance/api/pins";
+    GcConfig config = GcContract.shippedConfig();
+    assertEquals(6, config.pinsRetryAttempts(), "the shipped attempt count");
+    assertEquals(java.time.Duration.ofSeconds(30), config.pinsRetryDelay(), "the shipped delay");
+    GcProcess process = GcContract.process(config);
+    List<java.time.Duration> waits = new ArrayList<>();
+    process.sleeper = waits::add;
+    StepDefinition step = GcContract.step(process, GcProcess.PINS_DEPENDENCIES);
+
+    FakePeers peers = ContractPeers.fake();
+    peers.answer(path, FakePeers.Scripted.status(503, "{\"message\":\"not complete yet\"}"));
+    StepResult result = step.body().run(new RunContext(UUID.randomUUID(), false, peers));
+    assertEquals(6, peers.callsTo(path));
+    assertEquals(java.util.Collections.nCopies(5, java.time.Duration.ofSeconds(30)), waits);
+    assertEquals(eu.wohlben.qits.orchestrator.run.RunStatus.FAILED, result.status());
+    assertTrue(
+        result.error().endsWith("/maintenance/api/pins answered 503 (6 attempts, 30s apart)"),
+        result.error());
+
+    peers.reset();
+    waits.clear();
+    peers.answer(path, FakePeers.Scripted.status(502, "{}"));
+    result = step.body().run(new RunContext(UUID.randomUUID(), false, peers));
+    assertEquals(1, peers.callsTo(path), "a 502 is not asked again");
+    assertEquals(List.of(), waits);
+    assertTrue(result.error().endsWith("answered 502"), result.error());
+  }
+
+  /** An interrupt stops the asking: the flag survives and the last read is the verdict. */
+  @Test
+  void anInterruptedWaitStopsAskingAndKeepsTheFlag() {
+    String path = "/maintenance/api/pins";
+    GcProcess process = GcContract.process(GcContract.shippedConfig());
+    process.sleeper =
+        duration -> {
+          throw new InterruptedException("shutting down");
+        };
+    FakePeers peers = ContractPeers.fake();
+    peers.answer(path, FakePeers.Scripted.status(503, "{}"));
+    try {
+      StepResult result =
+          GcContract.step(process, GcProcess.PINS_DEPENDENCIES)
+              .body()
+              .run(new RunContext(UUID.randomUUID(), false, peers));
+      assertTrue(Thread.currentThread().isInterrupted(), "the interrupt flag is restored");
+      assertEquals(1, peers.callsTo(path));
+      assertEquals(eu.wohlben.qits.orchestrator.run.RunStatus.FAILED, result.status());
+      assertTrue(result.error().endsWith("answered 503"), result.error());
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
   @Test
   void everyRowIsAStepAndEveryPeerIsCalled() {
     GcProcess process = GcContract.process(GcContract.shippedConfig());

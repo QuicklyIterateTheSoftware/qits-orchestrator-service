@@ -4,14 +4,18 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import eu.wohlben.qits.orchestrator.peer.PeerAnswer;
 import eu.wohlben.qits.orchestrator.peer.PeerTarget;
 import eu.wohlben.qits.orchestrator.process.RunContext;
 import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
+import eu.wohlben.qits.orchestrator.run.RunStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.time.Duration;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * The gc process: the platform's one deletion run, across every store that grows.
@@ -58,6 +62,14 @@ import java.util.List;
  * whole — cut off, or not JSON ({@link StepResult#ofKeepSet}). Before ticket qits-1175 a cut-off
  * answer SUCCEEDED as an empty pin set, and only qits-artifacts' own empty-source guard stopped a
  * plan that condemned everything maintenance pins.
+ *
+ * <p><b>A 503 is asked again before it counts</b> (ticket qits-1733, {@link #keepSet}). Each pin
+ * read is one GET, and a peer that answers 503 is asked again, up to {@code
+ * qits.orchestrator.gc.pins.retry.attempts} reads in all, {@code ...pins.retry.delay} apart.
+ * qits-maintenance answers 503 for the seconds its pin set is incomplete and heals it in the
+ * background; read once, that window was a FAILED run that deleted nothing, twelve times in one
+ * week. Only the 503 is re-asked: another status, an unreachable peer and an unreadable 2xx fail at
+ * once, and the last 503 fails the step — so fail-closed is exactly what it was, only later.
  *
  * <h2>The steps</h2>
  *
@@ -208,6 +220,20 @@ public class GcProcess implements TechnicalProcess {
 
   @Inject GcConfig config;
 
+  /**
+   * How a pin read waits between two asks. A seam rather than a {@code Thread.sleep} inline, so a
+   * suite that drives the shipped thirty-second delay never actually waits it out.
+   */
+  @FunctionalInterface
+  interface Sleeper {
+    void sleep(Duration duration) throws InterruptedException;
+
+    Sleeper THREAD = duration -> Thread.sleep(duration.toMillis());
+  }
+
+  /** The real wait in production; a test outside CDI swaps in its own. */
+  Sleeper sleeper = Sleeper.THREAD;
+
   @Override
   public String kind() {
     return KIND;
@@ -254,8 +280,10 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.DEPLOYMENTS,
             List.of(),
             context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.DEPLOYMENTS, "/deployments/api/pins"),
+                keepSet(
+                    context,
+                    PeerTarget.DEPLOYMENTS,
+                    "/deployments/api/pins",
                     answer -> GcSummaries.deploymentPins(answer.json()))),
         new StepDefinition(
             PINS_CI,
@@ -263,8 +291,10 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.CI,
             List.of(),
             context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.CI, "/ci/api/daemon"),
+                keepSet(
+                    context,
+                    PeerTarget.CI,
+                    "/ci/api/daemon",
                     answer -> GcSummaries.ciPin(answer.json()))),
         new StepDefinition(
             PINS_DEPENDENCIES,
@@ -272,8 +302,10 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.MAINTENANCE,
             List.of(),
             context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.MAINTENANCE, "/maintenance/api/pins"),
+                keepSet(
+                    context,
+                    PeerTarget.MAINTENANCE,
+                    "/maintenance/api/pins",
                     answer -> GcSummaries.dependencyPins(answer.json()))),
         new StepDefinition(
             PINS_WORKSPACES,
@@ -281,8 +313,10 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.WORKSPACES,
             List.of(),
             context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.WORKSPACES, "/workspaces/api/pins"),
+                keepSet(
+                    context,
+                    PeerTarget.WORKSPACES,
+                    "/workspaces/api/pins",
                     answer -> GcSummaries.workspaceLaunchPins(answer.json()))),
         new StepDefinition(
             PINS_PROJECTS,
@@ -290,8 +324,10 @@ public class GcProcess implements TechnicalProcess {
             PeerTarget.PROJECTS,
             List.of(),
             context ->
-                StepResult.ofKeepSet(
-                    context.peers().get(PeerTarget.PROJECTS, "/projects/api/pins"),
+                keepSet(
+                    context,
+                    PeerTarget.PROJECTS,
+                    "/projects/api/pins",
                     answer -> GcSummaries.projectLaunchPins(answer.json()))),
         new StepDefinition(
             ARTIFACTS_PLAN,
@@ -456,6 +492,76 @@ public class GcProcess implements TechnicalProcess {
                 StepResult.of(
                     context.peers().get(PeerTarget.CONTAINERS, USAGE_PATH),
                     answer -> GcSummaries.usage(answer.json()))));
+  }
+
+  /**
+   * One {@code pins.*} read: a GET judged by {@link StepResult#ofKeepSet}, asked again while the
+   * peer answers 503 (ticket qits-1733).
+   *
+   * <p><b>503 alone, because 503 alone says "ask again".</b> qits-maintenance answers it while its
+   * pin set is not complete, and its body says the next read answers once it is; the heal lands in
+   * seconds. Any other non-2xx, a peer that cannot be reached, and a 2xx that cannot be read whole
+   * are answers about the peer rather than about a moment, so they fail on the first read as they
+   * always have. Up to {@link GcConfig#pinsRetryAttempts()} reads in all, {@link
+   * GcConfig#pinsRetryDelay()} apart; the last 503 FAILS the step, and the edges do the rest.
+   *
+   * <p><b>The row is the LAST read's</b> — its call, its answer, its verdict — with the count beside
+   * it when there was more than one: {@code (after 2 attempts)} on the summary, {@code (6 attempts,
+   * 30s apart)} after the error. The error keeps its own text as the prefix, so {@code answered 503}
+   * still reads the way every reader of a failed pin row already matches it.
+   *
+   * <p>An interrupt stops the asking: the flag is restored and the last read is the verdict.
+   */
+  private StepResult keepSet(
+      RunContext context, String target, String path, Function<PeerAnswer, String> summary) {
+    int attempts = config.pinsRetryAttempts();
+    Duration delay = config.pinsRetryDelay();
+    StepResult result = StepResult.ofKeepSet(context.peers().get(target, path), summary);
+    int made = 1;
+    while (made < attempts && answered503(result)) {
+      try {
+        sleeper.sleep(delay);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        break;
+      }
+      result = StepResult.ofKeepSet(context.peers().get(target, path), summary);
+      made++;
+    }
+    if (made == 1) {
+      return result;
+    }
+    if (result.status() == RunStatus.SUCCEEDED) {
+      return new StepResult(
+          result.status(),
+          result.call(),
+          result.answer(),
+          result.summary() + " (after " + made + " attempts)",
+          result.error(),
+          result.skip());
+    }
+    return new StepResult(
+        result.status(),
+        result.call(),
+        result.answer(),
+        result.summary(),
+        result.error() + " (" + made + " attempts, " + spelled(delay) + " apart)",
+        result.skip());
+  }
+
+  /** A FAILED read whose peer answered, and answered 503 — the one answer worth asking again. */
+  private static boolean answered503(StepResult result) {
+    PeerAnswer answer = result.answer();
+    return result.status() == RunStatus.FAILED
+        && answer != null
+        && answer.error() == null
+        && Integer.valueOf(503).equals(answer.httpStatus());
+  }
+
+  /** {@code 30s}, or {@code 250ms} for a delay that is not whole seconds. */
+  static String spelled(Duration delay) {
+    long millis = delay.toMillis();
+    return millis % 1000 == 0 ? (millis / 1000) + "s" : millis + "ms";
   }
 
   /**

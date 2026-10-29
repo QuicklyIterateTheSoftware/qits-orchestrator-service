@@ -370,10 +370,15 @@ final class GcContract {
 
   // --- running a row -----------------------------------------------------------------------------
 
-  /** The gc process as shipped: {@code META-INF/microprofile-config.properties}, outside CDI. */
+  /**
+   * The gc process as shipped: {@code META-INF/microprofile-config.properties}, outside CDI. The
+   * one thing not as shipped is the wait between two asks of a 503 pin read (qits-1733): it is a
+   * no-op, so a row that answers 503 never holds the suite for the shipped thirty seconds.
+   */
   static GcProcess process(GcConfig config) {
     GcProcess process = new GcProcess();
     process.config = config;
+    process.sleeper = duration -> {};
     return process;
   }
 
@@ -398,6 +403,9 @@ final class GcContract {
         Long.parseLong(shipped.getProperty(prefix + "builder-cache-keep-bytes"));
     config.tagsSweepCallTimeout =
         Duration.parse(shipped.getProperty(prefix + "tags-sweep-call-timeout"));
+    config.pinsRetryAttempts =
+        Integer.parseInt(shipped.getProperty(prefix + "pins.retry.attempts"));
+    config.pinsRetryDelay = Duration.parse(shipped.getProperty(prefix + "pins.retry.delay"));
     return config;
   }
 
