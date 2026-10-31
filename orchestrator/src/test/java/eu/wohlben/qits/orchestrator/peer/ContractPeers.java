@@ -65,7 +65,6 @@ public final class ContractPeers {
     client.projectsUrl = url.apply(PeerTarget.PROJECTS);
     client.workspacesUrl = url.apply(PeerTarget.WORKSPACES);
     client.maintenanceUrl = url.apply(PeerTarget.MAINTENANCE);
-    client.configurationUrl = url.apply(PeerTarget.CONFIGURATION);
     client.idpUrl = url.apply(PeerTarget.IDP);
     client.callTimeout = Duration.ofSeconds(10);
     client.tokens =

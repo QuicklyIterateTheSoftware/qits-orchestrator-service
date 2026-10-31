@@ -56,8 +56,8 @@ import java.util.function.Function;
  *
  * <p><b>Fail-closed, and the edges are what makes it so.</b> Every step that deletes depends on all
  * FIVE pin reads ({@link #PIN_SOURCES}), so one failed pin read skips every deleter in every store —
- * the registry, host images, volumes, build cache, branches, configuration entries, tags and
- * service clients alike. Only the reads and the opening measurements still run. A pin read FAILS
+ * the registry, host images, volumes, build cache, branches, tags and service clients alike.
+ * Only the reads and the opening measurements still run. A pin read FAILS
  * not only when its peer cannot be reached or refuses, but also when its answer cannot be read
  * whole — cut off, or not JSON ({@link StepResult#ofKeepSet}). Before ticket qits-1175 a cut-off
  * answer SUCCEEDED as an empty pin set, and only qits-artifacts' own empty-source guard stopped a
@@ -88,7 +88,6 @@ import java.util.function.Function;
  * containers.build-cache containers     POST /containers/api/gc/build-cache  ← usage.before, pins.*
  * repos.catalogue        projects       GET  /projects/api/repositories
  * branches.sweep         workspaces     POST /workspaces/api/gc/branches     ← repos.catalogue, pins.*
- * configuration.entries  configuration  POST /configuration/api/gc/entries   ← pins.*
  * tags.sweep             projects       POST /projects/api/gc/tags {pins}    ← pins.*, repos.catalogue
  * claims.idp-clients     deployments    GET  /deployments/api/claims/idp-clients
  * idp.service-clients    idp            POST /idp/api/gc/service-clients     ← claims.idp-clients, pins.*
@@ -123,16 +122,11 @@ import java.util.function.Function;
  * off everything that frees disk, so a broken container prune still leaves the registry's own
  * before-and-after in the run.
  *
- * <p><b>{@code configuration.entries} deletes rows, not bytes, which is why it hangs off neither
- * {@code usage.after} plane.</b> qits-configuration deletes entries of RETIRED keys — a key some
- * declaration of an application used to state and no surviving declaration states any longer. The
- * rule for what counts as retired lives with qits-configuration, the owner of the store; this
- * process hands it the one pin that answers the question its rule needs — {@code pins.deployments},
- * the serving and rollback shas — verbatim, the same discipline as {@link #pinsBody}. The other four
- * pin sources answer a different tense (what a launch would pull, what a manifest still references)
- * that has no bearing on whether a configuration key is still declared — but it still depends on
- * all five, because a run with any pin source unread deletes nothing (qits-1175). It runs on a dry run too — qits-configuration judges identically and deletes nothing, so the
- * nightly dry figures are real figures, the same reasoning as {@code branches.sweep}.
+ * <p><b>There is no {@code configuration.entries} step any more</b> (epic qits-765). It asked
+ * qits-configuration to delete entries of retired keys; that service is retired and nothing reads
+ * its store, so the step went with it. Runs recorded before the removal still carry a
+ * {@code configuration.entries} row, and they read back like any other: a stored step row is
+ * free text against the definition, never looked up in it.
  *
  * <p><b>{@code tags.sweep} decommissions git tags, on the platform's git host and on its backup
  * twin alike.</b> qits-projects owns the repository catalogue and is the one peer that can reach
@@ -144,7 +138,7 @@ import java.util.function.Function;
  * for the branch sweep. Fail-closed applies to all six edges alike: an unread pin, or an unread
  * catalogue, skips the sweep before its body runs. It is not a {@code usage.after} dependency either
  * — a decommissioned tag frees no docker disk — and it runs on a dry run too, the same reasoning as
- * {@code branches.sweep} and {@code configuration.entries}.
+ * {@code branches.sweep}.
  *
  * <p><b>{@code idp.service-clients} deletes service clients, and its keep-set is a CLAIM rather
  * than a pin</b> (ticket qits-878). Every application that declares an {@code idp:client} resource
@@ -181,7 +175,6 @@ public class GcProcess implements TechnicalProcess {
   static final String CONTAINERS_BUILD_CACHE = "containers.build-cache";
   static final String REPOS_CATALOGUE = "repos.catalogue";
   static final String BRANCHES_SWEEP = "branches.sweep";
-  static final String CONFIGURATION_ENTRIES = "configuration.entries";
   static final String TAGS_SWEEP = "tags.sweep";
   static final String CLAIMS_IDP_CLIENTS = "claims.idp-clients";
   static final String IDP_SERVICE_CLIENTS = "idp.service-clients";
@@ -424,20 +417,6 @@ public class GcProcess implements TechnicalProcess {
                             "/workspaces/api/gc/branches",
                             branchesBody(context)),
                     answer -> GcSummaries.branchesSweep(answer.json()))),
-        new StepDefinition(
-            CONFIGURATION_ENTRIES,
-            "Retired configuration entries",
-            PeerTarget.CONFIGURATION,
-            PIN_SOURCES,
-            context ->
-                StepResult.of(
-                    context
-                        .peers()
-                        .post(
-                            PeerTarget.CONFIGURATION,
-                            "/configuration/api/gc/entries",
-                            entriesBody(context)),
-                    answer -> GcSummaries.configurationEntries(answer.json()))),
         new StepDefinition(
             TAGS_SWEEP,
             "Decommissioned git tags",
@@ -689,24 +668,6 @@ public class GcProcess implements TechnicalProcess {
   }
 
   /**
-   * The configuration entry-gc request:
-   *
-   * <pre>{@code {"dryRun":…, "deployments": <the deployments pin answer, verbatim>}}</pre>
-   *
-   * <p><b>Verbatim, the same discipline as {@link #pinsBody}.</b> qits-configuration owns the
-   * retirement rule, so the deployments pin travels as the document qits-platform-deployments sent
-   * rather than a keep-set re-shaped here. A pin answer this run could not read is simply absent —
-   * but this step never runs in that case, because {@code pins.deployments} is its declared
-   * dependency.
-   */
-  private String entriesBody(RunContext context) {
-    ObjectNode body = JSON.createObjectNode();
-    body.put("dryRun", context.dryRun());
-    context.answer(PINS_DEPLOYMENTS).ifPresent(node -> body.set("deployments", node));
-    return body.toString();
-  }
-
-  /**
    * The tag-decommission request:
    *
    * <pre>{@code {"dryRun":…, "pins": {"deployments":…, "ciDaemon":…, "dependencies":…,
@@ -715,7 +676,7 @@ public class GcProcess implements TechnicalProcess {
    * <p><b>The same {@code pins} object {@link #pinsBody} sends, built by {@link #pinsObject} so the
    * five lines live once.</b> A git tag can be the thing any one of the five protects — a sha a
    * deployment still serves, a version a manifest references, an image a launch would pull — so
-   * qits-projects is handed every source rather than one, unlike {@link #entriesBody}'s single pin.
+   * qits-projects is handed every source rather than one.
    * A member this run could not read is simply absent, the same fail-closed discipline as the
    * artifacts plan — but this step never runs with one missing, because all five pin reads are its
    * declared dependencies.
@@ -732,7 +693,7 @@ public class GcProcess implements TechnicalProcess {
    *
    * <pre>{@code {"dryRun":…, "claims": <the claims read's "claims" array, verbatim>}}</pre>
    *
-   * <p><b>Verbatim, the same discipline as {@link #entriesBody}</b>: the claim rows are
+   * <p><b>Verbatim, the same discipline as {@link #pinsBody}</b>: the claim rows are
    * qits-deployments' contract and qits-idp reads them as such, so they are re-embedded rather than
    * re-shaped into a list of ids here.
    *

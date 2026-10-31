@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * <b>The nine services a gc run drives — the ninth, qits-idp, also the one it borrows a credential
+ * <b>The eight services a gc run drives — the eighth, qits-idp, also the one it borrows a credential
  * from</b> — one
  * in-JVM stub impersonating all of them, plus the <b>outgoing</b> tap that draws what the launched
  * process asked each one.
@@ -28,7 +28,7 @@ import java.util.Optional;
  *
  * <p>A technical process only SENDS REQUESTS. Everything it does happens on the far side of a
  * socket from this JVM, so a story that wanted to show what a run actually did has exactly one
- * source of evidence: the record each far side keeps of being asked. There are nine of them, and
+ * source of evidence: the record each far side keeps of being asked. There are eight of them, and
  * every one is a decision written down in {@code qits-orchestrator-plan.md}:
  *
  * <pre>
@@ -46,7 +46,6 @@ import java.util.Optional;
  * containers.build-cache       qits-containers               POST /containers/api/gc/build-cache
  * repos.catalogue              qits-projects                 GET  /projects/api/repositories
  * branches.sweep               qits-workspaces               POST /workspaces/api/gc/branches
- * configuration.entries        qits-configuration            POST /configuration/api/gc/entries
  * tags.sweep                   qits-projects                 POST /projects/api/gc/tags
  * claims.idp-clients           qits-platform-deployments     GET  /deployments/api/claims/idp-clients
  * idp.service-clients          qits-idp                      POST /idp/api/gc/service-clients
@@ -75,7 +74,7 @@ import java.util.Optional;
  * <p>The exception is {@link #refuse}, and it exists because <b>no story-controlled value reaches a
  * peer path here</b>. In a repository whose peers are addressed per subject ({@code
  * …/applications/story-misconfigured/resolved}) a refusal can be keyed on the name in the url, and
- * being unreadable is then what that name MEANS. A gc run's nineteen paths are fixed by {@code
+ * being unreadable is then what that name MEANS. A gc run's paths are fixed by {@code
  * GcProcess.steps()} and identical in every run, so "this peer is down tonight" cannot be spelled
  * as a path. It is spelled as a file instead — written by the one story about a broken peer, in a
  * {@code try}/{@code finally} that always clears it, wiped again when the stub starts, and read
@@ -100,8 +99,8 @@ import java.util.Optional;
  * <p>quarkus-oidc-client caches the token it acquires and re-mints only when it expires, so the
  * {@code POST /idp/token} arrow belongs to the <b>first run of the whole catalogue</b> and to no
  * other. That is a real property of this service rather than an artefact here: {@code PeerTokens}
- * holds one {@code TokensHelper} for the one named client precisely so that a twenty-step run is
- * not twenty token requests.
+ * holds one {@code TokensHelper} for the one named client precisely so that a nineteen-step run is
+ * not nineteen token requests.
  *
  * <p>What this stand-in chooses is only that the horizon is the whole run: the token says {@code
  * expires_in: 3600}, so the mint lands in exactly one story and every other story's edge count is
@@ -144,9 +143,6 @@ public final class StoryPeers {
   /** The dependency pins: what every repository's main still references in its manifests. */
   public static final String MAINTENANCE = "qits-platform-maintenance";
 
-  /** The retired-entry sweep. */
-  public static final String CONFIGURATION = "qits-configuration";
-
   /**
    * The identity provider — the outbound token endpoint, and the service-client sweep's peer. Same
    * node {@link MockIdp} is.
@@ -156,7 +152,7 @@ public final class StoryPeers {
   /** Every peer, for the negative claims a refusal story makes about all of them at once. */
   public static final List<String> ALL =
       List.of(
-          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, CONFIGURATION, IDP);
+          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, IDP);
 
   // --- the paths, exactly as GcProcess spells them --------------------------------------------
 
@@ -174,7 +170,6 @@ public final class StoryPeers {
   public static final String SWEEP_PATH = "/artifacts/api/gc/sweep";
   public static final String REPOSITORIES_PATH = "/projects/api/repositories";
   public static final String BRANCHES_PATH = "/workspaces/api/gc/branches";
-  public static final String CONFIGURATION_ENTRIES_PATH = "/configuration/api/gc/entries";
   public static final String TAGS_SWEEP_PATH = "/projects/api/gc/tags";
   public static final String TOKEN_PATH = "/idp/token";
   public static final String CLAIMS_PATH = "/deployments/api/claims/idp-clients";
@@ -393,18 +388,6 @@ public final class StoryPeers {
               + "\"removed\":[{\"repositoryName\":\""
               + CATALOGUE_REPOSITORY
               + "\",\"branch\":\"old-work\"}],\"errors\":[]}";
-      case CONFIGURATION_ENTRIES_PATH ->
-          "{\"dryRun\":"
-              + dryRun
-              + ",\"examined\":1,"
-              + "\"removed\":[{\"application\":\""
-              + PINNED_APPLICATION
-              + "\",\"env\":\"dev\",\"key\":\"env.OLD_FLAG\",\"reason\":\"retired\","
-              + "\"lastDeclaredBy\":\""
-              + CI_DAEMON_VERSION
-              + "\"}],"
-              + "\"kept\":{\"unpinned\":0,\"undeclaredPinnedVersion\":0,\"pinned\":1,"
-              + "\"inFlight\":0,\"neverDeclared\":0,\"staged\":0},\"errors\":[]}";
       case TAGS_SWEEP_PATH ->
           "{\"dryRun\":"
               + dryRun
@@ -574,7 +557,7 @@ public final class StoryPeers {
             Labels.scrub(fields[0] + " " + fields[1] + " -> " + fields[2])));
   }
 
-  /** Which peer a path belongs to — the whole of how one stub draws as nine. */
+  /** Which peer a path belongs to — the whole of how one stub draws as eight. */
   private static String peer(String path) {
     if (path.startsWith("/containers/")) {
       return CONTAINERS;
@@ -596,9 +579,6 @@ public final class StoryPeers {
     }
     if (path.startsWith("/maintenance/")) {
       return MAINTENANCE;
-    }
-    if (path.startsWith("/configuration/")) {
-      return CONFIGURATION;
     }
     if (path.startsWith("/idp/")) {
       return IDP;

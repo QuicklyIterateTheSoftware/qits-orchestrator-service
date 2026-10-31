@@ -15,10 +15,9 @@ import org.junit.jupiter.api.Test;
  * {@code PeerTokens} with the one named client, {@code qits}, faked directly — no CDI, the same
  * plain-construction shape {@code PeerClientTest} uses for {@code PeerClient}. What this proves is
  * the behaviour change the epic qits-540 dossier's 'Plan (as of 2026-09-13)', C4, makes: ONE client
- * now answers {@link PeerTokens#token(String)} for every one of the nine peers, {@code maintenance}
- * and {@code configuration} included — the two that {@code ComposeTemplate.java} never turned a
- * bearer on for before this commit, because a live deployment only ever enabled six of the eight
- * old clients.
+ * now answers {@link PeerTokens#token(String)} for every one of the eight peers, {@code
+ * maintenance} included — which {@code ComposeTemplate.java} never turned a bearer on for before
+ * that change, because a live deployment only ever enabled six of the old clients.
  *
  * <p>The config keys themselves — the shipped defaults, and the deployer's resource triple — are
  * {@link QitsOidcClientShippedConfigTest} and {@link QitsOidcClientResourceEnvTest}; this class is
@@ -34,7 +33,7 @@ class PeerTokensTest {
   }
 
   @Test
-  void everyPeerReadsTheSameBearerFromTheOneClientIncludingMaintenanceAndConfiguration() {
+  void everyPeerReadsTheSameBearerFromTheOneClientIncludingMaintenance() {
     System.setProperty(ENABLED_KEY, "true");
     PeerTokens tokens = new PeerTokens();
     tokens.qits = fakeClient("a-minted-token");
@@ -46,11 +45,10 @@ class PeerTokensTest {
       PeerTarget.DEPLOYMENTS,
       PeerTarget.PROJECTS,
       PeerTarget.WORKSPACES,
-      // The two that a live deployment never turned a bearer on for before this commit
-      // (ComposeTemplate.java only ever enabled six of the eight old clients).
+      // The one a live deployment never turned a bearer on for before C4
+      // (ComposeTemplate.java only ever enabled six of the old clients).
       PeerTarget.MAINTENANCE,
-      PeerTarget.CONFIGURATION,
-      // The ninth (qits-878): the service-client sweep rides the same bearer — qits-idp mints
+      // The eighth (qits-878): the service-client sweep rides the same bearer — qits-idp mints
       // qits-platform on every token, so no second client is needed to reach the idp itself.
       PeerTarget.IDP
     };
@@ -67,7 +65,6 @@ class PeerTokensTest {
     tokens.qits = fakeClient("never asked for");
 
     assertTrue(tokens.token(PeerTarget.MAINTENANCE).isEmpty());
-    assertTrue(tokens.token(PeerTarget.CONFIGURATION).isEmpty());
     assertTrue(tokens.token(PeerTarget.IDP).isEmpty());
   }
 

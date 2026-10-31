@@ -238,55 +238,13 @@ final class GcSummaries {
   }
 
   /**
-   * {@code removed 8 of 142 entries (dry run); kept: unpinned 12, undeclaredPinnedVersion 3, pinned
-   * 10, inFlight 2, neverDeclared 85, staged 4; 1 error} — qits-configuration's own retired-entry
-   * sweep.
-   *
-   * <p><b>Retired, not merely unpinned.</b> An entry here is a key some declaration of the
-   * application used to state and that no surviving declaration states any longer — neither a
-   * serving nor a rollback version, the {@code pins.deployments} answer this step hands over. The
-   * rule for what counts as retired lives with qits-configuration; this reads only what it reports.
-   */
-  static String configurationEntries(JsonNode body) {
-    if (body == null) {
-      return "no entry-gc report in the answer";
-    }
-    int removed = body.path("removed").size();
-    int examined = body.path("examined").asInt();
-    int errors = body.path("errors").size();
-    JsonNode kept = body.path("kept");
-    return "removed "
-        + removed
-        + " of "
-        + examined
-        + " entries"
-        + (body.path("dryRun").asBoolean() ? " (dry run)" : "")
-        + "; kept: unpinned "
-        + kept.path("unpinned").asInt()
-        + ", undeclaredPinnedVersion "
-        + kept.path("undeclaredPinnedVersion").asInt()
-        + ", pinned "
-        + kept.path("pinned").asInt()
-        + ", inFlight "
-        + kept.path("inFlight").asInt()
-        + ", neverDeclared "
-        + kept.path("neverDeclared").asInt()
-        + ", staged "
-        + kept.path("staged").asInt()
-        + "; "
-        + errors
-        + (errors == 1 ? " error" : " errors");
-  }
-
-  /**
    * {@code 12 tags decommissioned across 8 repositories (5 host, 7 twin); kept: newest 40,
    * pinnedVersion 6, gitlink 3, inFlight 1, young 2; 1 error} — qits-projects' own tag-decommission
    * sweep, across both the platform's git host and its backup twin.
    *
    * <p><b>{@code host}/{@code twin} count deleted TAGS, not repositories.</b> One decommissioned
    * tag can carry either flag, both, or (transiently, on a half-finished sweep an error recorded)
-   * neither; the two numbers here are how many of the entries in {@code deleted} said so, read the
-   * same way {@link #configurationEntries} reads its own {@code kept} breakdown.
+   * neither; the two numbers here are how many of the entries in {@code deleted} said so.
    */
   static String tagsSweep(JsonNode body) {
     if (body == null) {

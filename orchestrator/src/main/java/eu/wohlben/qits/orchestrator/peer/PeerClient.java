@@ -89,9 +89,6 @@ public class PeerClient {
   @ConfigProperty(name = "qits.orchestrator.targets.maintenance-url")
   String maintenanceUrl;
 
-  @ConfigProperty(name = "qits.orchestrator.targets.configuration-url")
-  String configurationUrl;
-
   @ConfigProperty(name = "qits.orchestrator.targets.idp-url")
   String idpUrl;
 
@@ -195,7 +192,6 @@ public class PeerClient {
       case PeerTarget.PROJECTS -> projectsUrl;
       case PeerTarget.WORKSPACES -> workspacesUrl;
       case PeerTarget.MAINTENANCE -> maintenanceUrl;
-      case PeerTarget.CONFIGURATION -> configurationUrl;
       case PeerTarget.IDP -> idpUrl;
       default -> throw new IllegalArgumentException("no such peer: " + target);
     };

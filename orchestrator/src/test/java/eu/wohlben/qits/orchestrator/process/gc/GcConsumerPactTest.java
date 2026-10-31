@@ -48,7 +48,6 @@ class GcConsumerPactTest {
           PeerTarget.MAINTENANCE,
           PeerTarget.WORKSPACES,
           PeerTarget.PROJECTS,
-          PeerTarget.CONFIGURATION,
           PeerTarget.IDP);
 
   @TestFactory

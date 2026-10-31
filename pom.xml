@@ -23,7 +23,7 @@
          two meanings on the platform now; the containers repo keeps its prose, this service is
          "the orchestrator" in navigation and in conversation.
 
-         DELIBERATELY ITS OWN GAV, the qits-configuration case: the child directories are
+         DELIBERATELY ITS OWN GAV: the child directories are
          `orchestrator` and `service`, and `eu.wohlben:service` would collide in the shared ~/.m2
          every workspace container mounts. So the coordinates are namespaced
          (`eu.wohlben.qits:qits-platform-orchestrator-*`) while the directories stay short. The
@@ -77,7 +77,7 @@
              A RELEASED VERSION, never a range and never a snapshot: a release pipeline's step
              container resolves this from the platform registry, so a coordinate that repository
              does not serve is a build that only works on a machine with the right ~/.m2. This is
-             the pin the siblings carry (qits-projects, qits-workspaces, qits-configuration,
+             the pin the siblings carry (qits-projects, qits-workspaces and
              qits-maintenance all sit on it). -->
         <qits.eventstream.version>2026.1027.101950</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
@@ -105,7 +105,6 @@
         <qits.maintenance-golden-masters.version>2026.1030.182634</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1029.225748</qits.workspaces-golden-masters.version>
         <qits.projects-golden-masters.version>2026.1030.185452</qits.projects-golden-masters.version>
-        <qits.configuration-golden-masters.version>2026.1011.84651</qits.configuration-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1027.165632</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
@@ -120,7 +119,7 @@
              the platform's. 2.8.2 is built against Quarkus 3.27.3 LTS — older than the 3.34.6
              above, which is the direction that works, since an extension compiled against an older
              core runs on a newer one. Bump it only past a platform bump. Same pin as
-             qits-configuration and every other SPA-serving service. -->
+             every other SPA-serving service. -->
         <quinoa.version>2.9.2</quinoa.version>
 
         <!-- Embedded PostgreSQL for the suites. This service's store IS postgres, so every test that
@@ -297,11 +296,6 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>qits-projects-golden-masters</artifactId>
                 <version>${qits.projects-golden-masters.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>qits-configuration-golden-masters</artifactId>
-                <version>${qits.configuration-golden-masters.version}</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>

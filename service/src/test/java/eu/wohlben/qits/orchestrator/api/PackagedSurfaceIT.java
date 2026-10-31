@@ -130,10 +130,9 @@ public class PackagedSurfaceIT {
       // projects and workspaces are the merged-branch sweep's two peers (2026-08-25).
       overrides.put("qits.orchestrator.targets.projects-url", dead);
       overrides.put("qits.orchestrator.targets.workspaces-url", dead);
-      // maintenance and configuration are the two pin sources the registry keeps against
-      // (2026-09-04): what repositories' mains reference, and what a launch would pull.
+      // maintenance is the pin source the registry keeps against for what repositories' mains
+      // reference (2026-09-04).
       overrides.put("qits.orchestrator.targets.maintenance-url", dead);
-      overrides.put("qits.orchestrator.targets.configuration-url", dead);
       // idp is the service-client sweep's peer (qits-878).
       overrides.put("qits.orchestrator.targets.idp-url", dead);
       // The clock must not start a run beside the one this IT starts itself.
@@ -204,12 +203,12 @@ public class PackagedSurfaceIT {
         .get("/orchestrator/api/runs/" + id)
         .then()
         .statusCode(200)
-        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — twenty since
-        // pins.images was removed (qits-1176), the same count ProcessApiTest and the userflow IT
-        // pin.
+        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — nineteen since
+        // configuration.entries was removed (epic qits-765), the same count ProcessApiTest and the
+        // userflow IT pin.
         // Step 0 is the first peer read and fails against a dead port; step 7 (the registry plan)
         // depends on all five pin reads and is skipped fail-closed when they do.
-        .body("steps.size()", Matchers.equalTo(20))
+        .body("steps.size()", Matchers.equalTo(19))
         .body("steps[0].status", Matchers.equalTo("FAILED"))
         .body("steps[0].error", Matchers.containsString("could not be called"))
         .body("steps[7].status", Matchers.equalTo("SKIPPED"))
@@ -219,7 +218,7 @@ public class PackagedSurfaceIT {
     // out of the postgres this JVM handed the process through ${QITS_RESOURCE_DB_URL}. That is the
     // whole claim: the shipped expression resolved, and Flyway's migration survived as a classpath
     // resource — exactly the shape a native image drops.
-    assertTrue(stepRows(id) == 20, "the packaged process must have written its steps");
+    assertTrue(stepRows(id) == 19, "the packaged process must have written its steps");
   }
 
   @Test

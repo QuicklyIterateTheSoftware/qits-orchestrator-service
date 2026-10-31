@@ -2,7 +2,7 @@ archetype: java-service
 artifacts:
   - { type: docker, name: qits/qits-orchestrator, sbom: .sbom/sbom.json }
 # THE PACTS (ticket qits-1149, epic qits-546): orchestrator/src/test/.../process/gc/GcContract
-# binds every call the gc process makes to its nine peers to that peer's golden masters, and
+# binds every call the gc process makes to its eight peers to that peer's golden masters, and
 # GcConsumerPactTest commits pacts/qits-orchestrator-service_<provider>.json. The platform packages
 # each provider's file as eu.wohlben.qits:qits-orchestrator-service-pacts-<provider>, published
 # only when that file changed. No golden masters of its own: nothing calls this service's API but
@@ -22,7 +22,6 @@ contracts:
     qits-maintenance-service: { packages: [maven] }
     qits-workspaces-service: { packages: [maven] }
     qits-projects-service: { packages: [maven] }
-    qits-configuration-service: { packages: [maven] }
     qits-idp-service: { packages: [maven] }
     qits-events-service: { packages: [maven] }
 # THE SITE IS SPELLED, AND IT NAMES THE COMPONENT. `true` derives it from the REPOSITORY name,

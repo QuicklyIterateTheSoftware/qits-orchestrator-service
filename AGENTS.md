@@ -126,14 +126,14 @@ process whose steps had to catch would put half its outcomes on a path nobody re
 that matters belongs to the call: an anonymous call to a guarded peer comes back 401 and the step
 records the url and the status, which is more useful than a mint failure one layer earlier.
 
-**One named client, `qits`, for all nine peers** (epic qits-540 dossier, 'Plan (as of
+**One named client, `qits`, for all eight peers** (epic qits-540 dossier, 'Plan (as of
 2026-09-13)', C4). A token is cut for the PLATFORM and not for one receiver: qits-idp puts
 `qits-platform` on every token it mints and every peer accepts it, so one client and one audience
-serve all nine calls and the roles decide what this service may do at each. Its id, secret and idp
+serve all eight peers and the roles decide what this service may do at each. Its id, secret and idp
 address come from the deployer's `idp:client` resource alone (`QITS_RESOURCE_IDP_*`), defaulting to
 `dev-qits-idp` / `dev-qits-orchestrator`; no configuration entry names any of the three, and the old
 `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. The client is turned on wherever the deployer
-runs it, off under `%dev`/`%test`, so qits-platform-maintenance and qits-configuration are reached
+runs it, off under `%dev`/`%test`, so qits-maintenance and qits-idp are reached
 with a bearer like the other six.
 
 **Every other client block is injected by nothing, and each is deliberate.** The unnamed default

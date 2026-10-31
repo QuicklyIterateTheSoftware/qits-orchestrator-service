@@ -103,7 +103,7 @@ public class PeerFailureIT {
       qits-ci is being redeployed at three in the morning, so the read that says which daemon binary
       must survive the night answers 503. Every step that deletes is skipped before its body runs —
       the registry plan and sweep, host images, orphan volumes, the build cache, merged branches,
-      retired configuration entries, decommissioned tags and unclaimed service clients — and the run
+      decommissioned tags and unclaimed service clients — and the run
       is FAILED, because a peer that could not be read is a failure and not a footnote.
 
       The reads still happen. The disk is still measured and so is the registry store, the five pin
@@ -191,13 +191,12 @@ public class PeerFailureIT {
             StoryRuns.stepPath("containers.build-cache") + ".error",
             equalTo("skipped: pins.ci failed"))
         .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SKIPPED"))
-        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SKIPPED"))
         .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SKIPPED"));
     story
         .note(
             "the reads still ran — five pins, the catalogue, the claims and both opening"
                 + " measurements — and every other deleter was skipped too: host images, volumes,"
-                + " build cache, branches, configuration entries and service clients")
+                + " build cache, branches and service clients")
         .as("every-deleter-skipped");
 
     operator()
@@ -286,7 +285,6 @@ public class PeerFailureIT {
         .statusCode(200)
         .body(StoryRuns.stepPath("artifacts.sweep") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("tags.sweep") + ".status", equalTo("SUCCEEDED"))
-        .body(StoryRuns.stepPath("configuration.entries") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("usage.after") + ".status", equalTo("SUCCEEDED"))
         .body(StoryRuns.stepPath("artifacts.usage.after") + ".status", equalTo("SUCCEEDED"));
     story
@@ -364,9 +362,9 @@ public class PeerFailureIT {
     // THE CLAIM. Not one request reached qits-idp — no sweep, and no token either: the credential
     // was minted by the first run of the catalogue and is cached for the hour.
     ReportAssertions.assertNoEdgesTo(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, StoryPeers.IDP);
-    // Two in, seventeen out: the sixteen calls that need no claim, the claims read as its 503 —
+    // Two in, sixteen out: the fifteen calls that need no claim, the claims read as its 503 —
     // and no service-client sweep.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 19);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 18);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         CLAIMS_UNREAD_SLUG,

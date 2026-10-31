@@ -38,7 +38,6 @@ so what comes after it still runs.
 | `containers.build-cache` | containers | `POST /containers/api/gc/build-cache` | usage.before |
 | `repos.catalogue` | projects | `GET /projects/api/repositories` | — |
 | `branches.sweep` | workspaces | `POST /workspaces/api/gc/branches {dryRun, repositories, keepPrefixes}` | repos.catalogue |
-| `configuration.entries` | configuration | `POST /configuration/api/gc/entries {dryRun, deployments}` | pins.deployments |
 | `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects, repos.catalogue |
 | `claims.idp-clients` | deployments | `GET /deployments/api/claims/idp-clients` | — |
 | `idp.service-clients` | idp | `POST /idp/api/gc/service-clients {dryRun, claims}` — FAILED, no request, when the read answered no claims | claims.idp-clients |
@@ -83,14 +82,11 @@ reported a platform that was not growing while the registry did: the 2026-09-04 
 50 GB nobody's receipt showed. The after-step hangs off `artifacts.sweep` alone, so a container
 prune that failed still leaves the registry's own before-and-after in the run.
 
-**`configuration.entries` deletes rows, not bytes.** qits-configuration deletes entries of RETIRED
-keys — a key some declaration of an application used to state and that no surviving declaration
-states any longer, neither a serving nor a rollback version. The rule for what counts as retired
-lives with qits-configuration, the owner of the store; this process hands it `pins.deployments`
-verbatim, the one pin its rule needs, and that is the step's only edge — the other four pin sources
-answer a different tense that has no bearing on whether a configuration key is still declared. It
-frees no disk, so it hangs off neither `usage.after` plane, and it runs on a dry run too, the same
-reasoning as `branches.sweep`.
+**There is no `configuration.entries` step any more** (epic qits-765). It asked qits-configuration
+to delete entries of retired keys; that service is retired and nothing reads its store, so the step
+and the `configuration` peer went with it. Runs recorded before the removal still list a
+`configuration.entries` row: a stored step row carries its own id, name, target and edges, so an old
+run reads back unchanged.
 
 **`idp.service-clients` deletes service clients nothing claims** (qits-878). qits-deployments
 provisions a qits-idp client for every application declaring an `idp:client` resource, and is the
@@ -225,7 +221,6 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.targets.projects-url` | `http://qits-projects:8080` | where the repository catalogue is |
 | `qits.orchestrator.targets.workspaces-url` | `http://qits-workspaces:8080` | where branch semantics live |
 | `qits.orchestrator.targets.maintenance-url` | `http://qits-platform-maintenance:8080` | where the dependency pins are |
-| `qits.orchestrator.targets.configuration-url` | `http://qits-configuration:8080` | where the retired-entry sweep is |
 | `qits.orchestrator.targets.idp-url` | `http://${QITS_ENVIRONMENT:dev}-qits-idp:8080` | where the service-client store is |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
@@ -249,10 +244,9 @@ left a 13.7 GB bootstrap builder untouched every night — it was smaller than t
 shared keep-storage never reached it. qits-containers falls back to `keepStorageBytes` when
 `builderKeepStorageBytes` is absent.
 
-**Four tier services by configured url.** qits-artifacts, qits-containers, qits-ci and
-qits-configuration are per environment (`dev-qits-artifacts`, `dev-qits-configuration`) while this
-service is platform tier, so a live platform injects the qualified names. Known debt, the same one
-qits-configuration carries.
+**Three tier services by configured url.** qits-artifacts, qits-containers and qits-ci are per
+environment (`dev-qits-artifacts`) while this service is platform tier, so a live platform injects
+the qualified names. Known debt.
 
 **Outbound credentials** are ONE named oidc client, `qits` (epic qits-540 dossier, 'Plan (as of
 2026-09-13)', C4). Its id, secret and idp address come from the deployer and nowhere else:
@@ -262,7 +256,7 @@ this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_UR
 dev estate's `dev-qits-idp` alias and `dev-qits-orchestrator`). No configuration entry names any of
 the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
 PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
-every peer accepts it — so one client and one audience serve all nine calls, and what this service
+every peer accepts it — so one client and one audience serve all eight peers, and what this service
 may do at a peer is decided by its roles.
 
 One switch, `quarkus.oidc-client.qits.client-enabled`: shipped **true**, because every deployment
@@ -297,7 +291,7 @@ builds the client. `./mvnw test` needs neither — Quinoa is off in test mode.
 
 Integration tests are skipped by default. `-DskipITs=false` runs them against the fast-jar —
 `PackagedSurfaceIT`, and the five **user-story** classes that drive a whole gc run against an in-JVM
-stand-in for all nine peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
+stand-in for all eight peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
 builds the GraalVM binary (`.sdkmanrc` names `25.0.2-graalce`) and runs it against that.
 
 The stories reach nothing outside the JVM they run in, so they need no docker and no credentials

@@ -9,14 +9,18 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import eu.wohlben.qits.orchestrator.entity.OpRun;
+import eu.wohlben.qits.orchestrator.entity.OpStep;
 import eu.wohlben.qits.orchestrator.peer.FakePeers;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -99,12 +103,6 @@ class ProcessApiTest {
             "{\"dryRun\":false,\"repositoriesExamined\":1,\"branchesExamined\":4,"
                 + "\"removed\":[{\"repositoryId\":\"r-1\",\"repositoryName\":\"qits-ci\","
                 + "\"branch\":\"old-work\"}],\"errors\":[]}"));
-    peers.answer(
-        "/configuration/api/gc/entries",
-        FakePeers.Scripted.ok(
-            "{\"dryRun\":false,\"examined\":1,\"removed\":[],"
-                + "\"kept\":{\"unpinned\":0,\"undeclaredPinnedVersion\":0,\"pinned\":1,"
-                + "\"inFlight\":0,\"neverDeclared\":0,\"staged\":0},\"errors\":[]}"));
     peers.answer(
         "/projects/api/gc/tags",
         FakePeers.Scripted.ok(
@@ -191,7 +189,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(20))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(19))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -227,9 +225,8 @@ class ProcessApiTest {
                 "pins.dependencies",
                 "pins.workspaces",
                 "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[14].id", equalTo("configuration.entries"))
-        .body("find { it.kind == 'gc' }.steps[14].target", equalTo("configuration"))
-        // Every deleter waits on every pin read (qits-1175), not only on the one it embeds.
+        .body("find { it.kind == 'gc' }.steps[14].id", equalTo("tags.sweep"))
+        .body("find { it.kind == 'gc' }.steps[14].target", equalTo("projects"))
         .body(
             "find { it.kind == 'gc' }.steps[14].dependsOn",
             contains(
@@ -237,27 +234,17 @@ class ProcessApiTest {
                 "pins.ci",
                 "pins.dependencies",
                 "pins.workspaces",
-                "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("tags.sweep"))
-        .body("find { it.kind == 'gc' }.steps[15].target", equalTo("projects"))
-        .body(
-            "find { it.kind == 'gc' }.steps[15].dependsOn",
-            contains(
-                "pins.deployments",
-                "pins.ci",
-                "pins.dependencies",
-                "pins.workspaces",
                 "pins.projects",
                 "repos.catalogue"))
-        // The service-client sweep (qits-878): claims read from the deployer, the ninth peer asked to
+        // The service-client sweep (qits-878): claims read from the deployer, the eighth peer asked to
         // delete what nothing claims — the claims read first, then every pin read (qits-1175).
-        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("claims.idp-clients"))
-        .body("find { it.kind == 'gc' }.steps[16].target", equalTo("deployments"))
-        .body("find { it.kind == 'gc' }.steps[16].dependsOn", equalTo(java.util.List.of()))
-        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("idp.service-clients"))
-        .body("find { it.kind == 'gc' }.steps[17].target", equalTo("idp"))
+        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("claims.idp-clients"))
+        .body("find { it.kind == 'gc' }.steps[15].target", equalTo("deployments"))
+        .body("find { it.kind == 'gc' }.steps[15].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("idp.service-clients"))
+        .body("find { it.kind == 'gc' }.steps[16].target", equalTo("idp"))
         .body(
-            "find { it.kind == 'gc' }.steps[17].dependsOn",
+            "find { it.kind == 'gc' }.steps[16].dependsOn",
             contains(
                 "claims.idp-clients",
                 "pins.deployments",
@@ -265,8 +252,8 @@ class ProcessApiTest {
                 "pins.dependencies",
                 "pins.workspaces",
                 "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[18].id", equalTo("artifacts.usage.after"))
-        .body("find { it.kind == 'gc' }.steps[18].dependsOn", contains("artifacts.sweep"));
+        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("artifacts.usage.after"))
+        .body("find { it.kind == 'gc' }.steps[17].dependsOn", contains("artifacts.sweep"));
   }
 
   @Test
@@ -302,7 +289,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(20))
+        .body("steps.size()", equalTo(19))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -341,39 +328,32 @@ class ProcessApiTest {
         .body("steps[13].request.body", containsString("environment/"))
         .body("steps[13].request.body", containsString("release/"))
         .body("steps[13].summary", containsString("removed 1 of 4 branches"))
-        // configuration.entries is not withheld either — qits-configuration has a real dry mode,
-        // the same reasoning as the branch sweep.
-        .body("steps[14].id", equalTo("configuration.entries"))
+        // tags.sweep is not withheld either — qits-projects judges identically on a dry run — and
+        // it carries the same {"pins": {...}} object the plan does, not just one source.
+        .body("steps[14].id", equalTo("tags.sweep"))
         .body("steps[14].status", equalTo("SUCCEEDED"))
         .body("steps[14].request.method", equalTo("POST"))
         .body("steps[14].request.body", containsString("\"dryRun\":true"))
         .body("steps[14].request.body", containsString("\"applicationName\":\"qits-ci\""))
-        // tags.sweep is not withheld either — qits-projects judges identically on a dry run — and
-        // it carries the same {"pins": {...}} object the plan does, not just one source.
-        .body("steps[15].id", equalTo("tags.sweep"))
-        .body("steps[15].status", equalTo("SUCCEEDED"))
-        .body("steps[15].request.method", equalTo("POST"))
-        .body("steps[15].request.body", containsString("\"dryRun\":true"))
-        .body("steps[15].request.body", containsString("\"applicationName\":\"qits-ci\""))
-        .body("steps[15].summary", containsString("tags decommissioned"))
+        .body("steps[14].summary", containsString("tags decommissioned"))
         // idp.service-clients is not withheld either — qits-idp honours dryRun itself — and it
         // carries the deployer's claims array as it arrived.
-        .body("steps[16].id", equalTo("claims.idp-clients"))
+        .body("steps[15].id", equalTo("claims.idp-clients"))
+        .body("steps[15].status", equalTo("SUCCEEDED"))
+        .body("steps[16].id", equalTo("idp.service-clients"))
         .body("steps[16].status", equalTo("SUCCEEDED"))
-        .body("steps[17].id", equalTo("idp.service-clients"))
-        .body("steps[17].status", equalTo("SUCCEEDED"))
-        .body("steps[17].request.method", equalTo("POST"))
+        .body("steps[16].request.method", equalTo("POST"))
         .body(
-            "steps[17].request.url",
+            "steps[16].request.url",
             equalTo("http://dev-qits-idp:8080/idp/api/gc/service-clients"))
-        .body("steps[17].request.body", containsString("\"dryRun\":true"))
-        .body("steps[17].request.body", containsString("\"clientId\":\"dev-qits-ci\""))
+        .body("steps[16].request.body", containsString("\"dryRun\":true"))
+        .body("steps[16].request.body", containsString("\"clientId\":\"dev-qits-ci\""))
         // The registry's own measurement, taken twice like the host's — the plane a `docker system
         // df` receipt cannot see.
-        .body("steps[18].id", equalTo("artifacts.usage.after"))
-        .body("steps[18].status", equalTo("SUCCEEDED"))
+        .body("steps[17].id", equalTo("artifacts.usage.after"))
+        .body("steps[17].status", equalTo("SUCCEEDED"))
         .body(
-            "steps[18].request.url",
+            "steps[17].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
   }
 
@@ -419,5 +399,57 @@ class ProcessApiTest {
         .statusCode(404)
         .body("message", containsString("no run"));
     given().when().get(BASE + "/runs/not-a-uuid").then().statusCode(404);
+  }
+
+  @Test
+  void aRunRecordedBeforeTheConfigurationEntrySweepWasRemovedStillReadsBack() {
+    // Epic qits-765 removed the configuration.entries step and the `configuration` peer. A run row
+    // written before that carries both, and it must still read back whole: a stored step row holds
+    // its own id, name, target and edges and is never looked up in the current definition.
+    UUID runId = UUID.randomUUID();
+    Instant at = Instant.parse("2026-10-01T03:00:00Z");
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              OpRun run = new OpRun();
+              run.id = runId;
+              run.kind = GcProcess.KIND;
+              run.trigger = "SCHEDULED";
+              run.dryRun = false;
+              run.status = "SUCCEEDED";
+              run.startedAt = at;
+              run.finishedAt = at.plusSeconds(60);
+              run.summary = "configuration.entries ok";
+              run.persist();
+              OpStep step = new OpStep();
+              step.id = UUID.randomUUID();
+              step.runId = runId;
+              step.seq = 14;
+              step.stepId = "configuration.entries";
+              step.name = "Retired configuration entries";
+              step.target = "configuration";
+              step.dependsOn =
+                  "pins.deployments,pins.ci,pins.dependencies,pins.workspaces,pins.projects";
+              step.status = "SUCCEEDED";
+              step.startedAt = at;
+              step.finishedAt = at.plusSeconds(1);
+              step.httpStatus = 200;
+              step.requestMethod = "POST";
+              step.requestUrl = "http://dev-qits-configuration:8080/configuration/api/gc/entries";
+              step.summary = "removed 0 of 0 entries";
+              step.persist();
+            });
+
+    given()
+        .when()
+        .get(BASE + "/runs/" + runId)
+        .then()
+        .statusCode(200)
+        .body("steps.size()", equalTo(1))
+        .body("steps[0].id", equalTo("configuration.entries"))
+        .body("steps[0].target", equalTo("configuration"))
+        .body("steps[0].dependsOn.size()", equalTo(5))
+        .body("steps[0].status", equalTo("SUCCEEDED"))
+        .body("steps[0].summary", equalTo("removed 0 of 0 entries"));
   }
 }

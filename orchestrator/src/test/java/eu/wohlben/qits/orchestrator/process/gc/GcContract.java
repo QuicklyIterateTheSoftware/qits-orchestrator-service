@@ -45,7 +45,7 @@ import java.util.UUID;
  * <p><b>{@code consumes} is what this service reads</b>: the fields {@link GcSummaries} turns into
  * the step's line, and the fields a later step's request is built from ({@code pins[].shas} for the
  * image keep-set, {@code repositories[].id} for the branch sweep, {@code claims[]} for qits-idp). A
- * pin answer is also forwarded WHOLE to qits-artifacts, qits-projects and qits-configuration: that
+ * pin answer is also forwarded WHOLE to qits-artifacts and qits-projects: that
  * part is a contract between the pin source and its reader, not this service's, so it is not bound
  * here.
  *
@@ -96,8 +96,6 @@ final class GcContract {
   static final GoldenMasters WORKSPACES =
       GoldenMasters.of("qits-workspaces-service", "qits-workspaces");
   static final GoldenMasters PROJECTS = GoldenMasters.of("qits-projects-service", "qits-projects");
-  static final GoldenMasters CONFIGURATION =
-      GoldenMasters.of("qits-configuration-service", "qits-configuration");
   static final GoldenMasters IDP = GoldenMasters.of("qits-idp-service", "qits-idp");
 
   /** The peer each {@link PeerTarget} is. */
@@ -110,7 +108,6 @@ final class GcContract {
           PeerTarget.MAINTENANCE, MAINTENANCE,
           PeerTarget.WORKSPACES, WORKSPACES,
           PeerTarget.PROJECTS, PROJECTS,
-          PeerTarget.CONFIGURATION, CONFIGURATION,
           PeerTarget.IDP, IDP);
 
   // --- the rows ----------------------------------------------------------------------------------
@@ -183,13 +180,6 @@ final class GcContract {
               "collectTags", GcContract::pinsFromBody,
               "deleted[].host", "deleted[].twin", "repositories", "errors[]", "dryRun",
               "kept.newest", "kept.pinnedVersion", "kept.gitlink", "kept.inFlight", "kept.young"),
-          // qits-configuration-service
-          row(PeerTarget.CONFIGURATION, GcProcess.CONFIGURATION_ENTRIES,
-              "entries of a retired configuration key", "collectEntries",
-              GcContract::deploymentPinsFromBody,
-              "removed[]", "examined", "errors[]", "dryRun", "kept.unpinned",
-              "kept.undeclaredPinnedVersion", "kept.pinned", "kept.inFlight", "kept.neverDeclared",
-              "kept.staged"),
           // qits-idp-service. The GC door is called, like every peer, with this service's own
           // BEARER (PeerClient sends `Authorization: Bearer <PeerTokens' token>`), which that door
           // alone accepts for a qits:system service client: the state is the one judged by the
@@ -330,12 +320,6 @@ final class GcContract {
     seedIfPresent(context, GcProcess.PINS_DEPENDENCIES, pins.get("dependencies"));
     seedIfPresent(context, GcProcess.PINS_WORKSPACES, pins.get("workspaceLaunches"));
     seedIfPresent(context, GcProcess.PINS_PROJECTS, pins.get("projectLaunches"));
-  }
-
-  /** {@code deployments}: the deployment pin answer, forwarded whole. */
-  private static void deploymentPinsFromBody(
-      JsonNode recorded, GcConfig config, RunContext context) {
-    seedIfPresent(context, GcProcess.PINS_DEPLOYMENTS, recorded.get("deployments"));
   }
 
   /**

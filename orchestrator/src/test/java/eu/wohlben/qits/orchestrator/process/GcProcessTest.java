@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the twenty steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the nineteen steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -52,7 +52,6 @@ class GcProcessTest {
   private static final String BUILD_CACHE = "/containers/api/gc/build-cache";
   private static final String CATALOGUE = "/projects/api/repositories";
   private static final String BRANCHES = "/workspaces/api/gc/branches";
-  private static final String ENTRIES = "/configuration/api/gc/entries";
   private static final String TAGS = "/projects/api/gc/tags";
   private static final String CLAIMS = "/deployments/api/claims/idp-clients";
   private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
@@ -62,7 +61,7 @@ class GcProcessTest {
 
   /** Every path a deleting step calls. A run with an unread pin source calls none of them. */
   private static final List<String> DELETERS =
-      List.of(PLAN, SWEEP, IMAGES, VOLUMES, BUILD_CACHE, BRANCHES, ENTRIES, TAGS, SERVICE_CLIENTS);
+      List.of(PLAN, SWEEP, IMAGES, VOLUMES, BUILD_CACHE, BRANCHES, TAGS, SERVICE_CLIENTS);
 
   private void assertNoDeleterWasCalled() {
     for (String path : DELETERS) {
@@ -204,17 +203,6 @@ class GcProcessTest {
              "errors":[]}
             """));
     peers.answer(
-        ENTRIES,
-        FakePeers.Scripted.ok(
-            """
-            {"dryRun":false,"examined":142,
-             "removed":[{"application":"qits-docs","env":"dev","key":"env.OLD_FLAG",
-                         "reason":"retired","lastDeclaredBy":"2026.815.120000"}],
-             "kept":{"unpinned":12,"undeclaredPinnedVersion":3,"pinned":10,"inFlight":2,
-                     "neverDeclared":85,"staged":4},
-             "errors":[]}
-            """));
-    peers.answer(
         TAGS,
         FakePeers.Scripted.ok(
             """
@@ -301,7 +289,7 @@ class GcProcessTest {
   }
 
   @Test
-  void aHealthyPlatformRunsAllTwentyOneStepsAndSummarisesEachFromTheAnswer() {
+  void aHealthyPlatformRunsAllNineteenStepsAndSummarisesEachFromTheAnswer() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
@@ -324,7 +312,6 @@ class GcProcessTest {
             "containers.build-cache",
             "repos.catalogue",
             "branches.sweep",
-            "configuration.entries",
             "tags.sweep",
             "claims.idp-clients",
             "idp.service-clients",
@@ -367,10 +354,6 @@ class GcProcessTest {
     assertEquals(
         "removed 1 of 9 branches across 2 repositories", steps.get("branches.sweep").summary);
     assertEquals(
-        "removed 1 of 142 entries; kept: unpinned 12, undeclaredPinnedVersion 3, pinned 10,"
-            + " inFlight 2, neverDeclared 85, staged 4; 0 errors",
-        steps.get("configuration.entries").summary);
-    assertEquals(
         "1 tags decommissioned across 2 repositories (1 host, 1 twin); kept: newest 2,"
             + " pinnedVersion 2, gitlink 1, inFlight 0, young 3; 0 errors",
         steps.get("tags.sweep").summary);
@@ -405,13 +388,9 @@ class GcProcessTest {
     // The answer is stored whole, which is what an investigation reads.
     assertTrue(steps.get("containers.images").responseBody.contains("bytesReclaimed"));
     assertEquals(
-        "http://dev-qits-configuration:8080/configuration/api/gc/entries",
-        steps.get("configuration.entries").requestUrl);
-    assertEquals("POST", steps.get("configuration.entries").requestMethod);
-    assertEquals(
         "http://dev-qits-projects:8080/projects/api/gc/tags", steps.get("tags.sweep").requestUrl);
     assertEquals("POST", steps.get("tags.sweep").requestMethod);
-    // The claims are read from the deployer, the sweep is asked of qits-idp — the ninth target.
+    // The claims are read from the deployer, the sweep is asked of qits-idp — the eighth target.
     assertEquals(
         "http://dev-qits-deployments:8080/deployments/api/claims/idp-clients",
         steps.get("claims.idp-clients").requestUrl);
@@ -469,7 +448,6 @@ class GcProcessTest {
         "no service client may be swept against claims nobody could read");
     // Nothing else waits on the claims: every other deleter and both closing measurements ran.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("tags.sweep").status);
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("configuration.entries").status);
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("usage.after").status);
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("artifacts.usage.after").status);
   }
@@ -524,8 +502,7 @@ class GcProcessTest {
     JsonNode body = json(peers.bodiesFor(TAGS).getFirst());
     assertFalse(body.get("dryRun").asBoolean());
     JsonNode pins = body.get("pins");
-    // The same pins object artifacts.plan sends, verbatim — all five sources, not just the one
-    // configuration.entries carries.
+    // The same pins object artifacts.plan sends, verbatim — all five sources.
     assertEquals(
         "qits-ci", pins.get("deployments").get("pins").get(0).get("applicationName").asText());
     assertEquals("2026.815.120000", pins.get("ciDaemon").get("daemonVersion").asText());
@@ -565,45 +542,6 @@ class GcProcessTest {
     assertEquals(RunStatus.SKIPPED.name(), steps.get("tags.sweep").status);
     assertEquals("skipped: repos.catalogue failed", steps.get("tags.sweep").error);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("branches.sweep").status);
-  }
-
-  @Test
-  void theConfigurationEntriesStepDependsOnEveryPinAndEmbedsTheDeploymentPinsVerbatim() {
-    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
-    awaitClosed(id);
-
-    assertEquals(
-        PIN_EDGES,
-        runs.steps(id).stream()
-            .filter(step -> "configuration.entries".equals(step.stepId))
-            .findFirst()
-            .orElseThrow()
-            .dependsOn);
-
-    JsonNode body = json(peers.bodiesFor(ENTRIES).getFirst());
-    assertFalse(body.get("dryRun").asBoolean());
-    // Verbatim, the same discipline as the pins body: the deployments answer re-embedded whole
-    // rather than re-shaped into a local keep-set.
-    assertEquals(
-        "qits-ci", body.get("deployments").get("pins").get(0).get("applicationName").asText());
-    assertEquals(
-        List.of("aaa111", "bbb222"),
-        texts(body.get("deployments").get("pins").get(0).get("shas")));
-  }
-
-  @Test
-  void aBrokenDeploymentPinReadSkipsTheConfigurationEntrySweepToo() {
-    peers.answer(
-        DEPLOYMENT_PINS, FakePeers.Scripted.unreachable("qits-platform-deployments: no route"));
-
-    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
-    awaitClosed(id);
-
-    Map<String, OpStep> steps = stepsOf(id);
-    assertEquals(RunStatus.SKIPPED.name(), steps.get("configuration.entries").status);
-    assertEquals(
-        "skipped: pins.deployments failed", steps.get("configuration.entries").error);
-    assertTrue(peers.bodiesFor(ENTRIES).isEmpty(), "no entries may be swept without the pin");
   }
 
   @Test
@@ -679,7 +617,6 @@ class GcProcessTest {
             "containers.volumes",
             "containers.build-cache",
             "branches.sweep",
-            "configuration.entries",
             "tags.sweep",
             "idp.service-clients")) {
       assertEquals(RunStatus.SKIPPED.name(), steps.get(deleter).status, deleter);
@@ -812,11 +749,6 @@ class GcProcessTest {
     assertNull(steps.get("usage.after").error);
     // …and so does the registry's closing measurement, which hangs off the withheld step alone.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("artifacts.usage.after").status);
-    // CONFIGURATION.ENTRIES IS NOT WITHHELD EITHER: qits-configuration has a real dry mode, like
-    // qits-workspaces' branch sweep, so it is asked for real — never policy-skipped like the
-    // registry's own sweep.
-    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("configuration.entries").status);
-    assertTrue(json(peers.bodiesFor(ENTRIES).getFirst()).get("dryRun").asBoolean());
     // TAGS.SWEEP IS NOT WITHHELD EITHER, the same reasoning: qits-projects judges identically on a
     // dry run and deletes nothing.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("tags.sweep").status);

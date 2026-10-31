@@ -213,7 +213,7 @@ public class TokenValidationBootstrapIT {
         .get(PROCESSES)
         .then()
         .statusCode(200)
-        .body(GC + ".steps.size()", equalTo(20))
+        .body(GC + ".steps.size()", equalTo(19))
         .body(GC + ".steps.id", hasItem("artifacts.sweep"))
         .body(
             GC + ".steps.find { it.id == 'artifacts.plan' }.dependsOn",
