@@ -251,6 +251,17 @@ stores. `stories.refusals` is where each door is shown being shut rather than de
 gate rather than standing on its own, so with the gate off there is no OIDC tenant, nothing fetches
 a JWKS, and a clone-alone build needs no issuer. There is no third state.
 
+**The tenant pins the issuer qits-idp publishes, through discovery (qits-708).** Discovery is on and
+no issuer is configured anywhere — not `quarkus.oidc.token.issuer`, not any other key (owner
+decision, qits-730): at startup the tenant reads `<auth-server-url>/.well-known/openid-configuration`,
+fetches the JWKS its `jwks_uri` names, and checks every bearer's `iss` against the `issuer` it
+publishes (`https://idp.qits.<domain>`). A correctly signed `qits-platform` token with any other
+`iss` is a 401 (`api.BearerIssuerTest`). Before qits-708 discovery was off with `jwks-path=jwks`,
+and with no `token.issuer` beside it quarkus-oidc checks no `iss` at all. Both reads are rows of the
+qits-idp pact (`GcContract.TENANT_READS`, the issuer bound by value), and `GcCallCoverageTest` holds
+them to the shipped tenant configuration — turning discovery off or adding an issuer key is a red
+build there.
+
 **`quarkus.oidc.token.audience` is the literal `qits-platform` and there is only that one audience.**
 qits-idp puts it on every token it mints, whatever the client asked for, so a peer's bearer
 and a person's `qits` CLI token both address this service by it and the roles decide the rest. It is
@@ -323,21 +334,21 @@ documentation second; nothing in them is drawn by hand.
 
 | class | category | what it says |
 |---|---|---|
-| `api.TokenValidationBootstrapIT` | authentication | the gate on, the JWKS fetched at boot, the plan served to a peer's bearer — and the three refusals on the cheapest read |
+| `api.TokenValidationBootstrapIT` | authentication | the gate on, the discovery document read and the JWKS fetched at boot, the plan served to a peer's bearer — and the three refusals on the cheapest read |
 | `stories.collection.GarbageCollectionRunIT` | garbage collection | a run end to end against six peers; a dry run; one run at a time |
 | `stories.faults.PeerFailureIT` | resilience | a pin read that answered 503, what it skipped and what it did not |
 | `stories.operations.RunHistoryIT` | operations | the plan before a run, the account after it |
 | `stories.refusals.DeletionRefusalIT` | refusals | the doors on the write surface, and what is not there |
 
 **ONE `@TestProfile` for all five**, `stories.support.StoryProfile`, so they are one launched
-process: one boot, one JWKS fetch, one database, one executor. Two profiles would be two
+process: one boot, one discovery read and JWKS fetch, one database, one executor. Two profiles would be two
 orchestrators and a diagram whose startup traffic landed in whichever one happened to be running.
 
 **Class order is load-bearing and the package names carry it.** `UserflowClassOrderer` is a
 topological sort over `@UserflowRunsAfter` with ties broken by fully-qualified class name, so `api.*`
 runs before `stories.*` and inside `stories` it is `collection` → `faults` → `operations` →
 `refusals`. Two cumulative recordings are attributed by a cursor and therefore land in whichever
-story drains FIRST: the **startup JWKS fetch** (owned by the boot story) and the **outbound token
+story drains FIRST: the **startup discovery read and JWKS fetch** (owned by the boot story) and the **outbound token
 mint**, which quarkus-oidc-client caches for the hour the stub's `expires_in` grants, so it happens
 on the first peer call of the whole catalogue and belongs to the first run story. Both are asserted
 where they land. Rename a package and you re-attribute them.

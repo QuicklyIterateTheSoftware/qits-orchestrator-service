@@ -28,19 +28,20 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 /**
  * The whole service as it is <b>packaged</b> — like {@link PackagedSurfaceIT} beside it, but with
- * the OIDC tenant <b>on</b>, which no {@code @QuarkusTest} here can prove.
+ * the OIDC tenant <b>on</b>, which no {@code @QuarkusTest} here can prove of the artifact.
  *
  * <p>The shipped tenant is {@code quarkus.oidc.tenant-enabled=${qits.auth.machine.required:false}},
- * and <b>no suite in this repository turns that gate on except the story catalogue</b> — the test
+ * and <b>no suite in this repository turns that gate on except the story catalogue</b> and {@code
+ * BearerIssuerTest} (the in-JVM issuer pin, qits-708) — the test
  * application.properties says so in as many words ("the OIDC tenant is disabled because
  * qits.auth.machine.required defaults false"), which is what keeps a clone-alone {@code ./mvnw
  * verify} free of an issuer. Every {@code @QuarkusTest} here therefore runs under the {@code test}
  * profile's dev user, and {@link PackagedSurfaceIT} proves only the OTHER track of identity — the
  * forward-auth headers qits-gateway asserts. The consequence is that the entire shipped {@code
- * quarkus.oidc.*} block — auth-server-url with {@code discovery-enabled=false} and {@code
- * jwks-path=jwks} joined onto it, the boot-time fetch that {@code connection-delay} retries,
- * audience enforcement, groups&rarr;roles mapping — is exercised NOWHERE else. This is where it
- * starts. The far side is {@link MockIdp}, whose recordings make the interaction assertable on
+ * quarkus.oidc.*} block — auth-server-url, the discovery document read from it and the JWKS that
+ * document names, the boot-time fetch that {@code connection-delay} retries, audience enforcement,
+ * groups&rarr;roles mapping — is exercised on the packaged artifact NOWHERE else ({@code
+ * BearerIssuerTest} covers the issuer refusal in-JVM). This is where it starts. The far side is {@link MockIdp}, whose recordings make the interaction assertable on
  * <b>both ends</b>.
  *
  * <p><b>This is the catalogue's first story class and it owns the boot.</b> Every story class in
@@ -48,7 +49,7 @@ import org.junit.jupiter.api.TestMethodOrder;
  * than several; and {@code UserflowClassOrderer} sorts by fully-qualified class name, so {@code
  * …orchestrator.api} runs before {@code …orchestrator.stories.*}. That matters because a cumulative
  * source is attributed by a cursor: traffic that happened before any story ran — the startup JWKS
- * fetch, which is the whole subject of the first story here — lands in whichever story drains
+ * discovery read and JWKS fetch, which are the whole subject of the first story here — lands in whichever story drains
  * <i>first</i>. Pinning both orders is what keeps that the story it belongs to.
  *
  * <p>The proof doubles as documentation, emitted under {@code target/userstories/} with a network
@@ -139,9 +140,9 @@ public class TokenValidationBootstrapIT {
   @UserStoryDescription(
       """
       A freshly deployed qits-platform-orchestrator must validate service bearers before any
-      caller arrives: at startup it fetches the signing keys (JWKS) from qits-idp —
-      discovery stays off, the path is configured — so the very first machine request is
-      accepted. What that bearer then opens is the plan itself: the technical processes this
+      caller arrives: at startup it reads qits-idp's discovery document and fetches the
+      signing keys (JWKS) it names, so the very first machine request is judged on the
+      platform's own keys and issuer, and accepted. What that bearer then opens is the plan itself: the technical processes this
       service runs, their steps, and the dependency edges between them. That listing is the
       contract four repositories build against, and it is what a caller reads before it asks for
       a run — the run being minutes of somebody else's pruning, on four other services' stores.
@@ -155,15 +156,20 @@ public class TokenValidationBootstrapIT {
             + " qits-idp");
     given().get("/orchestrator/q/health/ready").then().statusCode(200);
 
-    // End (a), the idp side: the JWKS was served during startup — before this story presented any
+    // End (a), the idp side: the discovery document and the JWKS it names were served during startup — before this story presented any
     // token at all. Readiness above is deliberately independent of that fetch — the shipped config
     // explains why: tying it to another service's would make a cold boot a question of ordering —
     // so a 200 there is not the claim. The recording is.
     assertTrue(
+        idp.recordedRequests().stream()
+            .anyMatch(r -> "/idp/.well-known/openid-configuration".equals(r.path())),
+        "the packaged service never read the idp's discovery document at startup");
+    assertTrue(
         idp.recordedRequests().stream().anyMatch(r -> "/idp/jwks".equals(r.path())),
         "the packaged service never fetched /idp/jwks at startup");
     story
-        .note("the signing keys were fetched at startup, before this story presented any token")
+        .note("the discovery document was read and the signing keys it names were fetched at"
+            + " startup, before this story presented any token")
         .as("jwks-fetched");
 
     // End (b), this service's side: those keys are what token validation now runs on. A platform
@@ -324,6 +330,9 @@ public class TokenValidationBootstrapIT {
     ReportAssertions.assertComplete(CATEGORY, ACCEPTED_SLUG, UserflowReport.PASSED);
     // Observed on the far side, drained from the mock's recording, and attributed to this story
     // because it is the first one that ran (see the class javadoc on ordering).
+    ReportAssertions.assertEdge(
+        CATEGORY, ACCEPTED_SLUG, "http", SERVICE, MockIdp.SERVICE_NAME,
+        "GET /idp/.well-known/openid-configuration -> 200");
     ReportAssertions.assertEdge(
         CATEGORY, ACCEPTED_SLUG, "http", SERVICE, MockIdp.SERVICE_NAME, "GET /idp/jwks -> 200");
     // Observed on the near side, by the shipped tap, with the actor this story set. Both reads of

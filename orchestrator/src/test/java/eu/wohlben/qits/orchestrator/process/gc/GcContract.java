@@ -34,7 +34,8 @@ import java.util.UUID;
  * <b>What the gc process asks its peers, and what it reads from each answer</b> (ticket qits-1149,
  * epic qits-546): one {@link ConsumerPact} per peer, built with qits-pact-consumer from that peer's
  * published golden masters, and the table {@code GcConsumerPactTest}, {@code IdpTokenMintPactTest}
- * and {@code GcCallCoverageTest} are all built from.
+ * and {@code GcCallCoverageTest} are all built from. The qits-idp pact also carries the two reads
+ * the service's quarkus-oidc tenant makes at startup ({@link #TENANT_READS}, qits-708).
  *
  * <p><b>One row per call.</b> Every call is a step of {@link GcProcess}; the trigger named is the
  * nightly {@code GcSchedule.onSchedule}. A manual {@code POST /processes/gc/runs} and the {@code
@@ -217,6 +218,40 @@ final class GcContract {
           .header("Authorization", "{authorization}")
           .consumes("access_token");
 
+  // --- the quarkus-oidc tenant's two startup reads (qits-708) -------------------------------------
+
+  /**
+   * The qits-idp state that records the discovery document and the JWKS. The rows below are not gc
+   * steps and no class of this source tree makes their calls: the quarkus-oidc TENANT in {@code
+   * service/} makes them at startup once the machine gate turns it on — first the discovery document
+   * read from {@code quarkus.oidc.auth-server-url}, then the JWKS at the {@code jwks_uri} it names.
+   * They belong in this service's one qits-idp pact all the same, and {@code GcConsumerPactTest}
+   * reads each answer as quarkus-oidc reads it; {@code GcCallCoverageTest} holds them to the shipped
+   * tenant configuration in {@code service/src/main/resources/application.properties}.
+   */
+  static final String IDP_SIGNING_KEY_STATE = "a published signing key";
+
+  /** The tenant's startup reads, as qits-idp's other consumers trigger them. */
+  static final Trigger STARTUP = Trigger.event("StartupEvent");
+
+  /**
+   * The discovery document: the issuer the tenant checks every bearer's {@code iss} against, and
+   * where the keys are. The issuer is bound BY VALUE ({@code exact}): an idp answering another
+   * issuer refuses every token this service accepts, so its type alone is not the contract.
+   */
+  static final GoldenInteraction IDP_DISCOVERY =
+      GoldenInteraction.of(STARTUP, IDP_SIGNING_KEY_STATE, "getOpenIdConfiguration")
+          .consumes("issuer", "jwks_uri", "token_endpoint")
+          .exact("issuer");
+
+  /** The JWKS: each key with what quarkus-oidc needs to build it and to pick it by {@code kid}. */
+  static final GoldenInteraction IDP_JWKS =
+      GoldenInteraction.of(STARTUP, IDP_SIGNING_KEY_STATE, "getJwks")
+          .consumes("keys[].kid", "keys[].kty", "keys[].n", "keys[].e", "keys[].alg", "keys[].use");
+
+  /** Both tenant reads, in the order the tenant makes them. */
+  static final List<GoldenInteraction> TENANT_READS = List.of(IDP_DISCOVERY, IDP_JWKS);
+
   // --- the pending rows ----------------------------------------------------------------------------
 
   /**
@@ -266,6 +301,7 @@ final class GcContract {
     }
     if (target.equals(PeerTarget.IDP)) {
       rows.add(TOKEN_MINT);
+      rows.addAll(TENANT_READS);
     }
     return ConsumerPact.of(CONSUMER, PEERS.get(target), rows);
   }

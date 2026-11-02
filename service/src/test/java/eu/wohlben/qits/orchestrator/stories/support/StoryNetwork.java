@@ -16,9 +16,9 @@ import eu.wohlben.qits.userflows.NetworkTaps;
  *       {@code <actor> -> qits-platform-orchestrator}. The framework ships it; this repository's
  *       hand-copied {@code StoryNetworkFilter} was deleted when these stories were written. It is
  *       idempotent per service, which is why every class may call this method;
- *   <li><b>the idp's recording</b>, cumulative and <b>with no floor</b>: the JWKS fetch this
- *       service makes at STARTUP happens before any story exists and is the whole subject of the
- *       first one, so it must be attributable rather than filtered away;
+ *   <li><b>the idp's recording</b>, cumulative and <b>with no floor</b>: the discovery read and
+ *       JWKS fetch this service makes at STARTUP happen before any story exists and are the whole
+ *       subject of the first one, so they must be attributable rather than filtered away;
  *   <li><b>the peers' access log</b>, {@link StoryPeers#install()} — cumulative, floored, and the
  *       only place the outgoing half of a run exists at all.
  * </ul>
@@ -26,7 +26,7 @@ import eu.wohlben.qits.userflows.NetworkTaps;
  * <p><b>Order is load-bearing and it is the package names that carry it.</b> A cumulative source is
  * attributed by a cursor, so pre-story traffic lands in whichever story drains FIRST. {@code
  * UserflowClassOrderer} sorts by fully-qualified class name, so {@code …orchestrator.api} runs
- * before {@code …orchestrator.stories.*} and the boot story owns the JWKS fetch; within {@code
+ * before {@code …orchestrator.stories.*} and the boot story owns the discovery read and JWKS fetch; within {@code
  * stories}, {@code collection} runs before {@code faults}, {@code operations} and {@code refusals},
  * which is why the first run of the catalogue — and with it the eight outbound token mints — belongs
  * to {@code GarbageCollectionRunIT}. {@code @UserflowRunsAfter} states the ones that are real

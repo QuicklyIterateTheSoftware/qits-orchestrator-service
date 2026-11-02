@@ -1,6 +1,7 @@
 package eu.wohlben.qits.orchestrator.process.gc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eu.wohlben.qits.orchestrator.peer.ContractPeers;
@@ -11,13 +12,19 @@ import eu.wohlben.qits.orchestrator.peer.PeerTokens;
 import eu.wohlben.qits.orchestrator.process.RunContext;
 import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
+import eu.wohlben.qits.pact.consumer.ConsumerPact;
+import eu.wohlben.qits.pact.consumer.GoldenInteraction;
 import eu.wohlben.qits.pact.consumer.GoldenMasters.Operation;
 import io.quarkus.oidc.client.OidcClient;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -46,6 +53,9 @@ import org.junit.jupiter.api.Test;
  *       qits-eventstream-javalib_qits-events-service.json}, which qits-events-service pins and
  *       verifies); this service commits no events pact of its own.
  *   <li>the service's own health probes, which call no peer.
+ *   <li>the quarkus-oidc tenant's discovery and JWKS reads of qits-idp, which no gc step makes: they
+ *       are rows of the qits-idp pact all the same ({@link GcContract#TENANT_READS}), held to the
+ *       shipped tenant configuration by {@link #theOidcTenantsReadsArePacted} instead.
  * </ul>
  */
 class GcCallCoverageTest {
@@ -182,6 +192,45 @@ class GcCallCoverageTest {
       assertEquals(
           step.target(), pending.target(), pending.stepId() + ": the pending row names the step's peer");
     }
+  }
+
+  /**
+   * The calls the framework makes are held to the configuration that switches them on (qits-708).
+   * The service's quarkus-oidc tenant reads qits-idp at {@code auth-server-url}: with discovery on —
+   * the default, and what ships — that is the discovery document and then the JWKS it names, and
+   * both must be rows of the qits-idp pact; with discovery off it would be the JWKS alone. So turning
+   * discovery off again, or adding a {@code token.issuer} beside it, is a red build here rather than
+   * an unpacted read or an issuer pinned in configuration.
+   */
+  @Test
+  void theOidcTenantsReadsArePacted() throws IOException {
+    Properties shipped = new Properties();
+    try (InputStream in =
+        Files.newInputStream(
+            ConsumerPact.pactsDirectory()
+                .toAbsolutePath()
+                .getParent()
+                .resolve("service/src/main/resources/application.properties"))) {
+      shipped.load(in);
+    }
+    String server = shipped.getProperty("quarkus.oidc.auth-server-url", "");
+    assertTrue(server.contains("qits-idp"), "the tenant reads qits-idp: " + server);
+    assertNull(
+        shipped.getProperty("quarkus.oidc.token.issuer"),
+        "the issuer is never configuration: discovery publishes it (qits-730)");
+    boolean discovery =
+        Boolean.parseBoolean(shipped.getProperty("quarkus.oidc.discovery-enabled", "true"));
+    Set<String> tenant =
+        GcContract.TENANT_READS.stream()
+            .map(GoldenInteraction::operationId)
+            .collect(Collectors.toCollection(TreeSet::new));
+    assertEquals(
+        discovery ? Set.of("getJwks", "getOpenIdConfiguration") : Set.of("getJwks"),
+        tenant,
+        "the oidc tenant's reads of " + server);
+    assertTrue(
+        GcContract.pact(PeerTarget.IDP).rows().containsAll(GcContract.TENANT_READS),
+        "the qits-idp pact holds the tenant's reads");
   }
 
   @Test

@@ -2,12 +2,25 @@ package eu.wohlben.qits.orchestrator.process.gc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import eu.wohlben.qits.orchestrator.peer.ContractPeers;
 import eu.wohlben.qits.orchestrator.peer.PeerTarget;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.run.RunStatus;
 import eu.wohlben.qits.pact.consumer.ConsumerPact;
+import eu.wohlben.qits.pact.consumer.GoldenInteraction;
+import java.math.BigInteger;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAPublicKeySpec;
+import java.util.Base64;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Assumptions;
@@ -26,6 +39,11 @@ import org.junit.jupiter.api.TestFactory;
  * the summary reads but {@code consumes} leaves out shows up as a different line. (The mock's own
  * answer cannot be compared that way: an array matched by type answers its first element's values
  * for every element, so a sum over it differs from the recording's.)
+ *
+ * <p>The qits-idp pact's two tenant rows ({@link GcContract#TENANT_READS}, qits-708) are no gc
+ * step: the service's quarkus-oidc tenant makes them at startup. They are read here as quarkus-oidc
+ * reads them — the discovery {@code issuer} compared by value, the JWKS key named by the recorded
+ * {@code kid} built into an RSA public key.
  *
  * <p>Then, per peer, the committed {@code pacts/qits-orchestrator-service_<provider>.json} is what
  * the rows write ({@code -Dgolden.update=true} rewrites it), and every interaction carries both
@@ -77,6 +95,74 @@ class GcConsumerPactTest {
               assertEquals(RunStatus.SUCCEEDED, actual.status(), String.valueOf(actual.error()));
               assertNotNull(actual.summary(), "the step reads the pact's answer");
             });
+  }
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+
+  @TestFactory
+  Stream<DynamicTest> theOidcTenantsStartupReadsAreWhatQuarkusOidcReads() {
+    ConsumerPact pact = GcContract.pact(PeerTarget.IDP);
+    return Stream.of(
+        DynamicTest.dynamicTest(
+            "quarkus-oidc tenant -> qits-idp getOpenIdConfiguration",
+            () ->
+                pact.run(
+                    GcContract.IDP_DISCOVERY,
+                    (url, recorded) -> {
+                      JsonNode document = JSON.readTree(get(url + recorded.examplePath()));
+                      assertEquals(
+                          recordedJson(GcContract.IDP_DISCOVERY).path("issuer").asText(),
+                          document.path("issuer").asText(),
+                          "the issuer every bearer's iss is checked against");
+                      assertTrue(
+                          URI.create(document.path("jwks_uri").asText()).isAbsolute(),
+                          "jwks_uri is where the tenant fetches the keys");
+                      URI.create(document.path("token_endpoint").asText());
+                    })),
+        DynamicTest.dynamicTest(
+            "quarkus-oidc tenant -> qits-idp getJwks",
+            () ->
+                pact.run(
+                    GcContract.IDP_JWKS,
+                    (url, recorded) -> {
+                      String kid =
+                          recordedJson(GcContract.IDP_JWKS).path("keys").path(0).path("kid").asText();
+                      JsonNode key = null;
+                      for (JsonNode candidate :
+                          JSON.readTree(get(url + recorded.examplePath())).path("keys")) {
+                        if (kid.equals(candidate.path("kid").asText())) {
+                          key = candidate;
+                        }
+                      }
+                      assertNotNull(key, "the JWKS names the recorded kid " + kid);
+                      assertEquals("RSA", key.path("kty").asText());
+                      assertEquals("RS256", key.path("alg").asText());
+                      assertEquals("sig", key.path("use").asText());
+                      Base64.Decoder b64 = Base64.getUrlDecoder();
+                      RSAPublicKey rsa =
+                          (RSAPublicKey)
+                              KeyFactory.getInstance("RSA")
+                                  .generatePublic(
+                                      new RSAPublicKeySpec(
+                                          new BigInteger(1, b64.decode(key.path("n").asText())),
+                                          new BigInteger(1, b64.decode(key.path("e").asText()))));
+                      assertTrue(rsa.getModulus().bitLength() >= 2048, "a usable RS256 key");
+                    })));
+  }
+
+  private static JsonNode recordedJson(GoldenInteraction row) {
+    return GcContract.IDP.json(row.state(), row.operationId());
+  }
+
+  /** A plain GET of the mock server, as quarkus-oidc's own reads are: 200 and the body. */
+  private static String get(String url) throws Exception {
+    HttpResponse<String> answer =
+        HttpClient.newHttpClient()
+            .send(
+                HttpRequest.newBuilder(URI.create(url)).header("Accept", "application/json").build(),
+                HttpResponse.BodyHandlers.ofString());
+    assertEquals(200, answer.statusCode(), answer.body());
+    return answer.body();
   }
 
   /**

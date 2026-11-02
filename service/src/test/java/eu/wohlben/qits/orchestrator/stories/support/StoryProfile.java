@@ -43,9 +43,9 @@ import java.util.Map;
  *       difference between a service that validates machine bearers and one that does not. Every
  *       refusal in this catalogue is a claim only a gate-on packaged run can make, and <b>no other
  *       suite in this repository turns it on</b>.
- *   <li><b>{@code quarkus.oidc.auth-server-url}</b> — where the idp is. Discovery stays off and
- *       {@code jwks-path} stays {@code jwks}, joined onto this URL, so the shipped boot-time fetch
- *       is exercised rather than replaced.
+ *   <li><b>{@code quarkus.oidc.auth-server-url}</b> — where the idp is. Discovery stays on, as
+ *       shipped (qits-708): the tenant reads the discovery document under this URL and fetches the
+ *       JWKS it names, so the shipped boot-time reads are exercised rather than replaced.
  *   <li><b>the eight target urls</b> — {@link StoryPeers}, replacing the parent's dead port. The
  *       parent points them at a port nothing listens on because its claim is that a failure reaches
  *       a readable row; the claim here is what a run actually DOES, which needs peers that answer.
