@@ -14,9 +14,13 @@ public final class ContractPeers {
 
   private ContractPeers() {}
 
-  /** The real client with every peer at {@code baseUrl}. No token: the mock checks the request. */
+  /**
+   * The real client with every peer at {@code baseUrl}, and a stand-in bearer: {@link PeerClient}
+   * refuses to send any call with no bearer at all (qits-543), and the mock checks the rest of the
+   * request regardless of what the bearer says.
+   */
   public static PeerClient against(String baseUrl) {
-    return against(baseUrl, Optional.empty());
+    return against(baseUrl, Optional.of("a-contract-test-bearer"));
   }
 
   /**

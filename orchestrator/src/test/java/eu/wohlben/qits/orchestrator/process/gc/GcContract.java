@@ -315,13 +315,20 @@ final class GcContract {
   }
 
   /**
+   * A stand-in for a row whose recorded interaction pins no {@code Authorization} value: {@code
+   * PeerClient} now refuses to send any call with no bearer at all (qits-543), but the pact mock
+   * server never asserted this header's value for those rows, so any non-blank bearer satisfies it.
+   */
+  private static final String DEFAULT_BEARER = "a-contract-test-bearer";
+
+  /**
    * The token {@code PeerTokens} must hand {@code PeerClient} for {@code row}: the {@code Bearer}
-   * the state's {@code authorization} param carries, where the row sends that header; none
-   * otherwise.
+   * the state's {@code authorization} param carries, where the row pins that header;
+   * {@link #DEFAULT_BEARER} otherwise — a bearer is mandatory on every call now, pinned or not.
    */
   static Optional<String> bearer(Row row) {
     if (!row.interaction().requestHeaders().containsKey("Authorization")) {
-      return Optional.empty();
+      return Optional.of(DEFAULT_BEARER);
     }
     String authorization =
         masters(row).params(row.interaction().state()).get("authorization");

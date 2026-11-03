@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 /**
  * The one way a technical process touches another service.
@@ -25,18 +26,21 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * step with them.
  *
  * <p><b>The lazily built client is wrapped through {@link QitsHttpClients}</b> (qits-1198): a CLIENT
- * span per call and {@code X-Qits-Caller} alongside the forward-auth pair, the same two things a
- * REST client gets from Quarkus and this one otherwise would not.
+ * span per call and {@code X-Qits-Caller}, the same two things a REST client gets from Quarkus and
+ * this one otherwise would not.
  *
- * <p><b>Two credentials on every call, and they are not alternatives.</b> {@code X-Qits-User} /
- * {@code X-Qits-Roles} are the forward-auth pair a peer accepts on the platform's own network; the
- * bearer, where a client is enabled, is the machine track. A peer that takes neither refuses the
- * call and the step records the refusal — which is the same shape the deployer's config read has.
+ * <p><b>One credential on every call, and it is mandatory (owner ruling 2026-10-18, qits-543).</b>
+ * The bearer from the named Quarkus OIDC client {@code quarkus.oidc-client.qits} ({@code
+ * qits:system}) is the only identity a call carries — never the {@code X-Qits-User}/{@code
+ * X-Qits-Roles} pair, and never the pair as a fallback when the client is disabled. A peer that
+ * takes neither refuses the call, and a call this process cannot mint a bearer for is refused
+ * locally instead of going out unauthenticated — the same pattern qits-projects'
+ * {@code HttpGitHostRepositories} uses: fail closed and say which client is missing.
  *
- * <p><b>Nothing throws.</b> Every failure — a name that does not resolve, a timeout, a body that is
- * not JSON — comes back as a {@link PeerAnswer} carrying the sentence. A step's job is to record
- * what happened, and a process whose steps had to catch would put half its outcomes on an exception
- * path nobody reads.
+ * <p><b>Nothing throws.</b> Every failure — a missing bearer, a name that does not resolve, a
+ * timeout, a body that is not JSON — comes back as a {@link PeerAnswer} carrying the sentence. A
+ * step's job is to record what happened, and a process whose steps had to catch would put half its
+ * outcomes on an exception path nobody reads.
  *
  * <p><b>The STORED copy of a response is bounded at 1 MiB</b> with a marker appended. An artifacts
  * plan lists every condemned identity on the platform and can be tens of megabytes; the store here
@@ -50,6 +54,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  */
 @ApplicationScoped
 public class PeerClient {
+
+  private static final Logger LOG = Logger.getLogger(PeerClient.class);
 
   /** How much of a peer's answer is kept, and what says so when the rest is dropped. */
   public static final int RESPONSE_LIMIT_BYTES = 1024 * 1024;
@@ -142,15 +148,29 @@ public class PeerClient {
 
   /** The same send, with its own read timeout rather than {@link #callTimeout}. */
   public PeerAnswer send(String target, PeerCall call, Duration timeout) {
+    Optional<String> token = tokens.token(target);
+    if (token.isEmpty()) {
+      LOG.warnf(
+          "no bearer for %s: the qits oidc client is not configured or could not mint one; "
+              + "%s was not called",
+          target, call.url());
+      return new PeerAnswer(
+          null,
+          null,
+          null,
+          "no bearer for "
+              + target
+              + ": the qits oidc client (quarkus.oidc-client.qits) is not configured or could not"
+              + " mint one; "
+              + call.url()
+              + " was not called");
+    }
+
     HttpRequest.Builder request =
         HttpRequest.newBuilder(URI.create(call.url()))
             .timeout(timeout)
             .header("Accept", "application/json")
-            // The forward-auth half: this service's own name and the one role it acts with. Every
-            // peer route a process calls is a machine route, so the role is qits:system and never
-            // an operator's — a run started by a person is still the orchestrator calling.
-            .header("X-Qits-User", "qits-platform-orchestrator")
-            .header("X-Qits-Roles", "qits:system");
+            .header("Authorization", "Bearer " + token.get());
     if (call.body() == null) {
       request.GET();
     } else {
@@ -158,7 +178,6 @@ public class PeerClient {
           .header("Content-Type", "application/json")
           .POST(HttpRequest.BodyPublishers.ofString(call.body(), StandardCharsets.UTF_8));
     }
-    tokens.token(target).ifPresent(token -> request.header("Authorization", "Bearer " + token));
 
     try {
       HttpResponse<InputStream> response =

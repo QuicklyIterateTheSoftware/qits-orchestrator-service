@@ -85,16 +85,34 @@ class PeerClientTest {
   }
 
   @Test
-  void everyCallCarriesTheForwardAuthPairAndTheBearerWhenOneCanBeMinted() {
+  void everyCallCarriesTheBearerAloneAndNoForwardAuthPair() {
     PeerExchange exchange = client.get(PeerTarget.CONTAINERS, "/containers/api/gc/usage");
 
     assertTrue(exchange.answer().ok());
     assertEquals(200, exchange.answer().httpStatus());
     assertNotNull(exchange.answer().json());
     assertEquals(1, seenHeaders.size());
-    assertEquals("qits-platform-orchestrator", seenHeaders.getFirst()[0]);
-    assertEquals("qits:system", seenHeaders.getFirst()[1]);
+    assertNull(seenHeaders.getFirst()[0], "no X-Qits-User");
+    assertNull(seenHeaders.getFirst()[1], "no X-Qits-Roles");
     assertEquals("Bearer a-minted-token", seenHeaders.getFirst()[2]);
+  }
+
+  @Test
+  void noBearerFailsClosedWithNoCallMadeAndNoForwardAuthFallback() {
+    client.tokens =
+        new PeerTokens() {
+          @Override
+          public Optional<String> token(String target) {
+            return Optional.empty();
+          }
+        };
+
+    PeerAnswer answer = client.get(PeerTarget.CONTAINERS, "/containers/api/gc/usage").answer();
+
+    assertTrue(seenHeaders.isEmpty(), "the call must never reach the peer with no bearer");
+    assertNull(answer.httpStatus());
+    assertNotNull(answer.error());
+    assertTrue(answer.error().contains("quarkus.oidc-client.qits"), answer.error());
   }
 
   @Test
