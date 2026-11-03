@@ -35,9 +35,9 @@ import org.junit.jupiter.api.TestMethodOrder;
  * BearerIssuerTest} (the in-JVM issuer pin, qits-708) — the test
  * application.properties says so in as many words ("the OIDC tenant is disabled because
  * qits.auth.machine.required defaults false"), which is what keeps a clone-alone {@code ./mvnw
- * verify} free of an issuer. Every {@code @QuarkusTest} here therefore runs under the {@code test}
- * profile's dev user, and {@link PackagedSurfaceIT} proves only the OTHER track of identity — the
- * forward-auth headers qits-gateway asserts. The consequence is that the entire shipped {@code
+ * verify} free of an issuer. Every {@code @QuarkusTest} here therefore names its caller with {@code
+ * @TestSecurity}, and {@link PackagedSurfaceIT} only presents an operator's bearer to the tenant with
+ * the gate's refusals out of scope. The consequence is that the gate-on shipped {@code
  * quarkus.oidc.*} block — auth-server-url, the discovery document read from it and the JWKS that
  * document names, the boot-time fetch that {@code connection-delay} retries, audience enforcement,
  * groups&rarr;roles mapping — is exercised on the packaged artifact NOWHERE else ({@code
@@ -258,10 +258,10 @@ public class TokenValidationBootstrapIT {
     NetworkCapture.actor("an unauthenticated caller");
 
     // The first door, and it is this service's own shape rather than the fleet's. The gate being on
-    // changes nothing about it: with the tenant enabled there are two mechanisms at the door, the
-    // bearer's and qits-gateway's forward-auth pair, and a request carrying neither satisfies
-    // neither. PackagedSurfaceIT pins the same 401 with the gate OFF; the pair is what says the
-    // refusal is not an artefact of how this service happens to be configured.
+    // changes nothing about it: a request carrying no bearer satisfies no mechanism at the door
+    // (forward-auth's header pair leaves qits-auth-core with qits-1338, epic qits-543).
+    // PackagedSurfaceIT pins the same 401; the pair of them is what says the refusal is not an
+    // artefact of how this service happens to be configured.
     given().get(PROCESSES).then().statusCode(401);
     story
         .note("a request carrying no credential at all satisfies neither mechanism and is refused")

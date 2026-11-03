@@ -104,7 +104,7 @@ public class GarbageCollectionRunIT {
     StoryNetwork.install();
   }
 
-  /** The person pressing Run now: the forward-auth pair the platform edge asserts for a session. */
+  /** The person pressing Run now: a signed-in person's bearer, {@code qits:admin} in its groups. */
   private static Supplier<RequestSpecification> operator() {
     return () -> StoryIdentities.person(given(), StoryIdentities.OPERATOR_ACCOUNT);
   }

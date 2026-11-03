@@ -8,8 +8,10 @@ import io.restassured.specification.RequestSpecification;
  * service different from most of its siblings: <b>both tracks open every route</b>.
  *
  * <ul>
- *   <li><b>{@code qits:admin} is a PERSON's</b>, and it arrives only as the {@code X-Qits-User} /
- *       {@code X-Qits-Roles} pair the platform edge asserts for an authenticated admin session.
+ *   <li><b>{@code qits:admin} is a PERSON's</b>, and it arrives in a person's bearer from the same
+ *       idp: the account in {@code sub}, the platform audience, {@code qits:admin} in {@code
+ *       groups}. Forward-auth — the {@code X-Qits-User} / {@code X-Qits-Roles} pair the edge used to
+ *       assert — leaves qits-auth-core with qits-1338 (epic qits-543).
  *   <li><b>{@code qits:system} is a MACHINE's</b>, and it arrives only in an idp-minted bearer:
  *       qits-idp copies a client's granted roles into the token's {@code groups} claim and
  *       quarkus-oidc reads it as roles with no configuration at all.
@@ -25,11 +27,8 @@ import io.restassured.specification.RequestSpecification;
  * <p><b>There is no anonymous route and there must never be one.</b> The write surface starts
  * deletions on six other services.
  *
- * <p><b>The synthetic {@code %test} dev user is not available here, and that is the point.</b>
- * qits-auth-core's dev identity holds every platform role and is {@code LaunchMode}-guarded, while
- * a launched artifact runs in {@code NORMAL} mode — so an anonymous request really is anonymous and
- * the credentials below are the only thing opening these doors. {@code ProcessApiTest} runs under
- * the dev user and can make no refusal claim at all.
+ * <p><b>A launched artifact runs in {@code NORMAL} mode</b>, so an anonymous request really is
+ * anonymous and the credentials below are the only thing opening these doors.
  *
  * <p>Minting is local crypto against the keypair {@link MockIdp} parked at startup: it makes no
  * request to the mock, which is why no story's diagram carries an arrow for GETTING a token. The
@@ -50,7 +49,7 @@ public final class StoryIdentities {
   /** The machine role: a bearer's, and one of the two every route names. */
   public static final String MACHINE_ROLE = "qits:system";
 
-  /** The person's role: a forwarded header's, and the other of the two. */
+  /** The person's role: a signed-in person's bearer's, and the other of the two. */
   public static final String HUMAN_ROLE = "qits:admin";
 
   /** An audience no token of this platform carries — the credential that never becomes an identity. */
@@ -58,12 +57,6 @@ public final class StoryIdentities {
 
   /** A real platform role this service names nowhere — the 403 that is not a 401. */
   public static final String UNPRIVILEGED_ROLE = "qits:reader";
-
-  /** The header the edge names the logged-in person in. */
-  public static final String USER_HEADER = "X-Qits-User";
-
-  /** The header the edge asserts that person's roles in, comma-separated. */
-  public static final String ROLES_HEADER = "X-Qits-Roles";
 
   // --- how a diagram names each initiator ------------------------------------------------------
 
@@ -73,7 +66,7 @@ public final class StoryIdentities {
   /** A machine holding this service's audience — the other half of "a machine may post the run". */
   public static final String MACHINE = "a platform machine";
 
-  /** Nobody at all: no bearer, no forwarded pair. */
+  /** Nobody at all: no bearer. */
   public static final String ANONYMOUS = "an unauthenticated caller";
 
   /** A credential that looks right and is not: an audience from outside this platform. */
@@ -122,14 +115,14 @@ public final class StoryIdentities {
     return request.header("Authorization", "Bearer " + token);
   }
 
-  /** {@code given()} with the pair the edge asserts for a logged-in admin session. */
+  /** {@code given()} with a signed-in admin's bearer: {@code user} in {@code sub}, {@code qits:admin}. */
   public static RequestSpecification person(RequestSpecification request, String user) {
     return person(request, user, HUMAN_ROLE);
   }
 
-  /** …and the same pair for a session holding some other role, which is how a 403 is asked for. */
+  /** …and the same person holding some other role, which is how a 403 is asked for. */
   public static RequestSpecification person(
-      RequestSpecification request, String user, String roles) {
-    return request.header(USER_HEADER, user).header(ROLES_HEADER, roles);
+      RequestSpecification request, String user, String role) {
+    return bearer(request, token(user, AUDIENCE, role));
   }
 }

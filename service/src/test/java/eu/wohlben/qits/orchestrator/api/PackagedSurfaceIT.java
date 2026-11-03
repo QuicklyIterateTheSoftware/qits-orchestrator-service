@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eu.wohlben.qits.orchestrator.testdb.EmbeddedPg;
+import eu.wohlben.qits.servicemock.idp.MockIdp;
 import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
@@ -47,10 +48,11 @@ import org.junit.jupiter.api.Test;
  *       {@code /} would pass against a process with no client in it.
  * </ul>
  *
- * <p><b>This is also the only place the identity contract is real.</b> A {@code @QuarkusTest} runs
- * under the {@code test} profile, where qits-auth-core ships a dev user; the launched artifact runs
- * as a deployment does, so the roles have to arrive the way qits-gateway sends them — in {@code
- * X-Qits-User} and {@code X-Qits-Roles}. A request with neither is asserted to be refused.
+ * <p><b>This is also a place the identity contract is real.</b> A {@code @QuarkusTest} names its
+ * caller with {@code @TestSecurity}; the launched artifact runs as a deployment does, so the roles
+ * have to arrive in a bearer the shipped OIDC tenant validates — here one {@link MockIdp} minted
+ * ({@link PackagedWithIdp}). A request without one is asserted to be refused. Forward-auth's {@code
+ * X-Qits-User} / {@code X-Qits-Roles} leave qits-auth-core with qits-1338 (epic qits-543).
  *
  * <p><b>And the peers here are REAL calls to a port nothing listens on.</b> The profile points every
  * target at a dead loopback address, so the run this launches fails every step in milliseconds —
@@ -61,7 +63,7 @@ import org.junit.jupiter.api.Test;
  * package} to have happened. Ask for them explicitly.
  */
 @QuarkusIntegrationTest
-@TestProfile(PackagedSurfaceIT.PackagedUnderTarget.class)
+@TestProfile(PackagedSurfaceIT.PackagedWithIdp.class)
 public class PackagedSurfaceIT {
 
   /** The database this IT hands the launched process, on a name of its own. */
@@ -171,9 +173,35 @@ public class PackagedSurfaceIT {
     }
   }
 
-  /** What qits-gateway asserts for an authenticated operator. */
+  /**
+   * {@link PackagedUnderTarget} with the shipped OIDC tenant pointed at a {@link MockIdp} rather than
+   * at the unreachable derived idp alias, so an operator's bearer is validated the way a deployment
+   * validates it. Everything else is the parent's; {@code StoryProfile} is where the gate's
+   * refusals are under test.
+   */
+  public static class PackagedWithIdp extends PackagedUnderTarget {
+
+    @Override
+    public Map<String, String> getConfigOverrides() {
+      MockIdp idp = MockIdp.ensureStarted();
+      Map<String, String> overrides = new java.util.LinkedHashMap<>(super.getConfigOverrides());
+      overrides.put("quarkus.oidc.auth-server-url", idp.baseUrl());
+      return overrides;
+    }
+  }
+
+  /** An authenticated operator: a bearer from this run's idp, {@code qits:admin} in its groups. */
   private static RequestSpecification asAdmin() {
-    return given().header("X-Qits-User", "packaged-it").header("X-Qits-Roles", "qits:admin");
+    return given().header("Authorization", "Bearer " + adminToken());
+  }
+
+  private static String adminToken() {
+    return MockIdp.attach()
+        .token()
+        .subject("packaged-it")
+        .audience("qits-platform")
+        .groups("qits:admin")
+        .mint();
   }
 
   @Test
@@ -206,11 +234,13 @@ public class PackagedSurfaceIT {
         // The whole gc plan, one row per StepDefinition in GcProcess.steps() — nineteen since
         // configuration.entries was removed (epic qits-765), the same count ProcessApiTest and the
         // userflow IT pin.
-        // Step 0 is the first peer read and fails against a dead port; step 7 (the registry plan)
-        // depends on all five pin reads and is skipped fail-closed when they do.
+        // Step 0 is the first peer read and fails; step 7 (the registry plan) depends on all five
+        // pin reads and is skipped fail-closed when they do. The qits oidc client is shipped off
+        // and this profile leaves it so, so PeerClient fails closed before dialling (epic qits-543:
+        // no bearer, no call) — the dead port is never reached, and the error says so.
         .body("steps.size()", Matchers.equalTo(19))
         .body("steps[0].status", Matchers.equalTo("FAILED"))
-        .body("steps[0].error", Matchers.containsString("could not be called"))
+        .body("steps[0].error", Matchers.containsString("was not called"))
         .body("steps[7].status", Matchers.equalTo("SKIPPED"))
         .body("steps[7].error", Matchers.containsString("skipped:"));
 

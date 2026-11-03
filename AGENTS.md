@@ -307,9 +307,20 @@ therefore mints an audience from outside the platform — a sibling's bearer is 
   `orchestrator_svc_eventstream` beside the run log's database. `catchup-at-startup=false` is the
   belt: the startup sweep is not a scheduler tick and `quarkus.scheduler.enabled=false` does not
   cover it.
-- A `@QuarkusTest` runs under the `test` profile, where qits-auth-core ships a dev user carrying
-  `qits:admin` and `qits:system` — so the shipped `@RolesAllowed` pair is exercised rather than
-  bypassed, with no `@TestSecurity` fabricating an identity no deployment produces.
+- **No test uses forward-auth (epic qits-543, qits-1368).** `X-Qits-User` / `X-Qits-Roles` and the
+  `%test` dev user leave qits-auth-core with qits-1338, and the suite already runs without them: the
+  test config blanks the dev user and renames the forward headers (`%test.qits.auth.forward.*` in
+  `service/src/test/resources/application.properties`, which go with qits-1338), so a header-less
+  request is anonymous. A `@QuarkusTest` names its caller with `@TestSecurity` and the roles it
+  means (`ProcessApiTest` an operator, `AgentReadAccessTest` / `AdminAgentAccessTest` one role per
+  method). The packaged ITs send `MockIdp` bearers, for a person (`qits:admin`) as for a machine
+  (`qits:system`): `PackagedSurfaceIT.PackagedWithIdp` points the shipped tenant at the mock idp,
+  and `StoryIdentities.person` mints a person's token.
+- **Dev mode needs a bearer.** The `%dev` dev user goes with qits-1338, and `%dev` keeps the OIDC
+  tenant off, so `quarkus:dev` answers 401 until the tenant is pointed at an idp
+  (`-Dqits.auth.machine.required=true -Dquarkus.oidc.tenant-enabled=true
+  -Dquarkus.oidc.auth-server-url=...`); then call it with a person's token, for example
+  `curl -H "Authorization: Bearer $(qits-token qits-platform)" ...`, or through the `qits` CLI.
 - **Every claim about the ARTIFACT is an IT**, and there are two kinds. `PackagedSurfaceIT` is the
   gate-off one: it hands the process `QITS_RESOURCE_DB_*` rather than restating the datasource keys,
   so the jar's own `${…}` indirection is under test, it reads the rows back over JDBC, and **its
@@ -364,8 +375,9 @@ profile, which a launched-artifact run instantiates in a different classloader f
 
 **NORMAL mode is the whole point.** The profile sets `qits.auth.machine.required=true`, which no
 other suite here does; a launched artifact has no `%test` dev user, so an anonymous request really is
-anonymous and every refusal is a claim only these tests can make. People arrive as
-`X-Qits-User`/`X-Qits-Roles`, machines as MockIdp-minted bearers.
+anonymous and every refusal is a claim only these tests can make. People and machines both arrive
+as MockIdp-minted bearers (a person's carries `qits:admin`, a machine's `qits:system`); forward-auth's
+`X-Qits-User`/`X-Qits-Roles` leave with qits-1338.
 
 **What the stories cannot reach, stated rather than hidden:**
 

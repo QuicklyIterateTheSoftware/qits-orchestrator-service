@@ -89,9 +89,8 @@ public class DeletionRefusalIT {
       roles decide what it may do.
 
       A caller holding a role this service has never heard of gets the other answer. qits:reader is
-      a real platform role and it is not one of the two these routes name; presented as a session's
-      forwarded header or minted into a token addressed here, it authenticates perfectly and covers
-      nothing. 403 is what "you may not" looks like when "who are you" was already answered.
+      a real platform role and it is not one of the two these routes name; minted into a person's
+      or a machine's token addressed here, it authenticates perfectly and covers nothing. 403 is what "you may not" looks like when "who are you" was already answered.
 
       And every refusal costs the platform nothing: no run row, no worker, and not one request to
       any of the eight services a real run would have driven.
@@ -108,8 +107,8 @@ public class DeletionRefusalIT {
         .statusCode(401);
     story
         .note(
-            "a request carrying no credential at all satisfies neither the bearer track nor the"
-                + " edge's forwarded pair, and is refused before anything begins")
+            "a request carrying no credential at all satisfies no mechanism at the door, and is"
+                + " refused before anything begins")
         .as("anonymous-refused");
 
     NetworkCapture.actor(StoryIdentities.IMPOSTOR);

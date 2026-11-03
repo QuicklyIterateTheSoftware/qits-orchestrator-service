@@ -137,6 +137,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- @TestSecurity: tests name the identity they mean instead of leaning on the forward-auth
+                 dev user, which goes with qits-1338 (epic qits-543). -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- The platform's shared rules. DatasourceBaselineRules is what this repo takes them
                  for, and it lives here because this module's config is the deployable's whole
                  config — the `orchestrator` datasource is declared in the domain jar. -->

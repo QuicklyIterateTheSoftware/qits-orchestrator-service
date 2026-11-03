@@ -16,6 +16,7 @@ import eu.wohlben.qits.orchestrator.persistence.RunStore;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -32,14 +33,16 @@ import org.junit.jupiter.api.Test;
  * quarkus.rest.path=/orchestrator/api} from main's application.properties rather than re-declaring
  * it — so a change to the segment fails here rather than in a deployment.
  *
- * <p><b>No test sends an identity header</b>, and that is not a hole: qits-auth-core ships a {@code
- * %test} dev user carrying {@code qits:admin} and {@code qits:system}, so the shipped {@code
- * @RolesAllowed} pair is exercised rather than bypassed. That a real request must carry the pair is
- * pinned in {@code PackagedSurfaceIT}, where the identity contract is real.
+ * <p><b>Every test runs as an operator</b> ({@code @TestSecurity}, {@code qits:admin}), so the
+ * shipped {@code @RolesAllowed} list is exercised rather than bypassed. Forward-auth and its {@code
+ * %test} dev user go with qits-1338 (epic qits-543). That a real request must carry a bearer the
+ * shipped tenant validates is pinned in {@code PackagedSurfaceIT}, where the identity contract is
+ * real.
  *
  * <p>The peers are faked, so a run started here reaches no network.
  */
 @QuarkusTest
+@TestSecurity(user = "operator", roles = "qits:admin")
 class ProcessApiTest {
 
   private static final String BASE = "/orchestrator/api";

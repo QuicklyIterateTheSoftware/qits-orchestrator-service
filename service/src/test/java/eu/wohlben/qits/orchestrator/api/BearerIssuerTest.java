@@ -41,7 +41,10 @@ class BearerIssuerTest {
   /** Another environment's idp address: an issuer this service trusts under no name. */
   private static final String FOREIGN_ISSUER = "http://dev-qits-idp:8080/idp";
 
-  /** The gate on, the dev user off, the tenant pointed at the mock idp and nothing else moved. */
+  /**
+   * The gate on, the tenant pointed at the mock idp and nothing else moved. The dev user is off in
+   * the whole suite (test application.properties).
+   */
   public static class DiscoveringTheMockIdp implements QuarkusTestProfile {
     @Override
     public Map<String, String> getConfigOverrides() {
@@ -51,7 +54,6 @@ class BearerIssuerTest {
           "%test.qits.auth.machine.required", "true",
           "quarkus.oidc.tenant-enabled", "true",
           "%test.quarkus.oidc.tenant-enabled", "true",
-          "qits.auth.forward.dev-user", "",
           "quarkus.oidc.auth-server-url", idp.baseUrl());
     }
   }

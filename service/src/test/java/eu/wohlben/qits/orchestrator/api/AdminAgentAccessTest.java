@@ -6,8 +6,8 @@ import eu.wohlben.qits.orchestrator.entity.OpRun;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
 import eu.wohlben.qits.orchestrator.run.RunStatus;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
-import io.restassured.specification.RequestSpecification;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
@@ -23,9 +23,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>This pins the write door — starting a run — against an identity carrying ONLY {@code
  * qits:admin-agent}, no {@code qits:admin} and no {@code qits:agent}, the same way {@link
- * AgentReadAccessTest} pins {@code qits:agent}. Each request names its identity in {@code
- * X-Qits-User} / {@code X-Qits-Roles}, so the {@code %test} dev user does not apply and the
- * identity holds exactly the role sent.
+ * AgentReadAccessTest} pins {@code qits:agent}. Each test names its identity with {@code
+ * @TestSecurity}, so the identity holds exactly the role named (forward-auth and its {@code %test}
+ * dev user go with qits-1338, epic qits-543).
  */
 @QuarkusTest
 class AdminAgentAccessTest {
@@ -34,18 +34,13 @@ class AdminAgentAccessTest {
 
   @Inject RunStore runs;
 
-  private static RequestSpecification as(String role) {
-    return given().header("X-Qits-User", "dyn-admin-workspace-agent").header("X-Qits-Roles", role);
-  }
-
-  private static RequestSpecification adminAgent() {
-    return as("qits:admin-agent");
-  }
+  private static final String CALLER = "dyn-admin-workspace-agent";
 
   @Test
+  @TestSecurity(user = CALLER, roles = "qits:admin-agent")
   void anAdminAgentStartsAGcRun() {
     String id =
-        adminAgent()
+        given()
             .contentType(ContentType.JSON)
             .body("{\"dryRun\":true}")
             .post(BASE + "/processes/gc/runs")
@@ -79,13 +74,15 @@ class AdminAgentAccessTest {
   }
 
   @Test
+  @TestSecurity(user = CALLER, roles = "qits:admin-agent")
   void anAdminAgentReadsTheProcesses() {
-    adminAgent().get(BASE + "/processes").then().statusCode(200);
+    given().get(BASE + "/processes").then().statusCode(200);
   }
 
   @Test
+  @TestSecurity(user = CALLER, roles = "qits:reader")
   void aRoleOutsideTheBoundaryIsStillRefusedOnTheWriteDoor() {
-    as("qits:reader")
+    given()
         .contentType(ContentType.JSON)
         .body("{\"dryRun\":true}")
         .post(BASE + "/processes/gc/runs")
@@ -95,9 +92,10 @@ class AdminAgentAccessTest {
 
   /** {@code qits:desk-admin} (epic qits-1621): admitted wherever {@code qits:admin-agent} is. */
   @Test
+  @TestSecurity(user = CALLER, roles = "qits:desk-admin")
   void aDeskAdminStartsAGcRun() {
     String id =
-        as("qits:desk-admin")
+        given()
             .contentType(ContentType.JSON)
             .body("{\"dryRun\":true}")
             .post(BASE + "/processes/gc/runs")
@@ -109,7 +107,8 @@ class AdminAgentAccessTest {
   }
 
   @Test
+  @TestSecurity(user = CALLER, roles = "qits:desk-admin")
   void aDeskAdminReadsTheProcesses() {
-    as("qits:desk-admin").get(BASE + "/processes").then().statusCode(200);
+    given().get(BASE + "/processes").then().statusCode(200);
   }
 }
