@@ -123,6 +123,11 @@ public class PackagedSurfaceIT {
       // no qits-events here, and enabled the subscriber would redial a stream nobody serves for the
       // whole of the suite. It is a runtime key, so a launched process takes it.
       overrides.put("qits.eventstream.enabled", "false");
+      // The platform domain every edge address expands (qits-1423). A launched process runs in
+      // NORMAL mode, where the shipped lines carry no default for QITS_DOMAIN and a process without
+      // it refuses to start; `.invalid` is reserved and resolves nowhere, so the one address left
+      // un-overridden below — the tenant's idp — fails exactly as the old wire alias did.
+      overrides.put("QITS_DOMAIN", "orchestrator-it.invalid");
       overrides.put("qits.orchestrator.targets.artifacts-url", dead);
       overrides.put("qits.orchestrator.targets.containers-url", dead);
       overrides.put("qits.orchestrator.targets.ci-url", dead);

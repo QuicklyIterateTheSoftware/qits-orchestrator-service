@@ -214,14 +214,14 @@ and overridable by environment without a rebuild.
 
 | key | default | what it decides |
 |---|---|---|
-| `qits.orchestrator.targets.artifacts-url` | `http://qits-artifacts:8080` | where qits-artifacts is |
-| `qits.orchestrator.targets.containers-url` | `http://qits-containers:8080` | where qits-containers is |
-| `qits.orchestrator.targets.ci-url` | `http://qits-ci:8080` | where qits-ci is |
-| `qits.orchestrator.targets.deployments-url` | `http://qits-platform-deployments:8080` | where the deployer is |
-| `qits.orchestrator.targets.projects-url` | `http://qits-projects:8080` | where the repository catalogue is |
-| `qits.orchestrator.targets.workspaces-url` | `http://qits-workspaces:8080` | where branch semantics live |
-| `qits.orchestrator.targets.maintenance-url` | `http://qits-platform-maintenance:8080` | where the dependency pins are |
-| `qits.orchestrator.targets.idp-url` | `http://${QITS_ENVIRONMENT:dev}-qits-idp:8080` | where the service-client store is |
+| `qits.orchestrator.targets.artifacts-url` | `https://registry.qits.${QITS_DOMAIN}` | where qits-artifacts is |
+| `qits.orchestrator.targets.containers-url` | `https://containers.qits.${QITS_DOMAIN}` | where qits-containers is |
+| `qits.orchestrator.targets.ci-url` | `https://ci.qits.${QITS_DOMAIN}` | where qits-ci is |
+| `qits.orchestrator.targets.deployments-url` | `https://deployments.qits.${QITS_DOMAIN}` | where the deployer is |
+| `qits.orchestrator.targets.projects-url` | `https://projects.qits.${QITS_DOMAIN}` | where the repository catalogue is |
+| `qits.orchestrator.targets.workspaces-url` | `https://workspaces.qits.${QITS_DOMAIN}` | where branch semantics live |
+| `qits.orchestrator.targets.maintenance-url` | `https://maintenance.qits.${QITS_DOMAIN}` | where the dependency pins are |
+| `qits.orchestrator.targets.idp-url` | `https://idp.qits.${QITS_DOMAIN}` | where the service-client store is |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
 | `qits.orchestrator.gc.time-zone` | `UTC` | the zone the cron is read in (the platform's convention) |
@@ -244,16 +244,21 @@ left a 13.7 GB bootstrap builder untouched every night — it was smaller than t
 shared keep-storage never reached it. qits-containers falls back to `keepStorageBytes` when
 `builderKeepStorageBytes` is absent.
 
-**Three tier services by configured url.** qits-artifacts, qits-containers and qits-ci are per
-environment (`dev-qits-artifacts`) while this service is platform tier, so a live platform injects
-the qualified names. Known debt.
+**Every peer at its edge host** (qits-1423, feature qits-1406): `https://<label>.qits.<domain>`,
+the label being the peer's `host:` in its own `.config/qits/deployments.yml` (`registry` for
+qits-artifacts) or else its name without `qits-`. No environment label, no `<env>-qits-<app>:8080`
+wire alias, no path — each step spells its peer's full path. `QITS_DOMAIN` has no default, so a
+process without it refuses to start; `%dev`/`%test` keep the old dev-estate names as literals, and
+`peer.EdgeAddressShippedConfigTest` pins the prod values. The tenant and the `qits` client dial the
+idp at `https://idp.qits.<domain>/idp` the same way (`QITS_RESOURCE_IDP_URL` still wins for the
+client).
 
 **Outbound credentials** are ONE named oidc client, `qits` (epic qits-540 dossier, 'Plan (as of
 2026-09-13)', C4). Its id, secret and idp address come from the deployer and nowhere else:
 `.config/qits/deployments.yml` declares `resources: idp:client`, so qits-deployments provisions
 this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_URL`,
-`QITS_RESOURCE_IDP_CLIENT_ID` and `QITS_RESOURCE_IDP_CLIENT_SECRET` (the shipped defaults are the
-dev estate's `dev-qits-idp` alias and `dev-qits-orchestrator`). No configuration entry names any of
+`QITS_RESOURCE_IDP_CLIENT_ID` and `QITS_RESOURCE_IDP_CLIENT_SECRET` (the shipped defaults are
+qits-idp's edge host `https://idp.qits.<domain>/idp` and `dev-qits-orchestrator`). No configuration entry names any of
 the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
 PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
 every peer accepts it — so one client and one audience serve all eight peers, and what this service

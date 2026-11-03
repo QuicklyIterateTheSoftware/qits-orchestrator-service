@@ -131,7 +131,7 @@ records the url and the status, which is more useful than a mint failure one lay
 `qits-platform` on every token it mints and every peer accepts it, so one client and one audience
 serve all eight peers and the roles decide what this service may do at each. Its id, secret and idp
 address come from the deployer's `idp:client` resource alone (`QITS_RESOURCE_IDP_*`), defaulting to
-`dev-qits-idp` / `dev-qits-orchestrator`; no configuration entry names any of the three, and the old
+`https://idp.qits.<domain>/idp` / `dev-qits-orchestrator`; no configuration entry names any of the three, and the old
 `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. The client is turned on wherever the deployer
 runs it, off under `%dev`/`%test`, so qits-maintenance and qits-idp are reached
 with a bearer like the other six.

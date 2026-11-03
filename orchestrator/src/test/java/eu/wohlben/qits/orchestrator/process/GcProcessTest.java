@@ -364,8 +364,8 @@ class GcProcessTest {
         steps.get("idp.service-clients").summary);
 
     // The url is the shipped target plus the shipped path — a wrong peer would fail here. The host
-    // is the derived dev-qits-<alias> form (no QITS_ENVIRONMENT in this suite, so the `dev`
-    // fallback), never the bare alias.
+    // is %test's local dev-qits-<alias> value; the deployed edge hosts are the service module's
+    // EdgeAddressShippedConfigTest.
     assertEquals(
         "http://dev-qits-deployments:8080/deployments/api/pins",
         steps.get("pins.deployments").requestUrl);

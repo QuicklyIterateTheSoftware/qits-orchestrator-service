@@ -29,9 +29,8 @@ class QitsOidcClientShippedConfigTest {
 
   @Test
   void theQitsClientResolvesItsOwnDefaults() {
-    // The host is derived off QITS_ENVIRONMENT, which no test sets, so the `dev` fallback applies —
-    // the application is qits-idp (it was qits-platform-idp until the platform tier went), so its
-    // alias is dev-qits-idp.
+    // %test's local value, the old dev-estate name spelled literally. What a deployed process dials —
+    // qits-idp's edge host — is EdgeAddressShippedConfigTest's, under the prod profile.
     assertEquals(
         "http://dev-qits-idp:8080/idp", value("quarkus.oidc-client.qits.auth-server-url"));
     assertEquals("dev-qits-orchestrator", value("quarkus.oidc-client.qits.client-id"));
