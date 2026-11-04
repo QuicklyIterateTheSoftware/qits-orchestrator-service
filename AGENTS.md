@@ -159,10 +159,14 @@ unbounded column would let one peer's verbosity decide this service's disk.
 
 ## Telemetry
 
-`quarkus-opentelemetry` exports traces, logs and metrics to qits-observability. One key names the
-receiver — `qits.observability.url`, scheme/host/port and no path, the shape the peer urls already
-have — and the endpoint is derived from it; the protocol is `http/protobuf` because the receiver does
-not speak the gRPC default. The SDK is dark in `%dev`/`%test`, the same policy as the event bus.
+`quarkus-opentelemetry` instruments the process; `qits-telemetry-core` (epic qits-428) ships the
+three CDI exporters that export it, THROUGH THE EDGE — OTLP/HTTP builders whose header supplier
+attaches the `qits` oidc client's current bearer on every export, since the edge refuses an
+anonymous POST. `qits.observability.url` and `quarkus.otel.exporter.otlp.endpoint`/`.protocol` are
+gone: the receiver's address is now the module's own default edge host, overridable with
+`qits.telemetry.endpoint`, and read only when the SDK builds the exporters. The SDK is dark in
+`%dev`/`%test`, the same policy as the event bus, so neither profile needs `QITS_DOMAIN` or the oidc
+client for telemetry.
 
 **The four `quarkus.otel.logs.*` keys are spelled out even where they are Quarkus' own defaults.**
 That integration is still labelled PREVIEW, and it is the whole of what ships this service's logs, so
