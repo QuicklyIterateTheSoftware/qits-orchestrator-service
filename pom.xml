@@ -60,7 +60,7 @@
              address the builder container can actually reach — see docker/Dockerfile and
              .qits-maven-settings.xml. -->
         <qits.db-core.version>2026.1002.70617</qits.db-core.version>
-        <qits.auth-core.version>2026.1031.63225</qits.auth-core.version>
+        <qits.auth-core.version>2026.1105.105731</qits.auth-core.version>
         <qits.arch-rules.version>2026.1030.30851</qits.arch-rules.version>
         <!-- Service-to-service HTTP that says who is calling: QitsHttpClients.wrap turns a raw
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
@@ -109,7 +109,7 @@
         <qits.ci-golden-masters.version>2026.1102.180015</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1031.22002</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1102.193613</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1104.114635</qits.projects-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1105.180851</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1027.165632</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
