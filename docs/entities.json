@@ -1,0 +1,174 @@
+{
+  "formatVersion" : 1,
+  "application" : "qits-orchestrator",
+  "entities" : [
+    {
+      "entity" : "eu.wohlben.qits.orchestrator.entity.OpRun",
+      "table" : "op_run",
+      "marking" : "domain",
+      "reason" : null,
+      "projectionOf" : null,
+      "knownGap" : null,
+      "dtos" : [
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "kind" : "assembler",
+          "via" : null,
+          "site" : "Runs.run(UUID)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "site" : "RunDetailDto.steps()"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
+          "kind" : "assembler",
+          "via" : null,
+          "site" : "Runs.runs(String, int)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
+          "kind" : "mapper",
+          "via" : null,
+          "site" : "Runs.summarise(OpRun)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.peer.PeerClient",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "RunContext.peers()"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "kind" : "assembler",
+          "via" : null,
+          "site" : "RunExecutor.execute(TechnicalProcess, UUID, boolean)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.StepDefinition",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "GcProcess.steps()"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.StepResult",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "GcProcess.keepSet(RunContext, String, String, Function)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.StepResult",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "GcProcess.serviceClients(RunContext)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.StepResult",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "RunExecutor.run(StepDefinition, RunContext)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.process.StepResult",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.process.RunContext",
+          "site" : "StepBody.run(RunContext)"
+        }
+      ],
+      "operations" : [
+        {
+          "operationId" : "ProcessController.runs",
+          "method" : "GET",
+          "path" : "/processes/{kind}/runs",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
+          "kind" : "returns"
+        },
+        {
+          "operationId" : "RunController.run",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "kind" : "returns"
+        },
+        {
+          "operationId" : "RunController.run",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "kind" : "returns"
+        }
+      ]
+    },
+    {
+      "entity" : "eu.wohlben.qits.orchestrator.entity.OpStep",
+      "table" : "op_step",
+      "marking" : "domain",
+      "reason" : null,
+      "projectionOf" : null,
+      "knownGap" : null,
+      "dtos" : [
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "mapper",
+          "via" : null,
+          "site" : "Runs.describe(OpStep)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "site" : "RunStepDto.request()"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "site" : "RunDetailDto.<init>(UUID, String, String, boolean, String, Instant, Instant, String, List)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "site" : "Runs.run(UUID)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "kind" : "mapper",
+          "via" : null,
+          "site" : "Runs.describe(OpStep)"
+        },
+        {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "site" : "RunStepDto.<init>(String, String, String, List, String, Instant, Instant, Integer, RequestDto, String, String, String)"
+        }
+      ],
+      "operations" : [
+        {
+          "operationId" : "RunController.run",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "returns"
+        },
+        {
+          "operationId" : "RunController.run",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
+          "kind" : "returns"
+        },
+        {
+          "operationId" : "RunController.run",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "kind" : "returns"
+        }
+      ]
+    }
+  ]
+}
