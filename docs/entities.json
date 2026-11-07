@@ -43,13 +43,6 @@
           "path" : "/runs/{id}",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
           "kind" : "returns"
-        },
-        {
-          "operationId" : "RunController.run",
-          "method" : "GET",
-          "path" : "/runs/{id}",
-          "dto" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
-          "kind" : "returns"
         }
       ]
     },
@@ -86,20 +79,6 @@
           "method" : "GET",
           "path" : "/runs/{id}",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
-          "kind" : "returns"
-        },
-        {
-          "operationId" : "RunController.run",
-          "method" : "GET",
-          "path" : "/runs/{id}",
-          "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
-          "kind" : "returns"
-        },
-        {
-          "operationId" : "RunController.run",
-          "method" : "GET",
-          "path" : "/runs/{id}",
-          "dto" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
           "kind" : "returns"
         }
       ]
