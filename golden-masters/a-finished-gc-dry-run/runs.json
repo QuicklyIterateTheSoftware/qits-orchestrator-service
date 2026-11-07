@@ -1,0 +1,12 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "kind": "gc",
+    "trigger": "manual",
+    "dryRun": true,
+    "status": "SUCCEEDED",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "finishedAt": "2026-01-01T00:00:00Z",
+    "summary": "usage.before SUCCEEDED (images 10 B (2 B reclaimable), build cache 4 B); artifacts.usage.before SUCCEEDED (store 10 B: oci 8 B, docs 1 B, sbom 1 B); pins.deployments SUCCEEDED (1 deployment pin across 1 application); pins.ci SUCCEEDED (qits-ci-daemon 1); pins.dependencies SUCCEEDED (0 manifest pins across 1 repository); pins.workspaces SUCCEEDED (0 workspace launch pins); pins.projects SUCCEEDED (0 project launch pins); artifacts.plan SUCCEEDED (plan executable); artifacts.sweep SKIPPED (dry run); containers.images SUCCEEDED (removed 0 images, kept 0); containers.volumes SUCCEEDED (removed 0 volumes, kept 0); containers.build-cache SUCCEEDED (reclaimed 0 B); repos.catalogue SUCCEEDED (0 repositories); branches.sweep SUCCEEDED (removed 0 of 0 branches); tags.sweep SUCCEEDED (0 tags decommissioned); claims.idp-clients SUCCEEDED (0 service-client claims); idp.service-clients SUCCEEDED (removed 0 service clients); artifacts.usage.after SUCCEEDED (store 10 B: oci 8 B, docs 1 B, sbom 1 B); usage.after SUCCEEDED (images 10 B (2 B reclaimable), build cache 4 B)"
+  }
+]

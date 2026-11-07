@@ -1,0 +1,184 @@
+[
+  {
+    "kind": "gc",
+    "name": "Garbage collection",
+    "description": "Reads the platform's pin set once, then asks every store's own owner to delete what nothing pins: registry identities and blobs (qits-artifacts), host images, orphan volumes and buildkit cache (qits-containers), and service clients nothing claims (qits-idp). Measures host disk and the registry store before and after.",
+    "steps": [
+      {
+        "id": "usage.before",
+        "name": "Disk usage before",
+        "target": "containers",
+        "dependsOn": []
+      },
+      {
+        "id": "artifacts.usage.before",
+        "name": "Registry store before",
+        "target": "artifacts",
+        "dependsOn": []
+      },
+      {
+        "id": "pins.deployments",
+        "name": "Deployment pins",
+        "target": "deployments",
+        "dependsOn": []
+      },
+      {
+        "id": "pins.ci",
+        "name": "CI daemon pin",
+        "target": "ci",
+        "dependsOn": []
+      },
+      {
+        "id": "pins.dependencies",
+        "name": "Dependency pins",
+        "target": "maintenance",
+        "dependsOn": []
+      },
+      {
+        "id": "pins.workspaces",
+        "name": "Workspace launch pins",
+        "target": "workspaces",
+        "dependsOn": []
+      },
+      {
+        "id": "pins.projects",
+        "name": "Project launch pins",
+        "target": "projects",
+        "dependsOn": []
+      },
+      {
+        "id": "artifacts.plan",
+        "name": "Plan the registry collection",
+        "target": "artifacts",
+        "dependsOn": [
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "artifacts.sweep",
+        "name": "Sweep the registry",
+        "target": "artifacts",
+        "dependsOn": [
+          "artifacts.plan",
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "containers.images",
+        "name": "Collect host images",
+        "target": "containers",
+        "dependsOn": [
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "containers.volumes",
+        "name": "Collect orphan volumes",
+        "target": "containers",
+        "dependsOn": [
+          "usage.before",
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "containers.build-cache",
+        "name": "Prune the build cache",
+        "target": "containers",
+        "dependsOn": [
+          "usage.before",
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "repos.catalogue",
+        "name": "Repository catalogue",
+        "target": "projects",
+        "dependsOn": []
+      },
+      {
+        "id": "branches.sweep",
+        "name": "Sweep merged branches",
+        "target": "workspaces",
+        "dependsOn": [
+          "repos.catalogue",
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "tags.sweep",
+        "name": "Decommissioned git tags",
+        "target": "projects",
+        "dependsOn": [
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects",
+          "repos.catalogue"
+        ]
+      },
+      {
+        "id": "claims.idp-clients",
+        "name": "Service-client claims",
+        "target": "deployments",
+        "dependsOn": []
+      },
+      {
+        "id": "idp.service-clients",
+        "name": "Unclaimed service clients",
+        "target": "idp",
+        "dependsOn": [
+          "claims.idp-clients",
+          "pins.deployments",
+          "pins.ci",
+          "pins.dependencies",
+          "pins.workspaces",
+          "pins.projects"
+        ]
+      },
+      {
+        "id": "artifacts.usage.after",
+        "name": "Registry store after",
+        "target": "artifacts",
+        "dependsOn": [
+          "artifacts.sweep"
+        ]
+      },
+      {
+        "id": "usage.after",
+        "name": "Disk usage after",
+        "target": "containers",
+        "dependsOn": [
+          "artifacts.sweep",
+          "containers.images",
+          "containers.volumes",
+          "containers.build-cache"
+        ]
+      }
+    ]
+  }
+]

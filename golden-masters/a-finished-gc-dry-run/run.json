@@ -1,0 +1,411 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "kind": "gc",
+  "trigger": "manual",
+  "dryRun": true,
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "summary": "usage.before SUCCEEDED (images 10 B (2 B reclaimable), build cache 4 B); artifacts.usage.before SUCCEEDED (store 10 B: oci 8 B, docs 1 B, sbom 1 B); pins.deployments SUCCEEDED (1 deployment pin across 1 application); pins.ci SUCCEEDED (qits-ci-daemon 1); pins.dependencies SUCCEEDED (0 manifest pins across 1 repository); pins.workspaces SUCCEEDED (0 workspace launch pins); pins.projects SUCCEEDED (0 project launch pins); artifacts.plan SUCCEEDED (plan executable); artifacts.sweep SKIPPED (dry run); containers.images SUCCEEDED (removed 0 images, kept 0); containers.volumes SUCCEEDED (removed 0 volumes, kept 0); containers.build-cache SUCCEEDED (reclaimed 0 B); repos.catalogue SUCCEEDED (0 repositories); branches.sweep SUCCEEDED (removed 0 of 0 branches); tags.sweep SUCCEEDED (0 tags decommissioned); claims.idp-clients SUCCEEDED (0 service-client claims); idp.service-clients SUCCEEDED (removed 0 service clients); artifacts.usage.after SUCCEEDED (store 10 B: oci 8 B, docs 1 B, sbom 1 B); usage.after SUCCEEDED (images 10 B (2 B reclaimable), build cache 4 B)",
+  "steps": [
+    {
+      "id": "usage.before",
+      "name": "Disk usage before",
+      "target": "containers",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-containers:8080/containers/api/gc/usage",
+        "body": null
+      },
+      "response": "{\"images\":{\"sizeBytes\":10,\"reclaimableBytes\":2},\"buildCache\":{\"sizeBytes\":4}}",
+      "error": null,
+      "summary": "images 10 B (2 B reclaimable), build cache 4 B"
+    },
+    {
+      "id": "artifacts.usage.before",
+      "name": "Registry store before",
+      "target": "artifacts",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-artifacts:8080/artifacts/api/store/summary",
+        "body": null
+      },
+      "response": "{\"diskTotalBytes\":10,\"ociUnionBytes\":8,\"docsBytes\":1,\"sbomBytes\":1}",
+      "error": null,
+      "summary": "store 10 B: oci 8 B, docs 1 B, sbom 1 B"
+    },
+    {
+      "id": "pins.deployments",
+      "name": "Deployment pins",
+      "target": "deployments",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-deployments:8080/deployments/api/pins",
+        "body": null
+      },
+      "response": "{\"pins\":[{\"applicationName\":\"qits-ci\",\"shas\":[\"abc\"]}]}",
+      "error": null,
+      "summary": "1 deployment pin across 1 application"
+    },
+    {
+      "id": "pins.ci",
+      "name": "CI daemon pin",
+      "target": "ci",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-ci:8080/ci/api/daemon",
+        "body": null
+      },
+      "response": "{\"daemonName\":\"qits-ci-daemon\",\"daemonVersion\":\"1\"}",
+      "error": null,
+      "summary": "qits-ci-daemon 1"
+    },
+    {
+      "id": "pins.dependencies",
+      "name": "Dependency pins",
+      "target": "maintenance",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/pins",
+        "body": null
+      },
+      "response": "{\"repositories\":[{\"name\":\"qits-ci-service\"}],\"pins\":[]}",
+      "error": null,
+      "summary": "0 manifest pins across 1 repository"
+    },
+    {
+      "id": "pins.workspaces",
+      "name": "Workspace launch pins",
+      "target": "workspaces",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-workspaces:8080/workspaces/api/pins",
+        "body": null
+      },
+      "response": "{\"pins\":[]}",
+      "error": null,
+      "summary": "0 workspace launch pins"
+    },
+    {
+      "id": "pins.projects",
+      "name": "Project launch pins",
+      "target": "projects",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-projects:8080/projects/api/pins",
+        "body": null
+      },
+      "response": "{\"pins\":[]}",
+      "error": null,
+      "summary": "0 project launch pins"
+    },
+    {
+      "id": "artifacts.plan",
+      "name": "Plan the registry collection",
+      "target": "artifacts",
+      "dependsOn": [
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-artifacts:8080/artifacts/api/gc/plan",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"summary\":{\"executable\":true}}",
+      "error": null,
+      "summary": "plan executable"
+    },
+    {
+      "id": "artifacts.sweep",
+      "name": "Sweep the registry",
+      "target": "artifacts",
+      "dependsOn": [
+        "artifacts.plan",
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SKIPPED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": null,
+      "request": null,
+      "response": null,
+      "error": "dry run",
+      "summary": null
+    },
+    {
+      "id": "containers.images",
+      "name": "Collect host images",
+      "target": "containers",
+      "dependsOn": [
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-containers:8080/containers/api/gc/images",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"removed\":[],\"kept\":[]}",
+      "error": null,
+      "summary": "removed 0 images, kept 0"
+    },
+    {
+      "id": "containers.volumes",
+      "name": "Collect orphan volumes",
+      "target": "containers",
+      "dependsOn": [
+        "usage.before",
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-containers:8080/containers/api/gc/volumes",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"removed\":[],\"kept\":[]}",
+      "error": null,
+      "summary": "removed 0 volumes, kept 0"
+    },
+    {
+      "id": "containers.build-cache",
+      "name": "Prune the build cache",
+      "target": "containers",
+      "dependsOn": [
+        "usage.before",
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-containers:8080/containers/api/gc/build-cache",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"host\":{\"reclaimedBytes\":0},\"builders\":[]}",
+      "error": null,
+      "summary": "reclaimed 0 B"
+    },
+    {
+      "id": "repos.catalogue",
+      "name": "Repository catalogue",
+      "target": "projects",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-projects:8080/projects/api/repositories",
+        "body": null
+      },
+      "response": "{\"repositories\":[]}",
+      "error": null,
+      "summary": "0 repositories"
+    },
+    {
+      "id": "branches.sweep",
+      "name": "Sweep merged branches",
+      "target": "workspaces",
+      "dependsOn": [
+        "repos.catalogue",
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-workspaces:8080/workspaces/api/gc/branches",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"dryRun\":true,\"removed\":[],\"errors\":[]}",
+      "error": null,
+      "summary": "removed 0 of 0 branches"
+    },
+    {
+      "id": "tags.sweep",
+      "name": "Decommissioned git tags",
+      "target": "projects",
+      "dependsOn": [
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects",
+        "repos.catalogue"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-projects:8080/projects/api/gc/tags",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"dryRun\":true,\"deleted\":[],\"errors\":[]}",
+      "error": null,
+      "summary": "0 tags decommissioned"
+    },
+    {
+      "id": "claims.idp-clients",
+      "name": "Service-client claims",
+      "target": "deployments",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-deployments:8080/deployments/api/claims/idp-clients",
+        "body": null
+      },
+      "response": "{\"claims\":[]}",
+      "error": null,
+      "summary": "0 service-client claims"
+    },
+    {
+      "id": "idp.service-clients",
+      "name": "Unclaimed service clients",
+      "target": "idp",
+      "dependsOn": [
+        "claims.idp-clients",
+        "pins.deployments",
+        "pins.ci",
+        "pins.dependencies",
+        "pins.workspaces",
+        "pins.projects"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-idp:8080/idp/api/gc/service-clients",
+        "body": "{\"dryRun\":true}"
+      },
+      "response": "{\"dryRun\":true,\"removed\":[],\"kept\":[]}",
+      "error": null,
+      "summary": "removed 0 service clients"
+    },
+    {
+      "id": "artifacts.usage.after",
+      "name": "Registry store after",
+      "target": "artifacts",
+      "dependsOn": [
+        "artifacts.sweep"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-artifacts:8080/artifacts/api/store/summary",
+        "body": null
+      },
+      "response": "{\"diskTotalBytes\":10,\"ociUnionBytes\":8,\"docsBytes\":1,\"sbomBytes\":1}",
+      "error": null,
+      "summary": "store 10 B: oci 8 B, docs 1 B, sbom 1 B"
+    },
+    {
+      "id": "usage.after",
+      "name": "Disk usage after",
+      "target": "containers",
+      "dependsOn": [
+        "artifacts.sweep",
+        "containers.images",
+        "containers.volumes",
+        "containers.build-cache"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-containers:8080/containers/api/gc/usage",
+        "body": null
+      },
+      "response": "{\"images\":{\"sizeBytes\":10,\"reclaimableBytes\":2},\"buildCache\":{\"sizeBytes\":4}}",
+      "error": null,
+      "summary": "images 10 B (2 B reclaimable), build cache 4 B"
+    }
+  ]
+}

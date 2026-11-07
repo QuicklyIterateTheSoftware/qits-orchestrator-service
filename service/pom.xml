@@ -164,6 +164,14 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- contracts/ConsumerPactVerificationTest: verifies the consumer pacts this provider
+                 pins. None is pinned yet (qits-1933), so today it verifies nothing. -->
+            <groupId>au.com.dius.pact.provider</groupId>
+            <artifactId>junit5</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- The user-story framework: ten @UserStory methods across five IT classes, so the
                  gate-on packaged proofs double as documentation — steps, notes and an observed
                  network diagram each, emitted under target/userstories/. Every story is browserless

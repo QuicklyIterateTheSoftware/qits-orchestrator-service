@@ -1,0 +1,106 @@
+{
+  "formatVersion": 1,
+  "provider": "qits-orchestrator",
+  "states": [
+    {
+      "name": "a finished gc dry run",
+      "slug": "a-finished-gc-dry-run",
+      "params": {
+        "kind": "gc",
+        "runId": "00000000-0000-4000-8000-000000000001"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "run",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}",
+          "status": 200,
+          "file": "a-finished-gc-dry-run/run.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt",
+              "$.steps[*].startedAt",
+              "$.steps[*].finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "runs",
+          "method": "GET",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "status": 200,
+          "file": "a-finished-gc-dry-run/runs.json",
+          "frozen": {
+            "ids": [
+              "$[*].id"
+            ],
+            "instants": [
+              "$[*].startedAt",
+              "$[*].finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": "$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "no active gc run",
+      "slug": "no-active-gc-run",
+      "params": {
+        "kind": "gc"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "start",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": true
+          },
+          "status": 202,
+          "file": "no-active-gc-run/start.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the gc process",
+      "slug": "the-gc-process",
+      "params": {
+        "kind": "gc"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "processes",
+          "method": "GET",
+          "path": "/orchestrator/api/processes",
+          "status": 200,
+          "file": "the-gc-process/processes.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    }
+  ]
+}
