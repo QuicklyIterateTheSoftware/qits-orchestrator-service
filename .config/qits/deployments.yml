@@ -84,6 +84,15 @@ navigation-entries: system.Orchestrator:3
 # Ticket qits-162, epic qits-540 contract C3.
 resources: postgresql:db:qits_platform_orchestrator, postgresql:eventstream:qits_platform_orchestrator_eventstream, idp:client
 
+# PRIVATE (qits-1980, task qits-2124): served by qits-edge-private only, reached through the
+# WireGuard tunnel or the qits-private overlay; the public edge answers 404 for orchestrator. Nothing
+# calls this service server-side. It moves before the services it reads, because it drives artifacts
+# gc with their pins: on qits-private, with the private edge as first resolver (qits-2117), its
+# calls to deployments, ci, maintenance, workspaces and projects keep resolving once those go
+# private, while registry and idp still resolve to the public edge. Its database is reachable here
+# because qits-oci-postgresql is on both networks (qits-2122). Revert: delete this line.
+exposure: private
+
 # The readiness endpoint the deployer's health gate curls. The convention derives it from the
 # repository name and would land on exactly this path; it is written out because a probe that 404s
 # fails a deployment for a reason nobody would look for in a config file.
