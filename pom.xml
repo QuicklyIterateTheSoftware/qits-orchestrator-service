@@ -84,7 +84,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces and
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1109.164031</qits.eventstream.version>
+        <qits.eventstream.version>2026.1110.232501</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
@@ -108,12 +108,12 @@
              pin. The pact-jvm version comes with qits-pact-consumer. -->
         <qits.pact-consumer.version>2026.1106.507</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1019.103940</qits.containers-golden-masters.version>
-        <qits.artifacts-golden-masters.version>2026.1109.145731</qits.artifacts-golden-masters.version>
-        <qits.deployments-golden-masters.version>2026.1109.191811</qits.deployments-golden-masters.version>
+        <qits.artifacts-golden-masters.version>2026.1111.62703</qits.artifacts-golden-masters.version>
+        <qits.deployments-golden-masters.version>2026.1111.21132</qits.deployments-golden-masters.version>
         <qits.ci-golden-masters.version>2026.1109.132507</qits.ci-golden-masters.version>
-        <qits.maintenance-golden-masters.version>2026.1108.232519</qits.maintenance-golden-masters.version>
-        <qits.workspaces-golden-masters.version>2026.1109.230415</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1110.31824</qits.projects-golden-masters.version>
+        <qits.maintenance-golden-masters.version>2026.1112.35408</qits.maintenance-golden-masters.version>
+        <qits.workspaces-golden-masters.version>2026.1111.70514</qits.workspaces-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1112.114615</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
