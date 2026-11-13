@@ -89,8 +89,11 @@ resources: postgresql:db:qits_platform_orchestrator, postgresql:eventstream:qits
 # calls this service server-side. It moves before the services it reads, because it drives artifacts
 # gc with their pins: on qits-private, with the private edge as first resolver (qits-2117), its
 # calls to deployments, ci, maintenance, workspaces and projects keep resolving once those go
-# private, while registry and idp still resolve to the public edge. Its database is reachable here
-# because qits-oci-postgresql is on both networks (qits-2122). Revert: delete this line.
+# private, while registry and idp still resolve to the public edge. Its databases live on the
+# private Postgres, qits-oci-postgresql-private, which sits on qits-private alone: a private
+# exposure puts them there (qits-2175), and they moved on 2026-11-13 (qits-2174, task qits-2187).
+# Nothing it uses is on qits-net. Revert: delete this line, which moves the databases back to the
+# public server with the service.
 exposure: private
 
 # The readiness endpoint the deployer's health gate curls. The convention derives it from the
