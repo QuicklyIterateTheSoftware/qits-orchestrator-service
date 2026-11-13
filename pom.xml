@@ -61,7 +61,7 @@
              .qits-maven-settings.xml. -->
         <qits.db-core.version>2026.1107.191249</qits.db-core.version>
         <qits.auth-core.version>2026.1106.507</qits.auth-core.version>
-        <qits.arch-rules.version>2026.1108.20205</qits.arch-rules.version>
+        <qits.arch-rules.version>2026.1113.14706</qits.arch-rules.version>
         <!-- Service-to-service HTTP that says who is calling: QitsHttpClients.wrap turns a raw
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
              X-Qits-Caller; the server filter (jandex-discovered off this jar alone) records an
@@ -110,10 +110,10 @@
         <qits.containers-golden-masters.version>2026.1019.103940</qits.containers-golden-masters.version>
         <qits.artifacts-golden-masters.version>2026.1111.62703</qits.artifacts-golden-masters.version>
         <qits.deployments-golden-masters.version>2026.1111.21132</qits.deployments-golden-masters.version>
-        <qits.ci-golden-masters.version>2026.1109.132507</qits.ci-golden-masters.version>
+        <qits.ci-golden-masters.version>2026.1113.31502</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1112.35408</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1111.70514</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1112.114615</qits.projects-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1113.65138</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
