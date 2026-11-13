@@ -1,5 +1,5 @@
 {
-  "formatVersion" : 1,
+  "formatVersion" : 2,
   "application" : "qits-orchestrator",
   "entities" : [
     {
@@ -35,14 +35,16 @@
           "method" : "GET",
           "path" : "/processes/{kind}/runs",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
-          "kind" : "returns"
+          "kind" : "returns",
+          "cardinality" : "collection"
         },
         {
           "operationId" : "RunController.run",
           "method" : "GET",
           "path" : "/runs/{id}",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
-          "kind" : "returns"
+          "kind" : "returns",
+          "cardinality" : "single"
         }
       ]
     },
@@ -79,7 +81,8 @@
           "method" : "GET",
           "path" : "/runs/{id}",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
-          "kind" : "returns"
+          "kind" : "returns",
+          "cardinality" : "collection"
         }
       ]
     }
