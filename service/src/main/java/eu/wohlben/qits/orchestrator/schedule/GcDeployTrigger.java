@@ -1,5 +1,6 @@
 package eu.wohlben.qits.orchestrator.schedule;
 
+import eu.wohlben.qits.orchestrator.error.RepositorySweepInFlightException;
 import eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException;
 import eu.wohlben.qits.orchestrator.process.gc.GcConfig;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
@@ -141,6 +142,14 @@ public class GcDeployTrigger {
       LOG.debugf(
           "A gc run is still active (%s); this wave's run is re-armed for %s from now.",
           active.activeRunId(), config.deployTriggerQuietPeriod());
+      arm(config.deployTriggerQuietPeriod());
+    } catch (RepositorySweepInFlightException sweeping) {
+      // The same re-arm, for the other deleter (qits-2138): an artifacts cleanup sweep is answering,
+      // and this wave's run follows it rather than overlapping it.
+      LOG.debugf(
+          "An artifacts cleanup sweep of %s is in flight; this wave's run is re-armed for %s from"
+              + " now.",
+          sweeping.repository(), config.deployTriggerQuietPeriod());
       arm(config.deployTriggerQuietPeriod());
     } catch (RuntimeException e) {
       // A store that will not answer, or a bug. A background trigger's failure is a line in the log

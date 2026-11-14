@@ -10,7 +10,8 @@ import java.util.Set;
 /**
  * Parity between {@code qits:admin-agent} and {@code qits:desk-admin} over this module's doors
  * (epic qits-1621, the task "qits-orchestrator-service: admit qits:desk-admin wherever
- * qits:admin-agent is"): {@link RunController} and {@link ProcessController}. The epic's
+ * qits:admin-agent is"): {@link RunController}, {@link ProcessController} and, since qits-2138,
+ * {@link ArtifactsCleanupController}. The epic's
  * "Inventory" dossier page records no refusal for this service, so the refusal set is empty:
  * every route admitting {@code qits:admin-agent} here must also admit {@code qits:desk-admin}.
  */

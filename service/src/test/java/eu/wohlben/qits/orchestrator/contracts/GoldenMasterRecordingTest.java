@@ -49,9 +49,11 @@ import org.junit.jupiter.api.Test;
  * is filtered to the state's own run ({@code frozen.listFilteredTo}), whatever else the database
  * holds.
  *
- * <p><b>Operation ids</b> are the Java method names, which is what the served OpenAPI would derive:
- * neither controller declares an {@code operationId}, and the platform matches an index entry to
- * the OpenAPI by method and path. Renaming one here is a contract change all the same.
+ * <p><b>Operation ids</b> are the Java method names for {@code ProcessController} and {@code
+ * RunController}, which is what the served OpenAPI would derive: neither declares an {@code
+ * operationId}. {@code ArtifactsCleanupController} declares its three (ticket qits-2138), and they
+ * are recorded as declared. The platform matches an index entry to the OpenAPI by method and path.
+ * Renaming one here is a contract change all the same.
  *
  * <p><b>It leaves no run RUNNING.</b> Recording {@code start} launches a real (dry) run on the
  * executor against {@link eu.wohlben.qits.orchestrator.peer.FakePeers}; every interaction ends by
@@ -123,6 +125,31 @@ class GoldenMasterRecordingTest {
               "/orchestrator/api/processes/{kind}/runs",
               "{\"dryRun\": true}",
               202,
+              null),
+          // The artifacts cleanup doors (ticket qits-2138): qits-artifacts' answers, handed on.
+          new Interaction(
+              ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
+              "listArtifactsCleanupRepositories",
+              "GET",
+              "/orchestrator/api/artifacts/repositories",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
+              "planArtifactsCleanupRepository",
+              "GET",
+              "/orchestrator/api/artifacts/repositories/{repository}/plan",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
+              "sweepArtifactsCleanupRepository",
+              "POST",
+              "/orchestrator/api/artifacts/repositories/{repository}/sweep",
+              null,
+              200,
               null));
 
   private static final ObjectMapper JSON = new ObjectMapper();

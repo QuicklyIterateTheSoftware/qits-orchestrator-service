@@ -135,4 +135,9 @@ class ConsumerPactVerificationTest {
   Map<String, String> noActiveGcRun() {
     return states.params(ProviderStates.NO_ACTIVE_GC_RUN);
   }
+
+  @State(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN)
+  Map<String, String> aRepositoryTheCleanupCanPlan() {
+    return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN);
+  }
 }

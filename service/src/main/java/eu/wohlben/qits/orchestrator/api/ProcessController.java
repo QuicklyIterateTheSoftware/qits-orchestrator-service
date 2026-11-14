@@ -96,7 +96,9 @@ public class ProcessController {
    * while the run is RUNNING.
    *
    * <p><b>409 while a run of that kind is active.</b> Two runs overlapping would compute two pin
-   * sets at two moments and hand each to a deleter the other is also driving.
+   * sets at two moments and hand each to a deleter the other is also driving. A gc run is refused
+   * the same way while an artifacts cleanup sweep is in flight ({@link ArtifactsCleanupController},
+   * ticket qits-2138), for the same reason.
    *
    * @param request {@code {"dryRun": true}} to plan without deleting. A missing body is a real run —
    *     the same default the scheduled trigger has.
@@ -106,7 +108,10 @@ public class ProcessController {
   @Operation(summary = "Start a run of this process")
   @APIResponse(responseCode = "202", description = "Started; poll GET /runs/{id}")
   @APIResponse(responseCode = "404", description = "No process of that kind")
-  @APIResponse(responseCode = "409", description = "A run of that kind is already active")
+  @APIResponse(
+      responseCode = "409",
+      description =
+          "A run of that kind is already active, or (gc) an artifacts cleanup sweep is in flight")
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
   public Response start(@PathParam("kind") String kind, StartRunRequest request) {
     boolean dryRun = request != null && request.dryRun();

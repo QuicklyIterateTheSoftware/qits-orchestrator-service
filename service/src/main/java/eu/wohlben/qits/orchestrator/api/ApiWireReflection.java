@@ -19,6 +19,10 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
  * <p>Some of these types happen to be reachable today through a declared return type; they are all
  * listed anyway, because which ones the analysis finds is an implementation detail no test guards.
  *
+ * <p>{@link ArtifactsCleanupController} adds nothing here: it answers qits-artifacts' text as a
+ * {@code String} and its own 502 as a {@code Map}, neither of which needs registering (ticket
+ * qits-2138).
+ *
  * <p><b>A new response type joins this list in the commit that adds it.</b>
  */
 @RegisterForReflection(

@@ -52,6 +52,63 @@
       ]
     },
     {
+      "name": "a repository the cleanup can plan",
+      "slug": "a-repository-the-cleanup-can-plan",
+      "params": {
+        "repository": "daemons"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "listArtifactsCleanupRepositories",
+          "method": "GET",
+          "path": "/orchestrator/api/artifacts/repositories",
+          "status": 200,
+          "file": "a-repository-the-cleanup-can-plan/listArtifactsCleanupRepositories.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.generatedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "planArtifactsCleanupRepository",
+          "method": "GET",
+          "path": "/orchestrator/api/artifacts/repositories/{repository}/plan",
+          "status": 200,
+          "file": "a-repository-the-cleanup-can-plan/planArtifactsCleanupRepository.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.generatedAt",
+              "$.pins[*].readAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "sweepArtifactsCleanupRepository",
+          "method": "POST",
+          "path": "/orchestrator/api/artifacts/repositories/{repository}/sweep",
+          "status": 200,
+          "file": "a-repository-the-cleanup-can-plan/sweepArtifactsCleanupRepository.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.executedAt",
+              "$.pins[*].readAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
       "name": "no active gc run",
       "slug": "no-active-gc-run",
       "params": {

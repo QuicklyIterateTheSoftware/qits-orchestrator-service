@@ -2,6 +2,241 @@
 # Run `./mvnw -pl service -am test -Dtest=OpenApiSchemaExportTest -Dsurefire.failIfNoSpecifiedTests=false -Dgolden.update=true` to regenerate.
 ---
 openapi: 3.1.0
+paths:
+  /orchestrator/api/artifacts/repositories:
+    get:
+      summary: "Every artifacts repository, with what a collection would reclaim"
+      description: Reads the platform's pins and hands them to qits-artifacts' POST
+        /artifacts/api/gc/repositories; its answer is returned verbatim.
+      operationId: listArtifactsCleanupRepositories
+      responses:
+        "200":
+          description: qits-artifacts' repository listing
+          content:
+            application/json:
+              schema: {}
+        "502":
+          description: qits-artifacts could not be asked
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Artifacts Cleanup Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/artifacts/repositories/{repository}/plan:
+    get:
+      summary: One artifacts repository's collection plan; nothing is deleted
+      description: "Reads the platform's pins and hands them to qits-artifacts' POST\
+        \ /artifacts/api/gc/repositories/{repository}/plan; its answer is returned\
+        \ verbatim."
+      operationId: planArtifactsCleanupRepository
+      parameters:
+      - name: repository
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: qits-artifacts' plan for the repository
+          content:
+            application/json:
+              schema: {}
+        "404":
+          description: qits-artifacts has no such repository
+        "502":
+          description: qits-artifacts could not be asked
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Artifacts Cleanup Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/artifacts/repositories/{repository}/sweep:
+    post:
+      summary: Sweep one artifacts repository
+      description: "Reads the platform's pins and hands them to qits-artifacts' POST\
+        \ /artifacts/api/gc/repositories/{repository}/sweep; its receipt is returned\
+        \ verbatim. Refused while a gc run is active, and no gc run starts while it\
+        \ is in flight."
+      operationId: sweepArtifactsCleanupRepository
+      parameters:
+      - name: repository
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: qits-artifacts' sweep receipt
+          content:
+            application/json:
+              schema: {}
+        "404":
+          description: qits-artifacts has no such repository
+        "409":
+          description: A gc run is active
+        "502":
+          description: qits-artifacts could not be asked
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Artifacts Cleanup Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/processes:
+    get:
+      summary: "Every technical process, with its steps and their dependencies"
+      responses:
+        "200":
+          description: The processes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProcessDto"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Process Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/processes/{kind}/runs:
+    post:
+      summary: Start a run of this process
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRunRequest"
+        required: true
+      responses:
+        "202":
+          description: "Started; poll GET /runs/{id}"
+        "404":
+          description: No process of that kind
+        "409":
+          description: "A run of that kind is already active, or (gc) an artifacts\
+            \ cleanup sweep is in flight"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      tags:
+      - Process Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+    get:
+      summary: "One process's runs, newest first"
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: The runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RunSummaryDto"
+        "404":
+          description: No process of that kind
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Process Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/runs/{id}:
+    get:
+      summary: One run with its steps
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunDetailDto"
+        "404":
+          description: No such run
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Run Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
 components:
   schemas:
     Instant:
@@ -130,138 +365,6 @@ components:
       type: openIdConnect
       openIdConnectUrl: http://dev-qits-idp:8080/idp/.well-known/openid-configuration
       description: Authentication
-paths:
-  /orchestrator/api/processes:
-    get:
-      summary: "Every technical process, with its steps and their dependencies"
-      responses:
-        "200":
-          description: The processes
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ProcessDto"
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-      tags:
-      - Process Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
-  /orchestrator/api/processes/{kind}/runs:
-    post:
-      summary: Start a run of this process
-      parameters:
-      - name: kind
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StartRunRequest"
-        required: true
-      responses:
-        "202":
-          description: "Started; poll GET /runs/{id}"
-        "404":
-          description: No process of that kind
-        "409":
-          description: A run of that kind is already active
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-        "400":
-          description: Bad Request
-      tags:
-      - Process Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
-    get:
-      summary: "One process's runs, newest first"
-      parameters:
-      - name: kind
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: limit
-        in: query
-        schema:
-          type: integer
-          format: int32
-          default: 20
-      responses:
-        "200":
-          description: The runs
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/RunSummaryDto"
-        "404":
-          description: No process of that kind
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-      tags:
-      - Process Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
-  /orchestrator/api/runs/{id}:
-    get:
-      summary: One run with its steps
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          description: The run
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunDetailDto"
-        "404":
-          description: No such run
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-      tags:
-      - Run Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
 info:
   title: qits-platform-orchestrator API
   version: 2026.1106.173839

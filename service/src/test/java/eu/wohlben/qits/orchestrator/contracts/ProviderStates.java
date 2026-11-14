@@ -49,6 +49,10 @@ public class ProviderStates {
   public static final String THE_GC_PROCESS = "the gc process";
   public static final String A_FINISHED_GC_DRY_RUN = "a finished gc dry run";
   public static final String NO_ACTIVE_GC_RUN = "no active gc run";
+  public static final String A_REPOSITORY_THE_CLEANUP_CAN_PLAN = "a repository the cleanup can plan";
+
+  /** The repository {@link #A_REPOSITORY_THE_CLEANUP_CAN_PLAN} plans and sweeps. */
+  static final String CLEANUP_REPOSITORY = "daemons";
 
   /** When the seeded run opened; every step and the close are offsets from it. */
   static final Instant SEEDED_START = Instant.parse("2026-10-01T03:00:00Z");
@@ -85,6 +89,7 @@ public class ProviderStates {
     states.put(THE_GC_PROCESS, this::theGcProcess);
     states.put(A_FINISHED_GC_DRY_RUN, this::aFinishedGcDryRun);
     states.put(NO_ACTIVE_GC_RUN, this::noActiveGcRun);
+    states.put(A_REPOSITORY_THE_CLEANUP_CAN_PLAN, this::aRepositoryTheCleanupCanPlan);
   }
 
   /** Every state name this provider answers for. */
@@ -292,6 +297,60 @@ public class ProviderStates {
                 + "\"kept\":[{\"clientId\":\"dev-qits-ci\",\"reason\":\"claimed\"}],"
                 + "\"keptCounts\":{\"claimed\":1,\"grace\":0,\"caller\":0}}"));
     return params(Map.of("kind", GcProcess.KIND));
+  }
+
+  /**
+   * The artifacts cleanup doors' state (ticket qits-2138): no gc run RUNNING, the five pin sources
+   * answering, and qits-artifacts' three supplied-pins doors answering for the repository {@code
+   * daemons} — so {@code GET /artifacts/repositories}, {@code GET
+   * /artifacts/repositories/daemons/plan} and {@code POST /artifacts/repositories/daemons/sweep}
+   * answer 200 with qits-artifacts' text. Its param is the {@code repository}.
+   *
+   * <p><b>qits-artifacts' answers are its own golden masters</b>, copied verbatim into {@code
+   * src/test/resources/contracts/artifacts-cleanup/} from its state {@code a repository with
+   * unpinned identities} (qits-artifacts-service 858f107): the doors hand qits-artifacts' text on
+   * untouched, so what a consumer of these doors pacts against is exactly what qits-artifacts
+   * recorded. A copy rather than the published jar, because the service module does not carry
+   * qits-artifacts' golden masters and the pinned version predates the three operations. When
+   * qits-artifacts re-records them, copy them again.
+   */
+  private Setup aRepositoryTheCleanupCanPlan() {
+    awaitNoActiveGcRun();
+    peers.reset();
+    peers.answer(
+        "/deployments/api/pins",
+        FakePeers.Scripted.ok("{\"pins\":[{\"applicationName\":\"qits-ci\",\"shas\":[\"abc\"]}]}"));
+    peers.answer(
+        "/ci/api/daemon",
+        FakePeers.Scripted.ok("{\"daemonName\":\"qits-ci-daemon\",\"daemonVersion\":\"1\"}"));
+    peers.answer(
+        "/maintenance/api/pins",
+        FakePeers.Scripted.ok("{\"repositories\":[{\"name\":\"qits-ci-service\"}],\"pins\":[]}"));
+    peers.answer("/workspaces/api/pins", FakePeers.Scripted.ok("{\"pins\":[]}"));
+    peers.answer("/projects/api/pins", FakePeers.Scripted.ok("{\"pins\":[]}"));
+    peers.answer(
+        "/artifacts/api/gc/repositories",
+        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoriesWithSuppliedPins")));
+    peers.answer(
+        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/plan",
+        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoryWithSuppliedPins")));
+    peers.answer(
+        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/sweep",
+        FakePeers.Scripted.ok(artifactsAnswer("sweepGcRepository")));
+    return params(Map.of("repository", CLEANUP_REPOSITORY));
+  }
+
+  /** One of qits-artifacts' recorded answers, as the copy under {@code contracts/} holds it. */
+  private static String artifactsAnswer(String operationId) {
+    String resource = "/contracts/artifacts-cleanup/" + operationId + ".json";
+    try (java.io.InputStream in = ProviderStates.class.getResourceAsStream(resource)) {
+      if (in == null) {
+        throw new IllegalStateException("no " + resource + " on the test classpath");
+      }
+      return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    } catch (java.io.IOException e) {
+      throw new java.io.UncheckedIOException(e);
+    }
   }
 
   private static Setup params(Map<String, String> params) {

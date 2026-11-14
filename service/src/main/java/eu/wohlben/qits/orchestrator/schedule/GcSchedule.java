@@ -1,5 +1,6 @@
 package eu.wohlben.qits.orchestrator.schedule;
 
+import eu.wohlben.qits.orchestrator.error.RepositorySweepInFlightException;
 import eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException;
 import eu.wohlben.qits.orchestrator.process.gc.GcConfig;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
@@ -59,6 +60,12 @@ public class GcSchedule {
       // The ordinary case for a long run, not a fault: the last one is still going, and starting a
       // second would plan against a store the first is emptying.
       LOG.infof("A gc run is still active (%s); this schedule is skipped.", active.activeRunId());
+    } catch (RepositorySweepInFlightException sweeping) {
+      // The same skip, for the other deleter (qits-2138): a person's artifacts cleanup sweep is
+      // answering, and a run beside it would judge against a store it is emptying.
+      LOG.infof(
+          "An artifacts cleanup sweep of %s is in flight; this schedule is skipped.",
+          sweeping.repository());
     } catch (RuntimeException e) {
       // A background chore's failure is a line in the log and a retry on the next schedule, never a
       // dead scheduler thread or a service that stops answering.

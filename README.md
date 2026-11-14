@@ -202,6 +202,29 @@ GET  /runs/{id}                      → the run above, plus
 - `POST` answers 202 and does not wait. A gc run is minutes of somebody else's pruning; the client
   polls `GET /runs/{id}` every two seconds while it is `RUNNING`.
 
+### The artifacts cleanup doors (qits-2138)
+
+qits-artifacts' per-repository cleanup UI judges every repository against the platform's pin set,
+and the five services that answer it are private while qits-artifacts is public, so it cannot read
+them. These doors read the pins exactly as a gc run's `pins.*` steps do (`process/gc/GcPins`, one
+copy for both: same peers, same keep-set judgement, same 503 retry, an unreadable source ABSENT
+from the body) and hand them to qits-artifacts' supplied-pins door of the same name. The answer is
+qits-artifacts' status and body verbatim; only a qits-artifacts that could not be asked is this
+service's `502 {"message"}`. The roles are `POST /processes/{kind}/runs`' five.
+
+```
+GET  /artifacts/repositories                     → POST /artifacts/api/gc/repositories {pins}
+GET  /artifacts/repositories/{repository}/plan   → POST /artifacts/api/gc/repositories/{repository}/plan {pins}
+POST /artifacts/repositories/{repository}/sweep  → POST /artifacts/api/gc/repositories/{repository}/sweep {pins}
+                                                   409 while a gc run is active
+```
+
+**A sweep and a gc run never overlap** (`process/gc/GcExclusion`): the sweep is refused while a gc
+run is active, and a gc run — manual, scheduled or deploy-triggered — is refused with a 409 (`a
+repository sweep is in flight: <repository>`) while a sweep is answering; the schedule skips and the
+deploy trigger re-arms, as they do for an active run. The two reads take no lock. Each sweep writes
+one INFO line: the repository, the caller, and the receipt's totals.
+
 The document is at `/orchestrator/q/openapi`, the browsable UI at `/orchestrator/q/swagger-ui`, and
 readiness at `/orchestrator/q/health/ready`. **The client is served at `/` on this service's own
 host, `orchestrator.<env>.<domain>`.** The machine surface keeps its segment and is path-routed on
