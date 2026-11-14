@@ -537,6 +537,375 @@
         "status": 200
       },
       "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "planGcRepositoriesWithSuppliedPins"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "operation",
+            "operationId": "listArtifactsCleanupRepositories"
+          }
+        }
+      },
+      "description": "listArtifactsCleanupRepositories: planGcRepositoriesWithSuppliedPins",
+      "key": "4db4d552",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a repository with unpinned identities",
+          "params": {
+            "daemon": "contract-daemon",
+            "repository": "daemons"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "maven",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/repositories"
+      },
+      "response": {
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "planGcRepositoryWithSuppliedPins"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "operation",
+            "operationId": "planArtifactsCleanupRepository"
+          }
+        }
+      },
+      "description": "planArtifactsCleanupRepository: planGcRepositoryWithSuppliedPins",
+      "key": "d16da377",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a repository with unpinned identities",
+          "params": {
+            "daemon": "contract-daemon",
+            "repository": "daemons"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "maven",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "generators": {
+          "path": {
+            "dataType": "RAW",
+            "expression": "/artifacts/api/gc/repositories/${repository}/plan",
+            "type": "ProviderState"
+          }
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/repositories/daemons/plan"
+      },
+      "response": {
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-artifacts-service",
+            "operationId": "sweepGcRepository"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "operation",
+            "operationId": "sweepArtifactsCleanupRepository"
+          }
+        }
+      },
+      "description": "sweepArtifactsCleanupRepository: sweepGcRepository",
+      "key": "c16d6f9",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a repository with unpinned identities",
+          "params": {
+            "daemon": "contract-daemon",
+            "repository": "daemons"
+          }
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "pins": {
+              "ciDaemon": {
+                "daemonName": "qits-ci-daemon",
+                "daemonVersion": "2026.805.1",
+                "previousDaemonVersion": "",
+                "source": "adopted"
+              },
+              "dependencies": {
+                "generatedAt": "2026-09-04T20:00:00Z",
+                "pins": [
+                  {
+                    "ecosystem": "maven",
+                    "manifestPath": "pom.xml",
+                    "name": "eu.wohlben.qits:qits-blobstore",
+                    "repository": "qits-githost-service",
+                    "version": "2026.903.85122"
+                  }
+                ],
+                "repositories": [
+                  {
+                    "name": "qits-githost-service",
+                    "status": "OK"
+                  }
+                ]
+              },
+              "deployments": {
+                "pins": [
+                  {
+                    "applicationName": "qits-artifacts",
+                    "shas": [
+                      "aaaa",
+                      "bbbb"
+                    ]
+                  }
+                ]
+              },
+              "projectLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/project-agent",
+                    "launches": "agent",
+                    "version": "2026.903.090000"
+                  }
+                ]
+              },
+              "workspaceLaunches": {
+                "generatedAt": "2026-09-05T06:00:00Z",
+                "pins": [
+                  {
+                    "image": "qits/workspace",
+                    "launches": "workspace",
+                    "version": "2026.903.120000"
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "generators": {
+          "path": {
+            "dataType": "RAW",
+            "expression": "/artifacts/api/gc/repositories/${repository}/sweep",
+            "type": "ProviderState"
+          }
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/artifacts/api/gc/repositories/daemons/sweep"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "sweep": {
+              "blobsUnlinked": 0,
+              "bytesReclaimed": 0
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.sweep.blobsUnlinked": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.sweep.bytesReclaimed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
     }
   ],
   "metadata": {
