@@ -171,6 +171,19 @@ class ArtifactsCleanupApiTest {
   }
 
   @Test
+  void qitsArtifactsRefusingThisServicesCredentialIsA502NotTheCallersRefusal() {
+    peers.answer(
+        "/artifacts/api/gc/repositories/daemons/plan",
+        FakePeers.Scripted.status(403, "{\"message\":\"forbidden\"}"));
+    given()
+        .when()
+        .get(BASE + "/daemons/plan")
+        .then()
+        .statusCode(502)
+        .body("message", containsString("refused qits-orchestrator's own credential with 403"));
+  }
+
+  @Test
   void qitsArtifactsThatCannotBeAskedIsA502() {
     peers.answer(
         "/artifacts/api/gc/repositories", FakePeers.Scripted.unreachable("qits-artifacts: no route"));

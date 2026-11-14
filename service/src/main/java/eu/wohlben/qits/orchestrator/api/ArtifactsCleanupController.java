@@ -118,6 +118,14 @@ public class ArtifactsCleanupController {
           "qits-artifacts could not be asked: "
               + (answer.error() == null ? exchange.call().url() + " gave no answer" : answer.error()));
     }
+    if (answer.httpStatus() == 401 || answer.httpStatus() == 403) {
+      // qits-artifacts refusing THIS service's own bearer is this service's fault, not the
+      // caller's: handed on verbatim, a browser would read it as its own session failing.
+      return badGateway(
+          exchange.call().url()
+              + " refused qits-orchestrator's own credential with "
+              + answer.httpStatus());
+    }
     if (answer.truncated()) {
       return badGateway(
           exchange.call().url()
