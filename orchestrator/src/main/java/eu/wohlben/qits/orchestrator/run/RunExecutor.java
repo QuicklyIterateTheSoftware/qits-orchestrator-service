@@ -9,6 +9,7 @@ import eu.wohlben.qits.orchestrator.process.SkipKind;
 import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
+import eu.wohlben.qits.orchestrator.process.gc.GcExclusion;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -75,6 +76,8 @@ public class RunExecutor {
 
   @Inject PeerClient peers;
 
+  @Inject GcExclusion exclusion;
+
   /**
    * The one worker. A daemon thread with a name, so a stuck run is identifiable in a thread dump
    * and a JVM shutting down is not held open by a prune somebody else is still doing.
@@ -106,12 +109,20 @@ public class RunExecutor {
    *
    * @return the run id, which the route answers with a 202
    * @throws NoSuchProcessException the kind is not registered — a 404
+   * <p><b>A gc run is opened through {@link GcExclusion}</b> (ticket qits-2138), so it is refused
+   * while an artifacts cleanup sweep is in flight — the one place every trigger passes, manual,
+   * scheduled and deploy-triggered alike.
+   *
    * @throws eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException one is already going — 409
+   * @throws eu.wohlben.qits.orchestrator.error.RepositorySweepInFlightException a gc run, while a
+   *     repository sweep is in flight — 409
    */
   public UUID start(String kind, RunTrigger trigger, boolean dryRun) {
     TechnicalProcess process =
         registry.byKind(kind).orElseThrow(() -> new NoSuchProcessException(kind));
-    UUID runId = runs.open(kind, trigger, dryRun, process.steps(), Instant.now());
+    UUID runId =
+        exclusion.opening(
+            kind, () -> runs.open(kind, trigger, dryRun, process.steps(), Instant.now()));
     worker.execute(() -> execute(process, runId, dryRun));
     return runId;
   }

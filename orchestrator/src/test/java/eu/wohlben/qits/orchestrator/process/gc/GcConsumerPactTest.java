@@ -181,6 +181,40 @@ class GcConsumerPactTest {
                     () -> Assumptions.abort(row.reason())));
   }
 
+  /**
+   * The artifacts cleanup doors' calls (ticket qits-2138, {@link GcContract#CLEANUP}): each door,
+   * with the five pins answering the recorded request's members, must send qits-artifacts exactly
+   * the recorded request and get the recorded status back. A row whose operation the pinned golden
+   * masters do not record yet is reported skipped with what it needs, the same shape as {@link
+   * #everyPendingRowWaitsForItsProviderState}, and switches itself on with the pin bump.
+   */
+  @TestFactory
+  Stream<DynamicTest> everyCleanupDoorAsksWhatQitsArtifactsRecorded() {
+    return GcContract.CLEANUP.stream()
+        .map(
+            row ->
+                DynamicTest.dynamicTest(
+                    row.door() + " -> " + GcContract.ARTIFACTS.repository() + " "
+                        + row.interaction().operationId(),
+                    () -> {
+                      if (!GcContract.recorded(row)) {
+                        Assumptions.abort(
+                            GcContract.pact(PeerTarget.ARTIFACTS).needs(row.interaction()));
+                      }
+                      GcContract.pact(PeerTarget.ARTIFACTS)
+                          .run(
+                              row.interaction(),
+                              (url, recorded) -> {
+                                var exchange =
+                                    GcContract.runCleanup(row, ContractPeers.against(url));
+                                assertEquals(
+                                    recorded.status(),
+                                    exchange.answer().httpStatus(),
+                                    String.valueOf(exchange.answer().error()));
+                              });
+                    }));
+  }
+
   @TestFactory
   Stream<DynamicTest> theCommittedPactsAreWhatTheRowsWrite() {
     return TARGETS.stream()

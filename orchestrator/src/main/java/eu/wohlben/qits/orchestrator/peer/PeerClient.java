@@ -248,6 +248,16 @@ public class PeerClient {
   }
 
   /**
+   * Whether {@code body} is a stored copy this client cut at {@link #RESPONSE_LIMIT_BYTES} — the
+   * marker at its end. A caller that hands a peer's answer on rather than storing it (the artifacts
+   * cleanup doors, ticket qits-2138) must not pass such a copy as the document: it is not JSON any
+   * more, and the parsed tree is the whole answer.
+   */
+  public static boolean bounded(String body) {
+    return body != null && body.endsWith(TRUNCATION_MARKER);
+  }
+
+  /**
    * The whole body as a tree, or null when it is empty or not JSON. Not an error here: whether a
    * missing tree fails a step is that step's call — see {@code StepResult.ofKeepSet}.
    */

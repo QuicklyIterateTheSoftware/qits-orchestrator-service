@@ -48,6 +48,27 @@ public final class ContractPeers {
     return wire(new FakePeers(), target -> "http://" + target);
   }
 
+  /**
+   * A {@link #fake()} for every peer but {@code target}, whose calls go to {@code real} instead:
+   * the artifacts cleanup rows (ticket qits-2138) read the five pins from scripted answers and send
+   * the one call the row is about to the pact mock server.
+   */
+  public static FakePeers fakeExcept(String target, PeerClient real) {
+    return wire(
+        new FakePeers() {
+          @Override
+          public PeerExchange get(String peer, String path) {
+            return peer.equals(target) ? real.get(peer, path) : super.get(peer, path);
+          }
+
+          @Override
+          public PeerExchange post(String peer, String path, String body) {
+            return peer.equals(target) ? real.post(peer, path, body) : super.post(peer, path, body);
+          }
+        },
+        peer -> "http://" + peer);
+  }
+
   /** The peer a {@link #fake()} call went to: the host of its url. */
   public static String target(PeerCall call) {
     String rest = call.url().substring("http://".length());

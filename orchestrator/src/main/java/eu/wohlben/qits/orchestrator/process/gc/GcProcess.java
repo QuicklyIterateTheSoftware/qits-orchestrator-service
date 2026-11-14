@@ -4,18 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import eu.wohlben.qits.orchestrator.peer.PeerAnswer;
 import eu.wohlben.qits.orchestrator.peer.PeerTarget;
 import eu.wohlben.qits.orchestrator.process.RunContext;
 import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
-import eu.wohlben.qits.orchestrator.run.RunStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.time.Duration;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * The gc process: the platform's one deletion run, across every store that grows.
@@ -63,7 +59,7 @@ import java.util.function.Function;
  * answer SUCCEEDED as an empty pin set, and only qits-artifacts' own empty-source guard stopped a
  * plan that condemned everything maintenance pins.
  *
- * <p><b>A 503 is asked again before it counts</b> (ticket qits-1733, {@link #keepSet}). Each pin
+ * <p><b>A 503 is asked again before it counts</b> (ticket qits-1733, {@link GcPins#read}). Each pin
  * read is one GET, and a peer that answers 503 is asked again, up to {@code
  * qits.orchestrator.gc.pins.retry.attempts} reads in all, {@code ...pins.retry.delay} apart.
  * qits-maintenance answers 503 for the seconds its pin set is incomplete and heals it in the
@@ -214,18 +210,11 @@ public class GcProcess implements TechnicalProcess {
   @Inject GcConfig config;
 
   /**
-   * How a pin read waits between two asks. A seam rather than a {@code Thread.sleep} inline, so a
-   * suite that drives the shipped thirty-second delay never actually waits it out.
+   * How a pin read waits between two asks — {@link GcPins.Sleeper}, so a suite that drives the
+   * shipped thirty-second delay never actually waits it out. The real wait in production; a test
+   * outside CDI swaps in its own.
    */
-  @FunctionalInterface
-  interface Sleeper {
-    void sleep(Duration duration) throws InterruptedException;
-
-    Sleeper THREAD = duration -> Thread.sleep(duration.toMillis());
-  }
-
-  /** The real wait in production; a test outside CDI swaps in its own. */
-  Sleeper sleeper = Sleeper.THREAD;
+  GcPins.Sleeper sleeper = GcPins.Sleeper.THREAD;
 
   @Override
   public String kind() {
@@ -267,61 +256,11 @@ public class GcProcess implements TechnicalProcess {
                 StepResult.of(
                     context.peers().get(PeerTarget.ARTIFACTS, STORE_PATH),
                     answer -> GcSummaries.storeUsage(answer.json()))),
-        new StepDefinition(
-            PINS_DEPLOYMENTS,
-            "Deployment pins",
-            PeerTarget.DEPLOYMENTS,
-            List.of(),
-            context ->
-                keepSet(
-                    context,
-                    PeerTarget.DEPLOYMENTS,
-                    "/deployments/api/pins",
-                    answer -> GcSummaries.deploymentPins(answer.json()))),
-        new StepDefinition(
-            PINS_CI,
-            "CI daemon pin",
-            PeerTarget.CI,
-            List.of(),
-            context ->
-                keepSet(
-                    context,
-                    PeerTarget.CI,
-                    "/ci/api/daemon",
-                    answer -> GcSummaries.ciPin(answer.json()))),
-        new StepDefinition(
-            PINS_DEPENDENCIES,
-            "Dependency pins",
-            PeerTarget.MAINTENANCE,
-            List.of(),
-            context ->
-                keepSet(
-                    context,
-                    PeerTarget.MAINTENANCE,
-                    "/maintenance/api/pins",
-                    answer -> GcSummaries.dependencyPins(answer.json()))),
-        new StepDefinition(
-            PINS_WORKSPACES,
-            "Workspace launch pins",
-            PeerTarget.WORKSPACES,
-            List.of(),
-            context ->
-                keepSet(
-                    context,
-                    PeerTarget.WORKSPACES,
-                    "/workspaces/api/pins",
-                    answer -> GcSummaries.workspaceLaunchPins(answer.json()))),
-        new StepDefinition(
-            PINS_PROJECTS,
-            "Project launch pins",
-            PeerTarget.PROJECTS,
-            List.of(),
-            context ->
-                keepSet(
-                    context,
-                    PeerTarget.PROJECTS,
-                    "/projects/api/pins",
-                    answer -> GcSummaries.projectLaunchPins(answer.json()))),
+        pinStep(GcPins.Source.DEPLOYMENTS),
+        pinStep(GcPins.Source.CI),
+        pinStep(GcPins.Source.DEPENDENCIES),
+        pinStep(GcPins.Source.WORKSPACES),
+        pinStep(GcPins.Source.PROJECTS),
         new StepDefinition(
             ARTIFACTS_PLAN,
             "Plan the registry collection",
@@ -474,73 +413,26 @@ public class GcProcess implements TechnicalProcess {
   }
 
   /**
-   * One {@code pins.*} read: a GET judged by {@link StepResult#ofKeepSet}, asked again while the
-   * peer answers 503 (ticket qits-1733).
-   *
-   * <p><b>503 alone, because 503 alone says "ask again".</b> qits-maintenance answers it while its
-   * pin set is not complete, and its body says the next read answers once it is; the heal lands in
-   * seconds. Any other non-2xx, a peer that cannot be reached, and a 2xx that cannot be read whole
-   * are answers about the peer rather than about a moment, so they fail on the first read as they
-   * always have. Up to {@link GcConfig#pinsRetryAttempts()} reads in all, {@link
-   * GcConfig#pinsRetryDelay()} apart; the last 503 FAILS the step, and the edges do the rest.
-   *
-   * <p><b>The row is the LAST read's</b> — its call, its answer, its verdict — with the count beside
-   * it when there was more than one: {@code (after 2 attempts)} on the summary, {@code (6 attempts,
-   * 30s apart)} after the error. The error keeps its own text as the prefix, so {@code answered 503}
-   * still reads the way every reader of a failed pin row already matches it.
-   *
-   * <p>An interrupt stops the asking: the flag is restored and the last read is the verdict.
+   * One {@code pins.*} step: the source's read as {@link GcPins#read} makes it — judged by {@link
+   * StepResult#ofKeepSet} and asked again while the peer answers 503 (ticket qits-1733), up to
+   * {@link GcConfig#pinsRetryAttempts()} reads {@link GcConfig#pinsRetryDelay()} apart. The read
+   * itself lives in {@link GcPins} since ticket qits-2138, because the artifacts cleanup doors read
+   * the same five sources and must judge them the same way; the step, its id, its name, its peer and
+   * its (empty) edges stay here.
    */
-  private StepResult keepSet(
-      RunContext context, String target, String path, Function<PeerAnswer, String> summary) {
-    int attempts = config.pinsRetryAttempts();
-    Duration delay = config.pinsRetryDelay();
-    StepResult result = StepResult.ofKeepSet(context.peers().get(target, path), summary);
-    int made = 1;
-    while (made < attempts && answered503(result)) {
-      try {
-        sleeper.sleep(delay);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        break;
-      }
-      result = StepResult.ofKeepSet(context.peers().get(target, path), summary);
-      made++;
-    }
-    if (made == 1) {
-      return result;
-    }
-    if (result.status() == RunStatus.SUCCEEDED) {
-      return new StepResult(
-          result.status(),
-          result.call(),
-          result.answer(),
-          result.summary() + " (after " + made + " attempts)",
-          result.error(),
-          result.skip());
-    }
-    return new StepResult(
-        result.status(),
-        result.call(),
-        result.answer(),
-        result.summary(),
-        result.error() + " (" + made + " attempts, " + spelled(delay) + " apart)",
-        result.skip());
-  }
-
-  /** A FAILED read whose peer answered, and answered 503 — the one answer worth asking again. */
-  private static boolean answered503(StepResult result) {
-    PeerAnswer answer = result.answer();
-    return result.status() == RunStatus.FAILED
-        && answer != null
-        && answer.error() == null
-        && Integer.valueOf(503).equals(answer.httpStatus());
-  }
-
-  /** {@code 30s}, or {@code 250ms} for a delay that is not whole seconds. */
-  static String spelled(Duration delay) {
-    long millis = delay.toMillis();
-    return millis % 1000 == 0 ? (millis / 1000) + "s" : millis + "ms";
+  private StepDefinition pinStep(GcPins.Source source) {
+    return new StepDefinition(
+        source.stepId(),
+        source.stepName(),
+        source.target(),
+        List.of(),
+        context ->
+            GcPins.read(
+                context.peers(),
+                source,
+                config.pinsRetryAttempts(),
+                config.pinsRetryDelay(),
+                sleeper));
   }
 
   /**
@@ -565,24 +457,17 @@ public class GcProcess implements TechnicalProcess {
    * without all five, so the absent case is the belt.
    */
   private static String pinsBody(RunContext context) {
-    ObjectNode body = JSON.createObjectNode();
-    body.set("pins", pinsObject(context));
-    return body.toString();
+    return GcPins.pinsBody(context::answer);
   }
 
   /**
    * The five pin answers, re-embedded verbatim under the names qits-artifacts (and now
    * qits-projects' tag sweep) take them by. Shared by every step that sends the whole pin set
-   * rather than a single source of it, so the five lines live in exactly one place.
+   * rather than a single source of it — and, since ticket qits-2138, with the artifacts cleanup
+   * doors: the members are {@link GcPins#pinsObject}'s, so the five lines live in exactly one place.
    */
   private static ObjectNode pinsObject(RunContext context) {
-    ObjectNode pins = JSON.createObjectNode();
-    context.answer(PINS_DEPLOYMENTS).ifPresent(node -> pins.set("deployments", node));
-    context.answer(PINS_CI).ifPresent(node -> pins.set("ciDaemon", node));
-    context.answer(PINS_DEPENDENCIES).ifPresent(node -> pins.set("dependencies", node));
-    context.answer(PINS_WORKSPACES).ifPresent(node -> pins.set("workspaceLaunches", node));
-    context.answer(PINS_PROJECTS).ifPresent(node -> pins.set("projectLaunches", node));
-    return pins;
+    return GcPins.pinsObject(context::answer);
   }
 
   /**

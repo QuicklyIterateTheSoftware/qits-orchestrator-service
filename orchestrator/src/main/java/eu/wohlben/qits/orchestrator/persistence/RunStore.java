@@ -204,6 +204,20 @@ public class RunStore implements PanacheRepositoryBase<OpRun, UUID> {
         find("kind = ?1 and status = ?2", kind, RunStatus.RUNNING.name()).firstResult());
   }
 
+  /**
+   * The id of the active run of a kind that {@link #open} would still refuse on at {@code now}:
+   * RUNNING, and not older than {@code abandon-after}. A RUNNING row past that age belongs to a process that is
+   * gone, and the next open closes it rather than waiting on it, so nothing else should wait on it
+   * either — the artifacts cleanup sweep door (ticket qits-2138) asks this, not {@link #active}.
+   * Read-only.
+   */
+  @ActivateRequestContext
+  public Optional<UUID> live(String kind, Instant now) {
+    return active(kind)
+        .filter(run -> !run.startedAt.isBefore(now.minus(abandonAfter)))
+        .map(run -> run.id);
+  }
+
   private static OpStep step(UUID runId, String stepId) {
     OpStep row = OpStep.find("runId = ?1 and stepId = ?2", runId, stepId).firstResult();
     if (row == null) {
