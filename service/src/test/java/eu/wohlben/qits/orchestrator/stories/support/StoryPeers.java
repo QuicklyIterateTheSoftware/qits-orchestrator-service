@@ -19,8 +19,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * <b>The eight services a gc run drives — the eighth, qits-idp, also the one it borrows a credential
- * from</b> — one
+ * <b>The nine services a gc run drives — qits-idp also the one it borrows a credential from</b> —
+ * one
  * in-JVM stub impersonating all of them, plus the <b>outgoing</b> tap that draws what the launched
  * process asked each one.
  *
@@ -28,7 +28,7 @@ import java.util.Optional;
  *
  * <p>A technical process only SENDS REQUESTS. Everything it does happens on the far side of a
  * socket from this JVM, so a story that wanted to show what a run actually did has exactly one
- * source of evidence: the record each far side keeps of being asked. There are eight of them, and
+ * source of evidence: the record each far side keeps of being asked. There are nine of them, and
  * every one is a decision written down in {@code qits-orchestrator-plan.md}:
  *
  * <pre>
@@ -39,6 +39,7 @@ import java.util.Optional;
  * pins.dependencies            qits-platform-maintenance     GET  /maintenance/api/pins
  * pins.workspaces              qits-workspaces               GET  /workspaces/api/pins
  * pins.projects                qits-projects                 GET  /projects/api/pins
+ * pins.mirror-images           qits-platform-maintenance     GET  /maintenance/api/pins/images
  * artifacts.plan               qits-artifacts                POST /artifacts/api/gc/plan
  * artifacts.sweep              qits-artifacts                POST /artifacts/api/gc/sweep
  * containers.images            qits-containers               POST /containers/api/gc/images
@@ -49,13 +50,14 @@ import java.util.Optional;
  * tags.sweep                   qits-projects                 POST /projects/api/gc/tags
  * claims.idp-clients           qits-platform-deployments     GET  /deployments/api/claims/idp-clients
  * idp.service-clients          qits-idp                      POST /idp/api/gc/service-clients
+ * mirror.sweep                 qits-mirror                   POST /mirror/api/gc/sweep
  * </pre>
  *
- * <p><b>One process impersonates all of them, and the diagram is drawn from the PATH.</b> The eight
- * are eight urls in this service's configuration and would be eight hosts on a platform; here they
- * are eight contexts on one stub, and {@link #peer} maps a path prefix onto the name a reader knows
+ * <p><b>One process impersonates all of them, and the diagram is drawn from the PATH.</b> The nine
+ * are nine urls in this service's configuration and would be nine hosts on a platform; here they
+ * are nine contexts on one stub, and {@link #peer} maps a path prefix onto the name a reader knows
  * the peer by. Nothing about the evidence changes — direction, method, path and status are what an
- * edge is — and eight servers would only be seven more ports to park.
+ * edge is — and nine servers would only be eight more ports to park.
  *
  * <p><b>qits-idp is drawn twice over, as one node.</b> {@code POST /idp/api/gc/service-clients} is a
  * peer call like the others (ticket qits-878); {@code POST /idp/token} is the outbound half of this
@@ -68,7 +70,7 @@ import java.util.Optional;
  * <h2>Stateless, with one deliberate exception</h2>
  *
  * <p>Every answer is a pure function of the request: the path decides the document and, for the
- * three bodies that carry {@code dryRun}, the flag is echoed back the way the real peer would judge
+ * bodies that carry {@code dryRun}, the flag is echoed back the way the real peer would judge
  * by it. There is nothing to arm and nothing to reset, so each story class is runnable on its own.
  *
  * <p>The exception is {@link #refuse}, and it exists because <b>no story-controlled value reaches a
@@ -99,8 +101,8 @@ import java.util.Optional;
  * <p>quarkus-oidc-client caches the token it acquires and re-mints only when it expires, so the
  * {@code POST /idp/token} arrow belongs to the <b>first run of the whole catalogue</b> and to no
  * other. That is a real property of this service rather than an artefact here: {@code PeerTokens}
- * holds one {@code TokensHelper} for the one named client precisely so that a nineteen-step run is
- * not nineteen token requests.
+ * holds one {@code TokensHelper} for the one named client precisely so that a twenty-one-step run is
+ * not twenty-one token requests.
  *
  * <p>What this stand-in chooses is only that the horizon is the whole run: the token says {@code
  * expires_in: 3600}, so the mint lands in exactly one story and every other story's edge count is
@@ -149,10 +151,13 @@ public final class StoryPeers {
    */
   public static final String IDP = MockIdp.SERVICE_NAME;
 
+  /** The pull-through caches, whose mirrored image tags are evicted by image pins (qits-2253). */
+  public static final String MIRROR = "qits-mirror";
+
   /** Every peer, for the negative claims a refusal story makes about all of them at once. */
   public static final List<String> ALL =
       List.of(
-          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, IDP);
+          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, IDP, MIRROR);
 
   // --- the paths, exactly as GcProcess spells them --------------------------------------------
 
@@ -174,6 +179,8 @@ public final class StoryPeers {
   public static final String TOKEN_PATH = "/idp/token";
   public static final String CLAIMS_PATH = "/deployments/api/claims/idp-clients";
   public static final String SERVICE_CLIENTS_PATH = "/idp/api/gc/service-clients";
+  public static final String MIRROR_IMAGE_PINS_PATH = "/maintenance/api/pins/images";
+  public static final String MIRROR_SWEEP_PATH = "/mirror/api/gc/sweep";
 
   /** The one service client the claims answer names — the orchestrator's own. */
   public static final String CLAIMED_CLIENT = "dev-qits-orchestrator";
@@ -213,6 +220,9 @@ public final class StoryPeers {
 
   /** The repository the branch sweep iterates over — one row of the projects catalogue. */
   public static final String CATALOGUE_REPOSITORY = "qits-platform-orchestrator";
+
+  /** The image version qits-maintenance says a manifest pins, which qits-mirror keeps (qits-2253). */
+  public static final String MIRRORED_IMAGE_VERSION = "18.4";
 
   /** What a refused peer answers, and what a step then records as its error. */
   public static final int REFUSED_STATUS = 503;
@@ -417,6 +427,24 @@ public final class StoryPeers {
               + "\",\"createdAt\":\"2026-09-01T10:00:00Z\",\"createdBy\":\"qits-deployments\","
               + "\"reason\":\"caller\"}],"
               + "\"keptCounts\":{\"claimed\":0,\"grace\":0,\"caller\":1}}";
+      // qits-maintenance's image pins, and qits-mirror's sweep report: whether the tags were judged
+      // by pins (pins.supplied) is the mirror's to say, read off whether the request carried any.
+      case MIRROR_IMAGE_PINS_PATH ->
+          "[{\"name\":\"hub/library/postgres\",\"version\":\"" + MIRRORED_IMAGE_VERSION + "\"}]";
+      case MIRROR_SWEEP_PATH ->
+          "{\"dryRun\":"
+              + dryRun
+              + ",\"pins\":{\"supplied\":"
+              + (request != null && request.contains("\"images\""))
+              + ",\"images\":1},"
+              + "\"types\":[{\"type\":\"oci-mirror\",\"condemned\":2,\"deleted\":"
+              + (dryRun ? 0 : 2)
+              + ",\"kept\":3,\"pinned\":1,\"errors\":[],\"failure\":null}],"
+              + "\"blobs\":{\"reclaimable\":4,\"reclaimableBytes\":2400000000,\"unlinked\":"
+              + (dryRun ? 0 : 4)
+              + ",\"reclaimedBytes\":"
+              + (dryRun ? 0 : 2400000000L)
+              + "}}";
       // An hour, so the mints land in exactly one story of the run — see the class javadoc.
       case TOKEN_PATH ->
           "POST".equals(method)
@@ -557,7 +585,7 @@ public final class StoryPeers {
             Labels.scrub(fields[0] + " " + fields[1] + " -> " + fields[2])));
   }
 
-  /** Which peer a path belongs to — the whole of how one stub draws as eight. */
+  /** Which peer a path belongs to — the whole of how one stub draws as nine. */
   private static String peer(String path) {
     if (path.startsWith("/containers/")) {
       return CONTAINERS;
@@ -582,6 +610,9 @@ public final class StoryPeers {
     }
     if (path.startsWith("/idp/")) {
       return IDP;
+    }
+    if (path.startsWith("/mirror/")) {
+      return MIRROR;
     }
     return null;
   }

@@ -51,14 +51,17 @@ import org.junit.jupiter.api.BeforeAll;
  * deletes nothing.
  *
  * <p>So one story, one broken peer, and a diagram that says it: an arrow to qits-ci carrying a 503,
- * arrows for the reads that answered anyway, and <b>no arrow to any deleter</b>. The registry and
- * the host ARE reached, once each, by the measurements that need no pin, so the honest claim is
- * about which calls are missing rather than about which peer is untouched.
+ * arrows for the reads that answered anyway, and <b>no arrow to any deleter the five pins guard</b>.
+ * The registry and the host ARE reached, once each, by the measurements that need no pin, so the
+ * honest claim is about which calls are missing rather than about which peer is untouched. The one
+ * deleter that still runs is qits-mirror's sweep (qits-2253): its tags are guarded by image pins of
+ * their own, and a sweep without them keeps the mirror's window rule — which the third story here
+ * shows from the other side.
  *
  * <h2>How the peer is broken</h2>
  *
  * <p>{@link StoryPeers#refuse} is the one piece of state in the stand-in, and the class javadoc over
- * there says why it has to be state here and can be a path elsewhere: a gc run's eighteen paths are
+ * there says why it has to be state here and can be a path elsewhere: a gc run's paths are
  * fixed by {@code GcProcess.steps()} and identical in every run, so "qits-ci is down tonight" cannot be
  * spelled as a url the story addresses. It is armed inside a {@code try} and cleared in a {@code
  * finally}, and cleared again in {@code @AfterEach} — a refusal that outlived its story would be a
@@ -81,6 +84,11 @@ public class PeerFailureIT {
       "A claim set nobody could read removes no service client";
 
   static final String CLAIMS_UNREAD_SLUG = Slugs.slug(CLAIMS_UNREAD);
+
+  static final String IMAGE_PINS_UNREAD =
+      "An image pin set nobody could read still evicts the mirror by its window";
+
+  static final String IMAGE_PINS_UNREAD_SLUG = Slugs.slug(IMAGE_PINS_UNREAD);
 
   @BeforeAll
   static void tapBothEndsOfTheNetwork() {
@@ -116,7 +124,8 @@ public class PeerFailureIT {
       between, so a reader does not have to walk the graph backwards to find the cause. And the
       whole of what "fail-closed" means is visible on the diagram rather than described: one arrow
       to qits-ci carrying its 503, nine arrows for the reads that answered, and not one arrow to a
-      deleter.
+      deleter the five pins guard. The one sweep that still runs is the mirror's: its tags are kept
+      by image pins of their own, read and handed to it as on any other night.
       """)
   @UserflowRunsAfter(GarbageCollectionRunIT.class)
   void aBrokenPinReadSkipsEveryDeleter(Interactions story) {
@@ -191,12 +200,16 @@ public class PeerFailureIT {
             StoryRuns.stepPath("containers.build-cache") + ".error",
             equalTo("skipped: pins.ci failed"))
         .body(StoryRuns.stepPath("branches.sweep") + ".status", equalTo("SKIPPED"))
-        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SKIPPED"));
+        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SKIPPED"))
+        // …but not the mirror's: the five pins do not guard its tags, its own image pins do.
+        .body(StoryRuns.stepPath("pins.mirror-images") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("mirror.sweep") + ".status", equalTo("SUCCEEDED"));
     story
         .note(
             "the reads still ran — five pins, the catalogue, the claims and both opening"
                 + " measurements — and every other deleter was skipped too: host images, volumes,"
-                + " build cache, branches and service clients")
+                + " build cache, branches and service clients. The mirror is swept against its own"
+                + " image pins, which no broken five-pin read stands between")
         .as("every-deleter-skipped");
 
     operator()
@@ -294,6 +307,80 @@ public class PeerFailureIT {
         .as("rest-of-the-night-runs");
   }
 
+  @UserStory(value = IMAGE_PINS_UNREAD, category = CATEGORY)
+  @UserStoryDescription(
+      """
+      qits-maintenance cannot answer the image pins tonight — every ask of them is a 503. Those pins
+      are what qits-mirror keeps its mirrored image tags by, and they guard nothing else: no other
+      store's deleter waits on them, and they ride in no other store's pin set.
+
+      So the run reads them, asks again on each 503 as it does for every pin read, records the read
+      as FAILED — and still sweeps the mirror, without pins, which qits-mirror answers with the
+      fail-safe it keeps for exactly this night: its old access window decides the tags. The sweep's
+      row says the pins were absent and why. Every other store is collected as on any other night;
+      the run is FAILED, because a peer that could not be read is a failure.
+      """)
+  @UserflowRunsAfter(GarbageCollectionRunIT.class)
+  void anUnreadImagePinSetStillSweepsTheMirrorAndHaltsNothingElse(Interactions story) {
+    NetworkCapture.actor(StoryIdentities.OPERATOR);
+
+    String id;
+    JsonPath run;
+    StoryPeers.refuse(StoryPeers.MIRROR_IMAGE_PINS_PATH);
+    try {
+      story
+          .note("qits-maintenance's image pins answer 503 tonight")
+          .as("image-pins-are-down");
+      id = StoryRuns.start(operator(), false);
+      run = StoryRuns.detail(operator(), id);
+    } finally {
+      StoryPeers.answerNormally();
+    }
+
+    assertEquals(
+        "FAILED", run.getString("status"), "an unread image pin set fails the run: " + run.prettify());
+    operator()
+        .get()
+        .when()
+        .get(StoryTarget.runPath(id))
+        .then()
+        .statusCode(200)
+        .body(StoryRuns.stepPath("pins.mirror-images") + ".status", equalTo("FAILED"))
+        .body(
+            StoryRuns.stepPath("pins.mirror-images") + ".httpStatus",
+            equalTo(StoryPeers.REFUSED_STATUS))
+        .body(StoryRuns.stepPath("mirror.sweep") + ".status", equalTo("SUCCEEDED"))
+        .body(
+            StoryRuns.stepPath("mirror.sweep") + ".summary",
+            containsString("sent without image pins (pins.mirror-images failed: "))
+        .body(
+            StoryRuns.stepPath("mirror.sweep") + ".summary",
+            containsString("tags judged by the mirror's own window"));
+    story
+        .note(
+            "the mirror is swept anyway, WITHOUT pins, and its row says so and why — qits-mirror"
+                + " judges the tags by its own window, the fail-safe it keeps for this night")
+        .as("mirror-swept-without-pins");
+
+    operator()
+        .get()
+        .when()
+        .get(StoryTarget.runPath(id))
+        .then()
+        .statusCode(200)
+        .body(StoryRuns.stepPath("artifacts.sweep") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("containers.images") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("tags.sweep") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("idp.service-clients") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("usage.after") + ".status", equalTo("SUCCEEDED"))
+        .body(StoryRuns.stepPath("artifacts.usage.after") + ".status", equalTo("SUCCEEDED"));
+    story
+        .note(
+            "nothing else waits on the image pins: every other store is collected and both stores"
+                + " are measured again")
+        .as("nothing-else-halted");
+  }
+
   @AfterAll
   static void theFailClosedStoryIsComplete() {
     ReportAssertions.assertComplete(CATEGORY_SLUG, FAIL_CLOSED_SLUG, UserflowReport.PASSED);
@@ -322,10 +409,14 @@ public class PeerFailureIT {
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.PINS_PATH));
     to(StoryPeers.PROJECTS, StoryPeers.read(StoryPeers.REPOSITORIES_PATH));
     to(StoryPeers.DEPLOYMENTS, StoryPeers.read(StoryPeers.CLAIMS_PATH));
+    // …and the mirror's own pair, which the five pins do not guard (qits-2253).
+    to(StoryPeers.MAINTENANCE, StoryPeers.read(StoryPeers.MIRROR_IMAGE_PINS_PATH));
+    to(StoryPeers.MIRROR, StoryPeers.written(StoryPeers.MIRROR_SWEEP_PATH));
 
     // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES was called, in any store, because
     // a pin source could not be read. Every deleter's path has `/gc/` in it except the usage read,
-    // which is a measurement; the registry and the host are reached for their size only.
+    // which is a measurement; the registry and the host are reached for their size only. The
+    // mirror's sweep is the exception the five pins do not cover: its tags have pins of their own.
     UserflowReport report = ReportAssertions.read(CATEGORY_SLUG, FAIL_CLOSED_SLUG);
     assertTrue(
         report.network().stream()
@@ -333,15 +424,16 @@ public class PeerFailureIT {
                 edge ->
                     StoryTarget.SERVICE.equals(edge.from())
                         && edge.label().contains("/gc/")
-                        && !edge.label().contains(StoryPeers.USAGE_PATH)),
+                        && !edge.label().contains(StoryPeers.USAGE_PATH)
+                        && !StoryPeers.MIRROR.equals(edge.to())),
         () -> "a collection call was made without every pin: " + report.network());
     assertTrue(
         report.network().stream().noneMatch(edge -> StoryPeers.IDP.equals(edge.to())),
         () -> "qits-idp was asked to delete without every pin: " + report.network());
-    // Two in, nine out. The credential was minted an hour ago by the first run of the
+    // Two in, eleven out: the 503, nine reads that answered and the mirror's sweep. The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 11);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 13);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,
@@ -362,12 +454,42 @@ public class PeerFailureIT {
     // THE CLAIM. Not one request reached qits-idp — no sweep, and no token either: the credential
     // was minted by the first run of the catalogue and is cached for the hour.
     ReportAssertions.assertNoEdgesTo(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, StoryPeers.IDP);
-    // Two in, sixteen out: the fifteen calls that need no claim, the claims read as its 503 —
+    // Two in, eighteen out: the seventeen calls that need no claim, the claims read as its 503 —
     // and no service-client sweep.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 18);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 20);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         CLAIMS_UNREAD_SLUG,
+        List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
+  }
+
+  @AfterAll
+  static void theImagePinStoryIsComplete() {
+    ReportAssertions.assertComplete(CATEGORY_SLUG, IMAGE_PINS_UNREAD_SLUG, UserflowReport.PASSED);
+    for (String step :
+        List.of("image-pins-are-down", "mirror-swept-without-pins", "nothing-else-halted")) {
+      ReportAssertions.assertStepId(CATEGORY_SLUG, IMAGE_PINS_UNREAD_SLUG, step);
+    }
+    ReportAssertions.assertEdge(
+        CATEGORY_SLUG,
+        IMAGE_PINS_UNREAD_SLUG,
+        NetworkEdge.HTTP,
+        StoryTarget.SERVICE,
+        StoryPeers.MAINTENANCE,
+        StoryPeers.label("GET", StoryPeers.MIRROR_IMAGE_PINS_PATH, StoryPeers.REFUSED_STATUS));
+    ReportAssertions.assertEdge(
+        CATEGORY_SLUG,
+        IMAGE_PINS_UNREAD_SLUG,
+        NetworkEdge.HTTP,
+        StoryTarget.SERVICE,
+        StoryPeers.MIRROR,
+        StoryPeers.written(StoryPeers.MIRROR_SWEEP_PATH));
+    // Two in, nineteen out: every call of a whole run (each store's two measurements one arrow),
+    // the image pin read drawn as its 503 — six asks, one arrow.
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, IMAGE_PINS_UNREAD_SLUG, 21);
+    ReportAssertions.assertOnlyEdgesFrom(
+        CATEGORY_SLUG,
+        IMAGE_PINS_UNREAD_SLUG,
         List.of(StoryIdentities.OPERATOR, StoryTarget.SERVICE));
   }
 

@@ -31,6 +31,7 @@ so what comes after it still runs.
 | `pins.dependencies` | maintenance | `GET /maintenance/api/pins` | — |
 | `pins.workspaces` | workspaces | `GET /workspaces/api/pins` | — |
 | `pins.projects` | projects | `GET /projects/api/pins` | — |
+| `pins.mirror-images` | maintenance | `GET /maintenance/api/pins/images` — FAILED when the answer is not a non-empty array | — (and nothing depends on it) |
 | `artifacts.plan` | artifacts | `POST /artifacts/api/gc/plan {pins}` | pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects |
 | `artifacts.sweep` | artifacts | `POST /artifacts/api/gc/sweep {pins}` — SKIPPED `dry run` on a dry run | artifacts.plan, pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects |
 | `containers.images` | containers | `POST /containers/api/gc/images` | pins.deployments |
@@ -41,6 +42,7 @@ so what comes after it still runs.
 | `tags.sweep` | projects | `POST /projects/api/gc/tags {dryRun, pins}` | pins.deployments, pins.ci, pins.dependencies, pins.workspaces, pins.projects, repos.catalogue |
 | `claims.idp-clients` | deployments | `GET /deployments/api/claims/idp-clients` | — |
 | `idp.service-clients` | idp | `POST /idp/api/gc/service-clients {dryRun, claims}` — FAILED, no request, when the read answered no claims | claims.idp-clients |
+| `mirror.sweep` | mirror | `POST /mirror/api/gc/sweep {pins: {images}, dryRun}` — `{dryRun}` alone when `pins.mirror-images` failed | — |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
 | `usage.after` | containers | `GET /containers/api/gc/usage` | artifacts.sweep, containers.images, containers.volumes, containers.build-cache |
 
@@ -110,6 +112,24 @@ budget: `qits.orchestrator.gc.tags-sweep-call-timeout` (15 minutes, PeerClient's
 `post`) rather than the shared `qits.orchestrator.gc.call-timeout` (2 minutes) every other step
 uses, because walking the whole catalogue and pushing a decommissioning commit per affected
 repository to GitHub is a different order of call than one store's own read or write.
+
+**`mirror.sweep` is qits-mirror's eviction, and the gc run is its only clock** (qits-2253). The
+mirror's own eviction cron is gone. Its mirrored image TAGS are kept by pins: the image versions
+every repository's manifests still name, which qits-maintenance answers at `GET
+/maintenance/api/pins/images` and `pins.mirror-images` reads with the same 503 retry as every pin
+read. The sweep sends that answer verbatim, `{"pins": {"images": <answer>}, "dryRun": …}`, and
+qits-mirror judges the tags; everything else it caches is its own rules'. The read is deliberately
+**not** one of the five pin sources: it guards the mirror alone, so it gates no other deleter, it is
+in no `pins` object qits-artifacts or qits-projects receives, and its failure halts nothing. Nor
+does `mirror.sweep` wait on it — when the read fails (a 503 after every retry, any other status, an
+unreadable or empty answer) the sweep still runs, sending `{"dryRun": …}` with no `pins`, which
+qits-mirror answers with its old access-window rule for tags; the sweep's row then says `sent
+without image pins (pins.mirror-images failed: <why>)`. It runs on a dry run too (qits-mirror
+honours the flag), and a mirror that fails is a FAILED row that stops no other store's step. The
+sweep runs synchronously inside the request, so it has the longest budget of all:
+`qits.orchestrator.gc.mirror-sweep-call-timeout` (30 minutes), and qits-mirror answers an
+overlapping sweep 409, so a timed-out call never doubles the work. `pins.mirror-images` is not
+`pins.images`: that id was qits-configuration's, retired by qits-1176.
 
 **Only what needs a pin waits for one.** `containers.build-cache` hangs off `usage.before`, not
 off the image sweep: a prune has no keep-set, so a broken pin read must not cost the platform the
@@ -245,6 +265,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.targets.workspaces-url` | `https://workspaces.qits.${QITS_DOMAIN}` | where branch semantics live |
 | `qits.orchestrator.targets.maintenance-url` | `https://maintenance.qits.${QITS_DOMAIN}` | where the dependency pins are |
 | `qits.orchestrator.targets.idp-url` | `https://idp.qits.${QITS_DOMAIN}` | where the service-client store is |
+| `qits.orchestrator.targets.mirror-url` | `https://mirror.qits.${QITS_DOMAIN}` | where the pull-through caches are (qits-2253) |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
 | `qits.orchestrator.gc.time-zone` | `UTC` | the zone the cron is read in (the platform's convention) |
@@ -258,6 +279,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.gc.build-cache-keep-bytes` | `10737418240` | what the HOST buildkit cache may keep after a prune |
 | `qits.orchestrator.gc.builder-cache-keep-bytes` | `1073741824` | what a `buildx_buildkit_*` BUILDER container may keep |
 | `qits.orchestrator.gc.call-timeout` | `PT120S` | how long one peer call may take |
+| `qits.orchestrator.gc.mirror-sweep-call-timeout` | `PT30M` | how long `mirror.sweep` alone may take: qits-mirror sweeps synchronously in the request |
 
 **Two build-cache budgets, because the two caches are not the same kind of thing.** The host cache
 is what every CI build warms and re-reads, so 10 GiB of it is kept — measured against a host sitting
@@ -284,7 +306,7 @@ this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_UR
 qits-idp's edge host `https://idp.qits.<domain>/idp` and `dev-qits-orchestrator`). No configuration entry names any of
 the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
 PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
-every peer accepts it — so one client and one audience serve all eight peers, and what this service
+every peer accepts it — so one client and one audience serve all nine peers, and what this service
 may do at a peer is decided by its roles.
 
 One switch, `quarkus.oidc-client.qits.client-enabled`: shipped **true**, because every deployment
@@ -319,7 +341,7 @@ builds the client. `./mvnw test` needs neither — Quinoa is off in test mode.
 
 Integration tests are skipped by default. `-DskipITs=false` runs them against the fast-jar —
 `PackagedSurfaceIT`, and the five **user-story** classes that drive a whole gc run against an in-JVM
-stand-in for all eight peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
+stand-in for all nine peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
 builds the GraalVM binary (`.sdkmanrc` names `25.0.2-graalce`) and runs it against that.
 
 The stories reach nothing outside the JVM they run in, so they need no docker and no credentials

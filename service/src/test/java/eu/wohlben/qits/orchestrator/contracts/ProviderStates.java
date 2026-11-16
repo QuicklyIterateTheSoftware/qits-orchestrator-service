@@ -296,6 +296,14 @@ public class ProviderStates {
             "{\"dryRun\":false,\"removed\":[],"
                 + "\"kept\":[{\"clientId\":\"dev-qits-ci\",\"reason\":\"claimed\"}],"
                 + "\"keptCounts\":{\"claimed\":1,\"grace\":0,\"caller\":0}}"));
+    peers.answer(
+        "/maintenance/api/pins/images",
+        FakePeers.Scripted.ok("[{\"name\":\"node\",\"version\":\"24-alpine\"}]"));
+    peers.answer(
+        "/mirror/api/gc/sweep",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],"
+                + "\"blobs\":{\"unlinked\":0,\"reclaimedBytes\":0}}"));
     return params(Map.of("kind", GcProcess.KIND));
   }
 
@@ -401,6 +409,13 @@ public class ProviderStates {
         "pins.projects",
         new SeededStep("GET", "/projects/api/pins", "{\"pins\":[]}", "0 project launch pins"));
     steps.put(
+        "pins.mirror-images",
+        new SeededStep(
+            "GET",
+            "/maintenance/api/pins/images",
+            "[{\"name\":\"node\",\"version\":\"24-alpine\"}]",
+            "1 image pin — what qits-mirror keeps its mirrored tags by"));
+    steps.put(
         "artifacts.plan",
         new SeededStep(
             "POST",
@@ -464,6 +479,14 @@ public class ProviderStates {
             "/idp/api/gc/service-clients",
             "{\"dryRun\":true,\"removed\":[],\"kept\":[]}",
             "removed 0 service clients"));
+    steps.put(
+        "mirror.sweep",
+        new SeededStep(
+            "POST",
+            "/mirror/api/gc/sweep",
+            "{\"dryRun\":true,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],"
+                + "\"blobs\":{\"reclaimable\":0,\"reclaimableBytes\":0}}",
+            "would delete 0 cached entries"));
     steps.put(
         "artifacts.usage.after",
         new SeededStep(

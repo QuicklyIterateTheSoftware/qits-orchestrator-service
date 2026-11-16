@@ -9,9 +9,11 @@ import eu.wohlben.qits.orchestrator.process.RunContext;
 import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
+import eu.wohlben.qits.orchestrator.run.RunStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The gc process: the platform's one deletion run, across every store that grows.
@@ -52,7 +54,8 @@ import java.util.List;
  *
  * <p><b>Fail-closed, and the edges are what makes it so.</b> Every step that deletes depends on all
  * FIVE pin reads ({@link #PIN_SOURCES}), so one failed pin read skips every deleter in every store —
- * the registry, host images, volumes, build cache, branches, tags and service clients alike.
+ * the registry, host images, volumes, build cache, branches, tags and service clients alike. The
+ * one exception is {@code mirror.sweep}, whose fail-safe is qits-mirror's own (below).
  * Only the reads and the opening measurements still run. A pin read FAILS
  * not only when its peer cannot be reached or refuses, but also when its answer cannot be read
  * whole — cut off, or not JSON ({@link StepResult#ofKeepSet}). Before ticket qits-1175 a cut-off
@@ -77,6 +80,7 @@ import java.util.List;
  * pins.dependencies      maintenance    GET  /maintenance/api/pins
  * pins.workspaces        workspaces     GET  /workspaces/api/pins
  * pins.projects          projects       GET  /projects/api/pins
+ * pins.mirror-images     maintenance    GET  /maintenance/api/pins/images   (no edge; gates nothing)
  * artifacts.plan         artifacts      POST /artifacts/api/gc/plan {pins}   ← pins.*
  * artifacts.sweep        artifacts      POST /artifacts/api/gc/sweep {pins}  ← artifacts.plan, pins.*
  * containers.images      containers     POST /containers/api/gc/images       ← pins.*
@@ -87,10 +91,14 @@ import java.util.List;
  * tags.sweep             projects       POST /projects/api/gc/tags {pins}    ← pins.*, repos.catalogue
  * claims.idp-clients     deployments    GET  /deployments/api/claims/idp-clients
  * idp.service-clients    idp            POST /idp/api/gc/service-clients     ← claims.idp-clients, pins.*
+ * mirror.sweep           mirror         POST /mirror/api/gc/sweep {pins:{images}}  (no edge)
  * artifacts.usage.after  artifacts      GET  /artifacts/api/store/summary    ← artifacts.sweep
  * usage.after            containers     GET  /containers/api/gc/usage        ← everything that frees disk
  * </pre>
-
+ *
+ * <p>{@code pins.*} in the table is the five {@link #PIN_SOURCES}; {@code pins.mirror-images} is
+ * not one of them (below).
+ *
  * <p><b>{@code pins.workspaces} and {@code pins.projects} ride peers this process already drives.</b>
  * qits-workspaces is the branch sweep's peer and qits-projects the catalogue's, so the two effective
  * pin reads cost no target url, no oidc client and no new configuration — only a second path on a
@@ -150,6 +158,33 @@ import java.util.List;
  * this orchestrator's own included — and a live platform always has at least that one claim. It
  * runs on a dry run too; qits-idp honours the flag itself. It frees no disk, so it hangs off
  * neither {@code usage.after} plane.
+ *
+ * <p><b>{@code mirror.sweep} is qits-mirror's eviction, and this run is its only clock</b> (ticket
+ * qits-2253). The mirror's pull-through caches used to evict on a cron of their own, by an access
+ * window; its mirrored image TAGS are now evicted by pins instead — the image versions every
+ * repository's manifests still name, which qits-maintenance answers at {@code GET
+ * /maintenance/api/pins/images} and {@code pins.mirror-images} reads, with the same 503 retry as
+ * every pin read ({@link GcPins#read}). The answer is handed to qits-mirror VERBATIM as {@code
+ * {"pins":{"images":<answer>},"dryRun":…}}; qits-mirror judges the tags, and its own rules decide
+ * everything else it caches.
+ *
+ * <p><b>That pin read is deliberately NOT one of the {@link #PIN_SOURCES}, and nothing hangs off
+ * it.</b> It protects the mirror's tags and nothing else, so it gates no other deleter, it is in no
+ * {@code pins} body qits-artifacts or qits-projects reads ({@link GcPins#pinsObject} iterates
+ * {@link GcPins.Source} alone), and {@code mirror.sweep} carries no edge on it either. The mirror
+ * owns the fail-safe instead: a sweep sent WITHOUT {@code pins.images} keeps its old window rule for
+ * tags, so when the read fails the sweep still runs, without {@code pins}, and its row says the pins
+ * were absent and why ({@link RunContext#failure}). Failing closed here would leave the mirror with
+ * no eviction at all on any night maintenance cannot answer, which is the outcome the window rule
+ * exists to prevent. An image pin set that answered EMPTY is a failed read rather than a pin set:
+ * qits-mirror refuses one with 400, because it would read as "nothing is pinned".
+ *
+ * <p>It runs on a dry run too, with {@code dryRun} in the body — qits-mirror honours the flag
+ * itself, the {@code branches.sweep} reasoning — and no step depends on it: a mirror that fails or
+ * times out ({@link GcConfig#mirrorSweepCallTimeout}, the sweep is synchronous and can take
+ * minutes) is a FAILED row and a FAILED run, and every other store's step still runs. It frees no
+ * docker disk this run measures, so it hangs off neither {@code usage.after} plane, and it sits
+ * after every other deleter so a slow mirror delays nothing else.
  */
 @ApplicationScoped
 public class GcProcess implements TechnicalProcess {
@@ -164,6 +199,12 @@ public class GcProcess implements TechnicalProcess {
   static final String PINS_DEPENDENCIES = "pins.dependencies";
   static final String PINS_WORKSPACES = "pins.workspaces";
   static final String PINS_PROJECTS = "pins.projects";
+  /**
+   * qits-mirror's image pins (ticket qits-2253). NOT {@code pins.images}: that id was a sixth pin
+   * source read from qits-configuration and retired by qits-1176, and old runs still carry rows
+   * under it.
+   */
+  static final String PINS_MIRROR_IMAGES = "pins.mirror-images";
   static final String ARTIFACTS_PLAN = "artifacts.plan";
   static final String ARTIFACTS_SWEEP = "artifacts.sweep";
   static final String CONTAINERS_IMAGES = "containers.images";
@@ -174,6 +215,7 @@ public class GcProcess implements TechnicalProcess {
   static final String TAGS_SWEEP = "tags.sweep";
   static final String CLAIMS_IDP_CLIENTS = "claims.idp-clients";
   static final String IDP_SERVICE_CLIENTS = "idp.service-clients";
+  static final String MIRROR_SWEEP = "mirror.sweep";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
 
@@ -205,6 +247,10 @@ public class GcProcess implements TechnicalProcess {
 
   private static final String STORE_PATH = "/artifacts/api/store/summary";
 
+  static final String MIRROR_IMAGE_PINS_PATH = "/maintenance/api/pins/images";
+
+  static final String MIRROR_SWEEP_PATH = "/mirror/api/gc/sweep";
+
   private static final ObjectMapper JSON = new ObjectMapper();
 
   @Inject GcConfig config;
@@ -230,9 +276,9 @@ public class GcProcess implements TechnicalProcess {
   public String description() {
     return "Reads the platform's pin set once, then asks every store's own owner to delete what"
         + " nothing pins: registry identities and blobs (qits-artifacts), host images, orphan"
-        + " volumes and buildkit cache (qits-containers), and service clients nothing claims"
-        + " (qits-idp). Measures host disk and the registry"
-        + " store before and after.";
+        + " volumes and buildkit cache (qits-containers), service clients nothing claims"
+        + " (qits-idp), and mirrored images no manifest pins (qits-mirror). Measures host disk and"
+        + " the registry store before and after.";
   }
 
   @Override
@@ -261,6 +307,12 @@ public class GcProcess implements TechnicalProcess {
         pinStep(GcPins.Source.DEPENDENCIES),
         pinStep(GcPins.Source.WORKSPACES),
         pinStep(GcPins.Source.PROJECTS),
+        new StepDefinition(
+            PINS_MIRROR_IMAGES,
+            "Mirror image pins",
+            PeerTarget.MAINTENANCE,
+            List.of(),
+            this::mirrorImagePins),
         new StepDefinition(
             ARTIFACTS_PLAN,
             "Plan the registry collection",
@@ -389,6 +441,14 @@ public class GcProcess implements TechnicalProcess {
             withPins(CLAIMS_IDP_CLIENTS),
             GcProcess::serviceClients),
         new StepDefinition(
+            MIRROR_SWEEP,
+            "Evict the mirror",
+            PeerTarget.MIRROR,
+            // NO edge, not even on pins.mirror-images: a failed image pin read still sweeps, without
+            // pins, and qits-mirror falls back to its window rule for tags (qits-2253).
+            List.of(),
+            this::mirrorSweep),
+        new StepDefinition(
             ARTIFACTS_USAGE_AFTER,
             "Registry store after",
             PeerTarget.ARTIFACTS,
@@ -433,6 +493,99 @@ public class GcProcess implements TechnicalProcess {
                 config.pinsRetryAttempts(),
                 config.pinsRetryDelay(),
                 sleeper));
+  }
+
+  /**
+   * {@code pins.mirror-images}: qits-maintenance's image pins, read the way every pin read is
+   * ({@link GcPins#read} — judged as a keep-set, a 503 asked again), and then held to one more
+   * rule: the answer must be a NON-EMPTY array. Anything else is a FAILED read, so {@link
+   * #mirrorSweep} sends no {@code pins} rather than an empty set qits-mirror would refuse (400) or a
+   * shape it cannot read.
+   */
+  private StepResult mirrorImagePins(RunContext context) {
+    StepResult read =
+        GcPins.read(
+            context.peers(),
+            PeerTarget.MAINTENANCE,
+            MIRROR_IMAGE_PINS_PATH,
+            answer -> GcSummaries.mirrorImagePins(answer.json()),
+            config.pinsRetryAttempts(),
+            config.pinsRetryDelay(),
+            sleeper);
+    if (read.status() != RunStatus.SUCCEEDED) {
+      return read;
+    }
+    JsonNode pins = read.answer().json();
+    if (pins == null || !pins.isArray() || pins.isEmpty()) {
+      return new StepResult(
+          RunStatus.FAILED,
+          read.call(),
+          read.answer(),
+          null,
+          read.call().url()
+              + " answered no image pins; an empty or non-array image pin set is not a pin set",
+          null);
+    }
+    return read;
+  }
+
+  /**
+   * {@code mirror.sweep}:
+   *
+   * <pre>{@code {"pins":{"images":<the pins.mirror-images answer, verbatim>}, "dryRun":…}}</pre>
+   *
+   * <p>or, when that read FAILED, {@code {"dryRun":…}} alone — {@code pins} ABSENT, which qits-mirror
+   * reads as "judge tags by the window", the fail-safe it keeps for exactly this case. The row then
+   * says so: the summary (or the error, when the sweep itself failed) carries {@code sent without
+   * image pins (pins.mirror-images failed: <why>)}.
+   *
+   * <p><b>The failure is asked of the context, not inferred from the answer.</b> The executor records
+   * a FAILED step's answer too, and a 503's body is JSON; with no edge to keep it away, only {@link
+   * RunContext#failure} tells a pin set from an error document.
+   */
+  private StepResult mirrorSweep(RunContext context) {
+    ObjectNode body = JSON.createObjectNode();
+    Optional<String> failure = context.failure(PINS_MIRROR_IMAGES);
+    Optional<JsonNode> images =
+        failure.isPresent()
+            ? Optional.empty()
+            : context.answer(PINS_MIRROR_IMAGES).filter(n -> n.isArray() && !n.isEmpty());
+    images.ifPresent(pins -> body.putObject("pins").set("images", pins));
+    body.put("dryRun", context.dryRun());
+    StepResult result =
+        StepResult.of(
+            context
+                .peers()
+                .post(
+                    PeerTarget.MIRROR,
+                    MIRROR_SWEEP_PATH,
+                    body.toString(),
+                    config.mirrorSweepCallTimeout()),
+            answer -> GcSummaries.mirrorSweep(answer.json()));
+    if (images.isPresent()) {
+      return result;
+    }
+    String absent =
+        "sent without image pins ("
+            + failure
+                .map(error -> PINS_MIRROR_IMAGES + " failed: " + error)
+                .orElse(PINS_MIRROR_IMAGES + " gave no image pins")
+            + ")";
+    return result.status() == RunStatus.SUCCEEDED
+        ? new StepResult(
+            result.status(),
+            result.call(),
+            result.answer(),
+            absent + "; " + result.summary(),
+            result.error(),
+            result.skip())
+        : new StepResult(
+            result.status(),
+            result.call(),
+            result.answer(),
+            result.summary(),
+            result.error() + "; " + absent,
+            result.skip());
   }
 
   /**

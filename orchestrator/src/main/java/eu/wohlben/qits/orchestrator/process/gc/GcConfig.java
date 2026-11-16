@@ -50,6 +50,9 @@ public class GcConfig {
   @ConfigProperty(name = "qits.orchestrator.gc.tags-sweep-call-timeout")
   Duration tagsSweepCallTimeout;
 
+  @ConfigProperty(name = "qits.orchestrator.gc.mirror-sweep-call-timeout")
+  Duration mirrorSweepCallTimeout;
+
   @ConfigProperty(name = "qits.orchestrator.gc.pins.retry.attempts")
   int pinsRetryAttempts;
 
@@ -139,6 +142,15 @@ public class GcConfig {
    */
   public Duration tagsSweepCallTimeout() {
     return tagsSweepCallTimeout;
+  }
+
+  /**
+   * How long {@code mirror.sweep} alone may take (ticket qits-2253). qits-mirror runs the whole
+   * eviction — every cache type's condemn-and-delete and the blob unlink after it — synchronously
+   * inside the one request, so on a big mirror the answer is minutes away, not seconds.
+   */
+  public Duration mirrorSweepCallTimeout() {
+    return mirrorSweepCallTimeout;
   }
 
   /**

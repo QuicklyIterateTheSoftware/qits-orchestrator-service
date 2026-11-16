@@ -351,6 +351,83 @@ final class GcSummaries {
         + ")";
   }
 
+  /**
+   * {@code 2 image pins — what qits-mirror keeps its mirrored tags by} — qits-maintenance's image
+   * pins, a bare array of {@code {name, version}} (ticket qits-2253). Counted, never read further:
+   * the rows are qits-mirror's to judge, and they travel to it verbatim.
+   */
+  static String mirrorImagePins(JsonNode body) {
+    int pins = body == null || !body.isArray() ? 0 : body.size();
+    return pins
+        + (pins == 1 ? " image pin" : " image pins")
+        + " — what qits-mirror keeps its mirrored tags by";
+  }
+
+  /**
+   * {@code deleted 4 cached entries, kept 12 (9 pinned) across 3 cache types; 7 blobs unlinked, 1.2
+   * GB reclaimed; tags judged by 31 image pins; 0 errors} — qits-mirror's own sweep report (ticket
+   * qits-2253). On a dry run it says {@code would delete} and counts what is {@code condemned}, and
+   * the blobs are what is reclaimable rather than what was unlinked.
+   *
+   * <p><b>Every figure is the mirror's.</b> The per-type figures are summed across its {@code types}
+   * rows — a sum of what it reported, not a judgement — and {@code pins.supplied} says whether the
+   * tags were judged by pins at all: false is the mirror's fail-safe window rule, which is what a
+   * sweep sent without pins gets.
+   */
+  static String mirrorSweep(JsonNode body) {
+    if (body == null) {
+      return "no mirror sweep report in the answer";
+    }
+    boolean dryRun = body.path("dryRun").asBoolean();
+    int condemned = 0;
+    int deleted = 0;
+    int kept = 0;
+    int pinned = 0;
+    int errors = 0;
+    List<String> failed = new ArrayList<>();
+    JsonNode types = body.path("types");
+    for (JsonNode type : types) {
+      condemned += type.path("condemned").asInt();
+      deleted += type.path("deleted").asInt();
+      kept += type.path("kept").asInt();
+      pinned += type.path("pinned").asInt();
+      errors += type.path("errors").size();
+      if (!text(type, "failure", "").isBlank()) {
+        failed.add(type.path("type").asText("?"));
+      }
+    }
+    int removed = dryRun ? condemned : deleted;
+    JsonNode blobs = body.path("blobs");
+    JsonNode pins = body.path("pins");
+    return (dryRun ? "would delete " : "deleted ")
+        + removed
+        + (removed == 1 ? " cached entry" : " cached entries")
+        + ", kept "
+        + kept
+        + " ("
+        + pinned
+        + " pinned) across "
+        + types.size()
+        + (types.size() == 1 ? " cache type; " : " cache types; ")
+        + (dryRun
+            ? blobs.path("reclaimable").asInt()
+                + " blobs reclaimable ("
+                + bytes(blobs.path("reclaimableBytes").asLong())
+                + ")"
+            : blobs.path("unlinked").asInt()
+                + " blobs unlinked, "
+                + bytes(blobs.path("reclaimedBytes").asLong())
+                + " reclaimed")
+        + "; "
+        + (pins.path("supplied").asBoolean()
+            ? "tags judged by " + pins.path("images").asInt() + " image pins"
+            : "tags judged by the mirror's own window, no image pins")
+        + "; "
+        + errors
+        + (errors == 1 ? " error" : " errors")
+        + (failed.isEmpty() ? "" : "; failed: " + String.join(", ", failed));
+  }
+
   private static String text(JsonNode node, String field, String fallback) {
     JsonNode value = node == null ? null : node.get(field);
     return value == null || value.isNull() ? fallback : value.asText();

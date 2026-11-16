@@ -66,7 +66,8 @@ class GcConsumerPactTest {
           PeerTarget.MAINTENANCE,
           PeerTarget.WORKSPACES,
           PeerTarget.PROJECTS,
-          PeerTarget.IDP);
+          PeerTarget.IDP,
+          PeerTarget.MIRROR);
 
   @TestFactory
   Stream<DynamicTest> everyRowIsWhatTheStepAsksAndReads() {
@@ -79,7 +80,15 @@ class GcConsumerPactTest {
                     () -> verify(row)));
   }
 
+  /**
+   * A row whose operation the pinned golden masters do not record yet ({@link GcContract#CALLS}) is
+   * reported skipped with what it needs, the same shape as {@link
+   * #everyCleanupDoorAsksWhatQitsArtifactsRecorded}, and switches itself on with the pin bump.
+   */
   private static void verify(GcContract.Row row) {
+    if (!GcContract.isRecorded(row)) {
+      Assumptions.abort(GcContract.pact(row.target()).needs(row.interaction()));
+    }
     StepResult whole = GcContract.againstRecording(row);
     assertEquals(RunStatus.SUCCEEDED, whole.status(), String.valueOf(whole.error()));
     assertEquals(

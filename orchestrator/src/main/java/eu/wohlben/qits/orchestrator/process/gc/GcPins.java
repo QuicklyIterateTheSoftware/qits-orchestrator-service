@@ -157,7 +157,24 @@ public final class GcPins {
    */
   public static StepResult read(
       PeerClient peers, Source source, int attempts, Duration delay, Sleeper sleeper) {
-    StepResult result = once(peers, source);
+    return read(peers, source.target(), source.path(), source.summary, attempts, delay, sleeper);
+  }
+
+  /**
+   * The same read for a keep-set that is NOT one of the five {@link Source}s — today {@code
+   * pins.mirror-images} (ticket qits-2253), which guards qits-mirror's tags alone and so must
+   * neither gate the other deleters nor travel in {@link #pinsObject}. Same judgement, same 503
+   * retry: one rule for "may this read be asked again", whoever asks.
+   */
+  public static StepResult read(
+      PeerClient peers,
+      String target,
+      String path,
+      Function<PeerAnswer, String> summary,
+      int attempts,
+      Duration delay,
+      Sleeper sleeper) {
+    StepResult result = once(peers, target, path, summary);
     int made = 1;
     while (made < attempts && answered503(result)) {
       try {
@@ -166,7 +183,7 @@ public final class GcPins {
         Thread.currentThread().interrupt();
         break;
       }
-      result = once(peers, source);
+      result = once(peers, target, path, summary);
       made++;
     }
     if (made == 1) {
@@ -190,8 +207,9 @@ public final class GcPins {
         result.skip());
   }
 
-  private static StepResult once(PeerClient peers, Source source) {
-    return StepResult.ofKeepSet(peers.get(source.target(), source.path()), source.summary);
+  private static StepResult once(
+      PeerClient peers, String target, String path, Function<PeerAnswer, String> summary) {
+    return StepResult.ofKeepSet(peers.get(target, path), summary);
   }
 
   /** A FAILED read whose peer answered, and answered 503 — the one answer worth asking again. */

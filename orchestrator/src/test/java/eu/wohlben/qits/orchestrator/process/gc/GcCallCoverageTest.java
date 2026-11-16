@@ -14,7 +14,6 @@ import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.pact.consumer.ConsumerPact;
 import eu.wohlben.qits.pact.consumer.GoldenInteraction;
-import eu.wohlben.qits.pact.consumer.GoldenMasters.Operation;
 import io.quarkus.oidc.client.OidcClient;
 import java.io.IOException;
 import java.io.InputStream;
@@ -64,6 +63,11 @@ class GcCallCoverageTest {
   void everyCallOfAFullGcPassHasARowAndEveryRowIsACall() {
     FakePeers peers = ContractPeers.fake();
     for (GcContract.Row row : GcContract.ROWS) {
+      if (!GcContract.isRecorded(row)) {
+        // Not recorded in the pinned golden masters yet (GcContract.CALLS): its step is answered
+        // with nothing, which still makes exactly one call.
+        continue;
+      }
       peers.answer(
           GcContract.recorded(row).examplePath(),
           FakePeers.Scripted.ok(
@@ -91,8 +95,7 @@ class GcCallCoverageTest {
     }
     Set<String> rows = new TreeSet<>();
     for (GcContract.Row row : GcContract.ROWS) {
-      Operation op = GcContract.recorded(row);
-      rows.add(row.target() + " " + op.method() + " " + op.examplePath());
+      rows.add(GcContract.call(row));
     }
     for (GcContract.Pending pending : GcContract.PENDING) {
       rows.add(pending.target() + " " + pending.method() + " " + pending.path());

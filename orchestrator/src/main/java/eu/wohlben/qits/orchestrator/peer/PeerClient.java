@@ -98,6 +98,9 @@ public class PeerClient {
   @ConfigProperty(name = "qits.orchestrator.targets.idp-url")
   String idpUrl;
 
+  @ConfigProperty(name = "qits.orchestrator.targets.mirror-url")
+  String mirrorUrl;
+
   @ConfigProperty(name = "qits.orchestrator.gc.call-timeout")
   Duration callTimeout;
 
@@ -131,10 +134,10 @@ public class PeerClient {
   }
 
   /**
-   * A POST with its own read timeout, for the one call this process knows in advance is slower
-   * than the rest — qits-projects' tag sweep, which can walk dozens of repositories and push to
-   * GitHub. Every other caller goes through the three-argument {@link #post}, which uses {@link
-   * #callTimeout}.
+   * A POST with its own read timeout, for the calls this process knows in advance are slower than
+   * the rest — qits-projects' tag sweep, which can walk dozens of repositories and push to GitHub,
+   * and qits-mirror's sweep, which evicts and unlinks synchronously inside the request. Every other
+   * caller goes through the three-argument {@link #post}, which uses {@link #callTimeout}.
    */
   public PeerExchange post(String target, String path, String body, Duration timeout) {
     PeerCall call = new PeerCall("POST", url(target, path), body);
@@ -212,6 +215,7 @@ public class PeerClient {
       case PeerTarget.WORKSPACES -> workspacesUrl;
       case PeerTarget.MAINTENANCE -> maintenanceUrl;
       case PeerTarget.IDP -> idpUrl;
+      case PeerTarget.MIRROR -> mirrorUrl;
       default -> throw new IllegalArgumentException("no such peer: " + target);
     };
   }

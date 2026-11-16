@@ -144,6 +144,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-mirror-golden-masters</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- qits-http-core's CallerRouteRecorder observes a Vert.x Router and takes vertx-web as
                  provided. The service module brings it through its REST layer; this module has
                  none, so its @QuarkusTest boot needs it here or ArC fails on the missing class. -->

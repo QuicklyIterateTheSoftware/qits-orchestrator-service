@@ -29,6 +29,8 @@ public final class RunContext {
 
   private final Map<String, String> bodies = new HashMap<>();
 
+  private final Map<String, String> failures = new HashMap<>();
+
   public RunContext(UUID runId, boolean dryRun, PeerClient peers) {
     this.runId = runId;
     this.dryRun = dryRun;
@@ -56,6 +58,24 @@ public final class RunContext {
     if (body != null) {
       bodies.put(stepId, body);
     }
+  }
+
+  /**
+   * Records that a step FAILED, and why. Called by the executor.
+   *
+   * <p>Needed beside {@link #record} because the executor records a FAILED step's answer too — a
+   * 503's body is JSON — and an edge is what normally keeps that answer from reaching anybody. A
+   * step that reads a predecessor WITHOUT an edge on it ({@code mirror.sweep}, ticket qits-2253,
+   * which must run whether or not its pin read succeeded) asks this before it trusts {@link
+   * #answer}.
+   */
+  public void recordFailure(String stepId, String error) {
+    failures.put(stepId, error == null ? "failed" : error);
+  }
+
+  /** Why a predecessor FAILED, or empty when it did not (or has not run). */
+  public Optional<String> failure(String stepId) {
+    return Optional.ofNullable(failures.get(stepId));
   }
 
   /** A predecessor's answer as a tree, or empty when it did not answer parseable JSON. */

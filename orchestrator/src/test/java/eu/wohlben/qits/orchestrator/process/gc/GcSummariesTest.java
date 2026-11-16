@@ -298,4 +298,68 @@ class GcSummariesTest {
         "removed 0 service clients; kept 0 (claimed 0, grace 0, caller 0)",
         GcSummaries.idpServiceClients(json("{\"message\":\"never swept\"}")));
   }
+
+  @Test
+  void theMirrorImagePinsAreCountedAndNothingMore() {
+    assertEquals(
+        "2 image pins — what qits-mirror keeps its mirrored tags by",
+        GcSummaries.mirrorImagePins(
+            json(
+                """
+                [{"name":"hub/library/postgres","version":"18.4"},
+                 {"name":"node","version":"24-alpine"}]
+                """)));
+    assertEquals(
+        "0 image pins — what qits-mirror keeps its mirrored tags by",
+        GcSummaries.mirrorImagePins(json("{\"message\":\"not an array\"}")));
+    assertEquals(
+        "0 image pins — what qits-mirror keeps its mirrored tags by",
+        GcSummaries.mirrorImagePins(null));
+  }
+
+  private static final String MIRROR_TYPES =
+      """
+      "types":[
+        {"type":"npm-proxy","condemned":2,"deleted":2,"kept":5,"pinned":0,"errors":[],"failure":null},
+        {"type":"oci-mirror","condemned":3,"deleted":2,"kept":9,"pinned":7,
+         "errors":["hub/library/x:1 could not be deleted"],"failure":null},
+        {"type":"maven-proxy","condemned":0,"deleted":0,"kept":0,"pinned":0,"errors":[],
+         "failure":"the store would not answer"}]
+      """;
+
+  @Test
+  void theMirrorSweepSumsTheMirrorsOwnPerTypeFiguresAndSaysWhatJudgedTheTags() {
+    assertEquals(
+        "deleted 4 cached entries, kept 14 (7 pinned) across 3 cache types; 6 blobs unlinked,"
+            + " 1.2 GB reclaimed; tags judged by 31 image pins; 1 error; failed: maven-proxy",
+        GcSummaries.mirrorSweep(
+            json(
+                "{\"dryRun\":false,\"pins\":{\"supplied\":true,\"images\":31},"
+                    + MIRROR_TYPES
+                    + ",\"blobs\":{\"unlinked\":6,\"reclaimedBytes\":1200000000,"
+                    + "\"reclaimable\":9,\"reclaimableBytes\":2000000000}}")));
+  }
+
+  @Test
+  void aDryMirrorSweepCountsWhatIsCondemnedAndWhatIsReclaimable() {
+    assertEquals(
+        "would delete 5 cached entries, kept 14 (7 pinned) across 3 cache types; 9 blobs"
+            + " reclaimable (2.0 GB); tags judged by the mirror's own window, no image pins; 1"
+            + " error; failed: maven-proxy",
+        GcSummaries.mirrorSweep(
+            json(
+                "{\"dryRun\":true,\"pins\":{\"supplied\":false,\"images\":0},"
+                    + MIRROR_TYPES
+                    + ",\"blobs\":{\"unlinked\":0,\"reclaimedBytes\":0,"
+                    + "\"reclaimable\":9,\"reclaimableBytes\":2000000000}}")));
+  }
+
+  @Test
+  void aMirrorSweepAnswerWithNothingInItReadsAsZeroesRatherThanFailing() {
+    assertEquals("no mirror sweep report in the answer", GcSummaries.mirrorSweep(null));
+    assertEquals(
+        "deleted 0 cached entries, kept 0 (0 pinned) across 0 cache types; 0 blobs unlinked, 0 B"
+            + " reclaimed; tags judged by the mirror's own window, no image pins; 0 errors",
+        GcSummaries.mirrorSweep(json("{\"nope\":1}")));
+  }
 }

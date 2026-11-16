@@ -115,6 +115,10 @@
         <qits.workspaces-golden-masters.version>2026.1111.70514</qits.workspaces-golden-masters.version>
         <qits.projects-golden-masters.version>2026.1116.1416</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
+        <!-- qits-mirror's, for mirror.sweep (qits-2253). Pinned at the newest published version,
+             which predates the sweepGc recording: the row is reported skipped and no
+             qits-mirror-service pact is written until the bump that brings the recording in. -->
+        <qits.mirror-golden-masters.version>2026.1107.183334</qits.mirror-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -319,6 +323,11 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>qits-idp-golden-masters</artifactId>
                 <version>${qits.idp-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-mirror-golden-masters</artifactId>
+                <version>${qits.mirror-golden-masters.version}</version>
             </dependency>
             <dependency>
                 <!-- Managed here rather than versioned at the use site because Quinoa is in no BOM;

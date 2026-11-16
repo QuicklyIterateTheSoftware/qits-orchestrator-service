@@ -159,6 +159,7 @@ public class RunExecutor {
           anyFailed = true;
           failureOrigin.put(step.id(), step.id());
           failures.add(failure(step, result));
+          context.recordFailure(step.id(), result.error());
         } else if (result.skip() == SkipKind.FAILURE) {
           failureOrigin.put(step.id(), blocker == null ? step.id() : blocker);
         }

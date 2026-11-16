@@ -1,7 +1,7 @@
 package eu.wohlben.qits.orchestrator.peer;
 
 /**
- * The eight peers, by their wire name.
+ * The nine peers, by their wire name.
  *
  * <p>Constants rather than an enum because the same string is two things at once: the value a step
  * reports as its {@code target}, and the middle of the config key {@code
@@ -41,6 +41,13 @@ public final class PeerTarget {
    * {@code qits-platform} on every token, so no second client and no second audience.
    */
   public static final String IDP = "idp";
+
+  /**
+   * qits-mirror — the pull-through caches, whose mirrored image tags are evicted by the image pins
+   * qits-maintenance reads off every repository's manifests (ticket qits-2253). Its own cron is
+   * gone: the gc run's {@code mirror.sweep} is the only clock its eviction has.
+   */
+  public static final String MIRROR = "mirror";
 
   private PeerTarget() {}
 }

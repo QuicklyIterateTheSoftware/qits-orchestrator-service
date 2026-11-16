@@ -125,6 +125,14 @@ class ProcessApiTest {
             "{\"dryRun\":false,\"removed\":[],"
                 + "\"kept\":[{\"clientId\":\"dev-qits-ci\",\"reason\":\"claimed\"}],"
                 + "\"keptCounts\":{\"claimed\":1,\"grace\":0,\"caller\":0}}"));
+    peers.answer(
+        "/maintenance/api/pins/images",
+        FakePeers.Scripted.ok("[{\"name\":\"node\",\"version\":\"24-alpine\"}]"));
+    peers.answer(
+        "/mirror/api/gc/sweep",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],"
+                + "\"blobs\":{\"unlinked\":0,\"reclaimedBytes\":0}}"));
   }
 
   /**
@@ -192,7 +200,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(19))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(21))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -206,21 +214,21 @@ class ProcessApiTest {
         .body("find { it.kind == 'gc' }.steps[5].target", equalTo("workspaces"))
         .body("find { it.kind == 'gc' }.steps[6].id", equalTo("pins.projects"))
         .body("find { it.kind == 'gc' }.steps[6].target", equalTo("projects"))
-        .body("find { it.kind == 'gc' }.steps[7].id", equalTo("artifacts.plan"))
+        .body("find { it.kind == 'gc' }.steps[8].id", equalTo("artifacts.plan"))
         .body(
-            "find { it.kind == 'gc' }.steps[7].dependsOn",
+            "find { it.kind == 'gc' }.steps[8].dependsOn",
             contains(
                 "pins.deployments",
                 "pins.ci",
                 "pins.dependencies",
                 "pins.workspaces",
                 "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[12].id", equalTo("repos.catalogue"))
-        .body("find { it.kind == 'gc' }.steps[12].target", equalTo("projects"))
-        .body("find { it.kind == 'gc' }.steps[13].id", equalTo("branches.sweep"))
-        .body("find { it.kind == 'gc' }.steps[13].target", equalTo("workspaces"))
+        .body("find { it.kind == 'gc' }.steps[13].id", equalTo("repos.catalogue"))
+        .body("find { it.kind == 'gc' }.steps[13].target", equalTo("projects"))
+        .body("find { it.kind == 'gc' }.steps[14].id", equalTo("branches.sweep"))
+        .body("find { it.kind == 'gc' }.steps[14].target", equalTo("workspaces"))
         .body(
-            "find { it.kind == 'gc' }.steps[13].dependsOn",
+            "find { it.kind == 'gc' }.steps[14].dependsOn",
             contains(
                 "repos.catalogue",
                 "pins.deployments",
@@ -228,10 +236,10 @@ class ProcessApiTest {
                 "pins.dependencies",
                 "pins.workspaces",
                 "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[14].id", equalTo("tags.sweep"))
-        .body("find { it.kind == 'gc' }.steps[14].target", equalTo("projects"))
+        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("tags.sweep"))
+        .body("find { it.kind == 'gc' }.steps[15].target", equalTo("projects"))
         .body(
-            "find { it.kind == 'gc' }.steps[14].dependsOn",
+            "find { it.kind == 'gc' }.steps[15].dependsOn",
             contains(
                 "pins.deployments",
                 "pins.ci",
@@ -241,13 +249,13 @@ class ProcessApiTest {
                 "repos.catalogue"))
         // The service-client sweep (qits-878): claims read from the deployer, the eighth peer asked to
         // delete what nothing claims — the claims read first, then every pin read (qits-1175).
-        .body("find { it.kind == 'gc' }.steps[15].id", equalTo("claims.idp-clients"))
-        .body("find { it.kind == 'gc' }.steps[15].target", equalTo("deployments"))
-        .body("find { it.kind == 'gc' }.steps[15].dependsOn", equalTo(java.util.List.of()))
-        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("idp.service-clients"))
-        .body("find { it.kind == 'gc' }.steps[16].target", equalTo("idp"))
+        .body("find { it.kind == 'gc' }.steps[16].id", equalTo("claims.idp-clients"))
+        .body("find { it.kind == 'gc' }.steps[16].target", equalTo("deployments"))
+        .body("find { it.kind == 'gc' }.steps[16].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("idp.service-clients"))
+        .body("find { it.kind == 'gc' }.steps[17].target", equalTo("idp"))
         .body(
-            "find { it.kind == 'gc' }.steps[16].dependsOn",
+            "find { it.kind == 'gc' }.steps[17].dependsOn",
             contains(
                 "claims.idp-clients",
                 "pins.deployments",
@@ -255,8 +263,16 @@ class ProcessApiTest {
                 "pins.dependencies",
                 "pins.workspaces",
                 "pins.projects"))
-        .body("find { it.kind == 'gc' }.steps[17].id", equalTo("artifacts.usage.after"))
-        .body("find { it.kind == 'gc' }.steps[17].dependsOn", contains("artifacts.sweep"));
+        // qits-mirror's pair (qits-2253): the image pins read from qits-maintenance with no edge,
+        // and the sweep with none either — it runs, without pins, when the read failed.
+        .body("find { it.kind == 'gc' }.steps[7].id", equalTo("pins.mirror-images"))
+        .body("find { it.kind == 'gc' }.steps[7].target", equalTo("maintenance"))
+        .body("find { it.kind == 'gc' }.steps[7].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'gc' }.steps[18].id", equalTo("mirror.sweep"))
+        .body("find { it.kind == 'gc' }.steps[18].target", equalTo("mirror"))
+        .body("find { it.kind == 'gc' }.steps[18].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'gc' }.steps[19].id", equalTo("artifacts.usage.after"))
+        .body("find { it.kind == 'gc' }.steps[19].dependsOn", contains("artifacts.sweep"));
   }
 
   @Test
@@ -292,7 +308,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(19))
+        .body("steps.size()", equalTo(21))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -308,12 +324,12 @@ class ProcessApiTest {
         .body("steps[0].error", nullValue())
         .body("steps[0].summary", notNullValue())
         // The registry sweep is the step a dry run does not make…
-        .body("steps[8].id", equalTo("artifacts.sweep"))
-        .body("steps[8].status", equalTo("SKIPPED"))
-        .body("steps[8].error", equalTo("dry run"))
-        .body("steps[8].request", nullValue())
+        .body("steps[9].id", equalTo("artifacts.sweep"))
+        .body("steps[9].status", equalTo("SKIPPED"))
+        .body("steps[9].error", equalTo("dry run"))
+        .body("steps[9].request", nullValue())
         .body(
-            "steps[8].dependsOn",
+            "steps[9].dependsOn",
             contains(
                 "artifacts.plan",
                 "pins.deployments",
@@ -323,40 +339,48 @@ class ProcessApiTest {
                 "pins.projects"))
         // …while the branch sweep runs on a dry run too — qits-workspaces judges identically and
         // deletes nothing, so the request carries the flag rather than being withheld.
-        .body("steps[13].id", equalTo("branches.sweep"))
-        .body("steps[13].status", equalTo("SUCCEEDED"))
-        .body("steps[13].request.method", equalTo("POST"))
-        .body("steps[13].request.body", containsString("\"dryRun\":true"))
-        .body("steps[13].request.body", containsString("\"mainBranch\":\"main\""))
-        .body("steps[13].request.body", containsString("environment/"))
-        .body("steps[13].request.body", containsString("release/"))
-        .body("steps[13].summary", containsString("removed 1 of 4 branches"))
-        // tags.sweep is not withheld either — qits-projects judges identically on a dry run — and
-        // it carries the same {"pins": {...}} object the plan does, not just one source.
-        .body("steps[14].id", equalTo("tags.sweep"))
+        .body("steps[14].id", equalTo("branches.sweep"))
         .body("steps[14].status", equalTo("SUCCEEDED"))
         .body("steps[14].request.method", equalTo("POST"))
         .body("steps[14].request.body", containsString("\"dryRun\":true"))
-        .body("steps[14].request.body", containsString("\"applicationName\":\"qits-ci\""))
-        .body("steps[14].summary", containsString("tags decommissioned"))
+        .body("steps[14].request.body", containsString("\"mainBranch\":\"main\""))
+        .body("steps[14].request.body", containsString("environment/"))
+        .body("steps[14].request.body", containsString("release/"))
+        .body("steps[14].summary", containsString("removed 1 of 4 branches"))
+        // tags.sweep is not withheld either — qits-projects judges identically on a dry run — and
+        // it carries the same {"pins": {...}} object the plan does, not just one source.
+        .body("steps[15].id", equalTo("tags.sweep"))
+        .body("steps[15].status", equalTo("SUCCEEDED"))
+        .body("steps[15].request.method", equalTo("POST"))
+        .body("steps[15].request.body", containsString("\"dryRun\":true"))
+        .body("steps[15].request.body", containsString("\"applicationName\":\"qits-ci\""))
+        .body("steps[15].summary", containsString("tags decommissioned"))
         // idp.service-clients is not withheld either — qits-idp honours dryRun itself — and it
         // carries the deployer's claims array as it arrived.
-        .body("steps[15].id", equalTo("claims.idp-clients"))
-        .body("steps[15].status", equalTo("SUCCEEDED"))
-        .body("steps[16].id", equalTo("idp.service-clients"))
+        .body("steps[16].id", equalTo("claims.idp-clients"))
         .body("steps[16].status", equalTo("SUCCEEDED"))
-        .body("steps[16].request.method", equalTo("POST"))
-        .body(
-            "steps[16].request.url",
-            equalTo("http://dev-qits-idp:8080/idp/api/gc/service-clients"))
-        .body("steps[16].request.body", containsString("\"dryRun\":true"))
-        .body("steps[16].request.body", containsString("\"clientId\":\"dev-qits-ci\""))
-        // The registry's own measurement, taken twice like the host's — the plane a `docker system
-        // df` receipt cannot see.
-        .body("steps[17].id", equalTo("artifacts.usage.after"))
+        .body("steps[17].id", equalTo("idp.service-clients"))
         .body("steps[17].status", equalTo("SUCCEEDED"))
+        .body("steps[17].request.method", equalTo("POST"))
         .body(
             "steps[17].request.url",
+            equalTo("http://dev-qits-idp:8080/idp/api/gc/service-clients"))
+        .body("steps[17].request.body", containsString("\"dryRun\":true"))
+        .body("steps[17].request.body", containsString("\"clientId\":\"dev-qits-ci\""))
+        // …and neither is the mirror's sweep (qits-2253): qits-mirror honours dryRun itself, and the
+        // image pins ride in the body as qits-maintenance answered them.
+        .body("steps[18].id", equalTo("mirror.sweep"))
+        .body("steps[18].status", equalTo("SUCCEEDED"))
+        .body(
+            "steps[18].request.url", equalTo("http://dev-qits-mirror:8080/mirror/api/gc/sweep"))
+        .body("steps[18].request.body", containsString("\"dryRun\":true"))
+        .body("steps[18].request.body", containsString("\"version\":\"24-alpine\""))
+        // The registry's own measurement, taken twice like the host's — the plane a `docker system
+        // df` receipt cannot see.
+        .body("steps[19].id", equalTo("artifacts.usage.after"))
+        .body("steps[19].status", equalTo("SUCCEEDED"))
+        .body(
+            "steps[19].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
   }
 

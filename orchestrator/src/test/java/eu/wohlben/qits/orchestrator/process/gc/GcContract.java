@@ -99,6 +99,7 @@ final class GcContract {
       GoldenMasters.of("qits-workspaces-service", "qits-workspaces");
   static final GoldenMasters PROJECTS = GoldenMasters.of("qits-projects-service", "qits-projects");
   static final GoldenMasters IDP = GoldenMasters.of("qits-idp-service", "qits-idp");
+  static final GoldenMasters MIRROR = GoldenMasters.of("qits-mirror-service", "qits-mirror");
 
   /** The peer each {@link PeerTarget} is. */
   static final Map<String, GoldenMasters> PEERS =
@@ -110,7 +111,8 @@ final class GcContract {
           PeerTarget.MAINTENANCE, MAINTENANCE,
           PeerTarget.WORKSPACES, WORKSPACES,
           PeerTarget.PROJECTS, PROJECTS,
-          PeerTarget.IDP, IDP);
+          PeerTarget.IDP, IDP,
+          PeerTarget.MIRROR, MIRROR);
 
   // --- the rows ----------------------------------------------------------------------------------
 
@@ -156,6 +158,17 @@ final class GcContract {
           // qits-maintenance-service
           row(PeerTarget.MAINTENANCE, GcProcess.PINS_DEPENDENCIES, "manifests that pin artifacts",
               "listDependencyPins", NOTHING, "pins[]", "repositories[]"),
+          // The mirror's image pins (qits-2253): a bare array, read for its presence and size alone
+          // (GcSummaries#mirrorImagePins) and forwarded WHOLE to qits-mirror, so no field of a row
+          // is this service's to bind, and anyLength("$") because how many images the estate's
+          // manifests pin today is no contract either side means to hold.
+          new Row(
+              PeerTarget.MAINTENANCE,
+              GcProcess.PINS_MIRROR_IMAGES,
+              GoldenInteraction.of(NIGHTLY, "manifests that pin artifacts", "listImagePins")
+                  .consumes("[]")
+                  .anyLength("$"),
+              NOTHING),
           // qits-workspaces-service. anyLength("pins"): this service reads no field of a pin, only
           // the array's presence (GcSummaries#workspaceLaunchPins counts it for the step's line, and
           // the whole answer rides to qits-artifacts verbatim — see pinsFromBody). Pinning the count
@@ -198,7 +211,61 @@ final class GcContract {
                   .consumes(
                       "dryRun", "removed[].clientId", "kept[]", "keptCounts.claimed",
                       "keptCounts.grace", "keptCounts.caller"),
-              GcContract::claimsFromBody));
+              GcContract::claimsFromBody),
+          // qits-mirror-service (qits-2253). Recorded on a dry run, so the row runs the step dry
+          // (#run reads the flag off the recorded request); the pins are the recorded body's.
+          row(PeerTarget.MIRROR, GcProcess.MIRROR_SWEEP, "a mirror holding a pinned and an unpinned tag",
+              "sweepGc", GcContract::mirrorPinsFromBody,
+              "dryRun", "pins.supplied", "pins.images", "types[].type", "types[].condemned",
+              "types[].deleted", "types[].kept", "types[].pinned", "types[].errors[]",
+              "types[].failure", "blobs.reclaimable", "blobs.reclaimableBytes", "blobs.unlinked",
+              "blobs.reclaimedBytes"));
+
+  /**
+   * The call a row makes, as {@code "<target> <METHOD> <path>"}, for a row whose operation the
+   * PINNED golden masters do not record yet — so {@code GcCallCoverageTest} can still hold the gc
+   * pass to it. Such a row is in {@link #ROWS} all the same: {@link ConsumerPact#recorded()} leaves
+   * it out of the pact file, {@code GcConsumerPactTest} reports it skipped with what it needs, and
+   * the pin bump that brings the recording in is what switches it on — from then the committed pact
+   * fails its comparison until it is rewritten with {@code -Dgolden.update=true}. Once recorded, the
+   * entry here must still agree with the recording, so it can stay.
+   *
+   * <p>Both entries are ticket qits-2253's: qits-maintenance's {@code listImagePins} and qits-mirror's
+   * {@code sweepGc} were recorded after the versions {@code qits.maintenance-golden-masters.version}
+   * and {@code qits.mirror-golden-masters.version} pin.
+   */
+  static final Map<String, String> CALLS =
+      Map.of(
+          GcProcess.PINS_MIRROR_IMAGES, PeerTarget.MAINTENANCE + " GET /maintenance/api/pins/images",
+          GcProcess.MIRROR_SWEEP, PeerTarget.MIRROR + " POST /mirror/api/gc/sweep");
+
+  /** Whether the pinned golden masters record {@code row}'s operation. */
+  static boolean isRecorded(Row row) {
+    return masters(row).recorded(row.interaction().state(), row.interaction().operationId());
+  }
+
+  /**
+   * {@code row}'s call as {@code "<target> <METHOD> <path>"}: the recording's where there is one
+   * (and then {@link #CALLS} must agree with it), {@link #CALLS}' otherwise.
+   */
+  static String call(Row row) {
+    String written = CALLS.get(row.stepId());
+    if (!isRecorded(row)) {
+      if (written == null) {
+        throw new IllegalStateException(
+            row.stepId() + ": " + pact(row.target()).needs(row.interaction())
+                + ", and GcContract.CALLS names no call for it");
+      }
+      return written;
+    }
+    Operation op = recorded(row);
+    String made = row.target() + " " + op.method() + " " + op.examplePath();
+    if (written != null && !written.equals(made)) {
+      throw new IllegalStateException(
+          row.stepId() + ": GcContract.CALLS says '" + written + "', the recording '" + made + "'");
+    }
+    return made;
+  }
 
   /**
    * The client-credentials mint {@code PeerTokens} makes through quarkus-oidc-client's {@code
@@ -486,6 +553,11 @@ final class GcContract {
     config.branchKeepPrefixes = prefixes;
   }
 
+  /** {@code pins.images}: the image pin answer qits-maintenance gave, sent whole. */
+  private static void mirrorPinsFromBody(JsonNode recorded, GcConfig config, RunContext context) {
+    seedIfPresent(context, GcProcess.PINS_MIRROR_IMAGES, recorded.path("pins").get("images"));
+  }
+
   /** {@code claims}: the claim set qits-deployments answered, sent whole. */
   private static void claimsFromBody(JsonNode recorded, GcConfig config, RunContext context) {
     ObjectNode answer = JSON.createObjectNode();
@@ -541,6 +613,8 @@ final class GcContract {
     config.pinsRetryAttempts =
         Integer.parseInt(shipped.getProperty(prefix + "pins.retry.attempts"));
     config.pinsRetryDelay = Duration.parse(shipped.getProperty(prefix + "pins.retry.delay"));
+    config.mirrorSweepCallTimeout =
+        Duration.parse(shipped.getProperty(prefix + "mirror-sweep-call-timeout"));
     return config;
   }
 
@@ -555,11 +629,16 @@ final class GcContract {
         .orElseThrow(() -> new IllegalArgumentException("no gc step " + stepId));
   }
 
-  /** {@code row}'s step, arranged to send the recorded request, calling {@code peers}. */
+  /**
+   * {@code row}'s step, arranged to send the recorded request, calling {@code peers} — on a dry run
+   * when the recorded request says {@code "dryRun": true} (qits-mirror's {@code sweepGc} is recorded
+   * so), a live one otherwise.
+   */
   static StepResult run(Row row, PeerClient peers) {
     Operation op = recorded(row);
     GcConfig config = shippedConfig();
-    RunContext context = new RunContext(UUID.randomUUID(), false, peers);
+    boolean dryRun = op.body() != null && op.body().path("dryRun").asBoolean(false);
+    RunContext context = new RunContext(UUID.randomUUID(), dryRun, peers);
     row.arrange().apply(op.body() == null ? null : examples(op.body(), op), config, context);
     return step(process(config), row.stepId()).body().run(context);
   }
@@ -585,7 +664,10 @@ final class GcContract {
     for (String path : row.interaction().consumes()) {
       List<String> steps = new ArrayList<>();
       for (String key : path.split("\\.")) {
-        if (key.endsWith("[]")) {
+        if (key.equals("[]")) {
+          // A top-level array ("[]", "[].name"): no key before the elements.
+          steps.add("[]");
+        } else if (key.endsWith("[]")) {
           steps.add(key.substring(0, key.length() - 2));
           steps.add("[]");
         } else {

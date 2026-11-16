@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the nineteen steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the twenty-one steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -55,11 +55,21 @@ class GcProcessTest {
   private static final String TAGS = "/projects/api/gc/tags";
   private static final String CLAIMS = "/deployments/api/claims/idp-clients";
   private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
+  private static final String MIRROR_IMAGE_PINS = "/maintenance/api/pins/images";
+  private static final String MIRROR_SWEEP = "/mirror/api/gc/sweep";
+
+  private static final String IMAGE_PINS =
+      """
+      [{"name":"hub/library/postgres","version":"18.4"},{"name":"node","version":"24-alpine"}]
+      """;
 
   private static final String PIN_EDGES =
       "pins.deployments,pins.ci,pins.dependencies,pins.workspaces,pins.projects";
 
-  /** Every path a deleting step calls. A run with an unread pin source calls none of them. */
+  /**
+   * Every path a deleting step calls. A run with an unread pin source calls none of them — except
+   * qits-mirror's sweep, which is not here: its fail-safe is the mirror's own (qits-2253).
+   */
   private static final List<String> DELETERS =
       List.of(PLAN, SWEEP, IMAGES, VOLUMES, BUILD_CACHE, BRANCHES, TAGS, SERVICE_CLIENTS);
 
@@ -233,6 +243,23 @@ class GcProcessTest {
                       "createdBy":"qits-deployments","reason":"caller"}],
              "keptCounts":{"claimed":1,"grace":0,"caller":1}}
             """));
+    peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.ok(IMAGE_PINS));
+    peers.answer(
+        MIRROR_SWEEP,
+        FakePeers.Scripted.ok(
+            """
+            {"startedAt":"2026-11-16T03:00:00Z","dryRun":false,"pins":{"supplied":true,"images":2},
+             "types":[{"type":"npm-proxy","window":"P30D","condemned":3,"superseded":0,"unpinned":0,
+                       "deleted":3,"kept":40,"pinned":0,"withheld":0,"errors":[],"failure":null,
+                       "note":null},
+                      {"type":"oci-mirror","window":"P30D","condemned":2,"superseded":0,
+                       "unpinned":2,"deleted":2,"kept":5,"pinned":4,"withheld":0,"errors":[],
+                       "failure":null,"note":null}],
+             "blobs":{"reclaimable":7,"reclaimableBytes":2400000000,"unlinked":7,
+                      "reclaimedBytes":2400000000,"withheld":0,"withheldBytes":0,
+                      "stillReferenced":0,"alreadyGone":0},
+             "summary":"Cache eviction: …"}
+            """));
   }
 
   /**
@@ -289,7 +316,7 @@ class GcProcessTest {
   }
 
   @Test
-  void aHealthyPlatformRunsAllNineteenStepsAndSummarisesEachFromTheAnswer() {
+  void aHealthyPlatformRunsAllTwentyOneStepsAndSummarisesEachFromTheAnswer() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
@@ -305,6 +332,7 @@ class GcProcessTest {
             "pins.dependencies",
             "pins.workspaces",
             "pins.projects",
+            "pins.mirror-images",
             "artifacts.plan",
             "artifacts.sweep",
             "containers.images",
@@ -315,6 +343,7 @@ class GcProcessTest {
             "tags.sweep",
             "claims.idp-clients",
             "idp.service-clients",
+            "mirror.sweep",
             "artifacts.usage.after",
             "usage.after"),
         runs.steps(id).stream().map(step -> step.stepId).toList());
@@ -362,6 +391,13 @@ class GcProcessTest {
     assertEquals(
         "removed 1 service client (dev-qits-retired); kept 2 (claimed 1, grace 0, caller 1)",
         steps.get("idp.service-clients").summary);
+    assertEquals(
+        "2 image pins — what qits-mirror keeps its mirrored tags by",
+        steps.get("pins.mirror-images").summary);
+    assertEquals(
+        "deleted 5 cached entries, kept 45 (4 pinned) across 2 cache types; 7 blobs unlinked,"
+            + " 2.4 GB reclaimed; tags judged by 2 image pins; 0 errors",
+        steps.get("mirror.sweep").summary);
 
     // The url is the shipped target plus the shipped path — a wrong peer would fail here. The host
     // is %test's local dev-qits-<alias> value; the deployed edge hosts are the service module's
@@ -399,6 +435,199 @@ class GcProcessTest {
         "http://dev-qits-idp:8080/idp/api/gc/service-clients",
         steps.get("idp.service-clients").requestUrl);
     assertEquals("POST", steps.get("idp.service-clients").requestMethod);
+    // The mirror's image pins ride qits-maintenance, the sweep is asked of qits-mirror — the ninth.
+    assertEquals(
+        "http://dev-qits-maintenance:8080/maintenance/api/pins/images",
+        steps.get("pins.mirror-images").requestUrl);
+    assertEquals("maintenance", steps.get("pins.mirror-images").target);
+    assertEquals(
+        "http://dev-qits-mirror:8080/mirror/api/gc/sweep", steps.get("mirror.sweep").requestUrl);
+    assertEquals("POST", steps.get("mirror.sweep").requestMethod);
+    assertEquals("mirror", steps.get("mirror.sweep").target);
+  }
+
+  // --- the mirror (qits-2253) ---------------------------------------------------------------------
+
+  private OpStep step(UUID id, String stepId) {
+    return stepsOf(id).get(stepId);
+  }
+
+  @Test
+  void theMirrorSweepIsHandedTheImagePinsVerbatimAndNeitherStepHasAnEdge() {
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(
+        json("{\"pins\":{\"images\":" + IMAGE_PINS + "},\"dryRun\":false}"),
+        json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+    // Neither waits on anything, and nothing waits on either: the image pins guard the mirror alone.
+    assertNull(step(id, "pins.mirror-images").dependsOn);
+    assertNull(step(id, "mirror.sweep").dependsOn);
+    process.steps()
+        .forEach(
+            s ->
+                assertFalse(
+                    s.dependsOn().contains("pins.mirror-images")
+                        || s.dependsOn().contains("mirror.sweep"),
+                    s.id() + " depends on a mirror step: " + s.dependsOn()));
+    // …and they are in no other store's pin body: the artifacts plan and the tag sweep carry the
+    // five sources and nothing else.
+    assertEquals(5, json(peers.bodiesFor(PLAN).getFirst()).get("pins").size());
+    assertEquals(5, json(peers.bodiesFor(TAGS).getFirst()).get("pins").size());
+  }
+
+  @Test
+  void aDryRunSweepsTheMirrorWithItsFlagAndThePins() {
+    UUID id = executor.start("gc", RunTrigger.MANUAL, true);
+    awaitClosed(id);
+
+    assertEquals(RunStatus.SUCCEEDED.name(), step(id, "mirror.sweep").status);
+    assertEquals(
+        json("{\"pins\":{\"images\":" + IMAGE_PINS + "},\"dryRun\":true}"),
+        json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+  }
+
+  /** Every deleter but the mirror's ran once, and so did both closing measurements. */
+  private void assertEveryOtherStoreRan(UUID id) {
+    for (String path : DELETERS) {
+      assertEquals(1, peers.callsTo(path), path + " must not wait on the mirror's image pins");
+    }
+    Map<String, OpStep> steps = stepsOf(id);
+    steps.forEach(
+        (stepId, row) -> {
+          if (!stepId.equals("pins.mirror-images") && !stepId.equals("mirror.sweep")) {
+            assertEquals(RunStatus.SUCCEEDED.name(), row.status, stepId);
+          }
+        });
+  }
+
+  @Test
+  void anImagePinReadThatAnswers503EveryTimeStillSweepsTheMirrorWithoutPinsAndHaltsNothing() {
+    peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.status(503, NOT_COMPLETE));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    // The read failed, and says so — the run is FAILED for it, like any failed step.
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    assertEquals(ATTEMPTS, peers.callsTo(MIRROR_IMAGE_PINS), "the same 503 retry as every pin read");
+    OpStep read = step(id, "pins.mirror-images");
+    assertEquals(RunStatus.FAILED.name(), read.status);
+    assertTrue(
+        read.error.endsWith("/maintenance/api/pins/images answered 503 (" + ATTEMPTS
+            + " attempts, 0s apart)"),
+        read.error);
+
+    // The sweep still ran, WITHOUT pins — never the 503's body as if it were a pin set — and says
+    // why on its row.
+    assertEquals(
+        json("{\"dryRun\":false}"), json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+    OpStep sweep = step(id, "mirror.sweep");
+    assertEquals(RunStatus.SUCCEEDED.name(), sweep.status);
+    assertTrue(
+        sweep.summary.startsWith(
+            "sent without image pins (pins.mirror-images failed: http://dev-qits-maintenance:8080"
+                + "/maintenance/api/pins/images answered 503 (" + ATTEMPTS + " attempts, 0s apart)); "),
+        sweep.summary);
+    assertEveryOtherStoreRan(id);
+  }
+
+  @Test
+  void anImagePinReadThatAnswers500FailsAtOnceAndTheMirrorIsSweptWithoutPins() {
+    peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.status(500, "{\"message\":\"boom\"}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(1, peers.callsTo(MIRROR_IMAGE_PINS), "a 500 is not asked again");
+    assertEquals(RunStatus.FAILED.name(), step(id, "pins.mirror-images").status);
+    assertEquals(json("{\"dryRun\":false}"), json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+    assertTrue(
+        step(id, "mirror.sweep").summary.startsWith("sent without image pins (pins.mirror-images"
+            + " failed: "),
+        step(id, "mirror.sweep").summary);
+    assertEveryOtherStoreRan(id);
+  }
+
+  @Test
+  void anEmptyImagePinSetIsAFailedReadAndIsNeverSent() {
+    // qits-mirror answers 400 to an empty image list: to it, that reads as "nothing is pinned".
+    peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.ok("[]"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    OpStep read = step(id, "pins.mirror-images");
+    assertEquals(RunStatus.FAILED.name(), read.status);
+    assertTrue(read.error.contains("answered no image pins"), read.error);
+    assertEquals(json("{\"dryRun\":false}"), json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+    assertEveryOtherStoreRan(id);
+  }
+
+  @Test
+  void anImagePinReadThatHealsAfterA503IsForwardedLikeAnyOther() {
+    peers.answerInSequence(
+        MIRROR_IMAGE_PINS,
+        FakePeers.Scripted.status(503, NOT_COMPLETE),
+        FakePeers.Scripted.ok(IMAGE_PINS));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.SUCCEEDED.name(), run.status, run.summary);
+    assertTrue(
+        step(id, "pins.mirror-images").summary.endsWith("(after 2 attempts)"),
+        step(id, "pins.mirror-images").summary);
+    assertEquals(
+        json("{\"pins\":{\"images\":" + IMAGE_PINS + "},\"dryRun\":false}"),
+        json(peers.bodiesFor(MIRROR_SWEEP).getFirst()));
+  }
+
+  @Test
+  void aMirrorThatFailsIsAFailedStepAndStopsNoOtherStore() {
+    peers.answer(MIRROR_SWEEP, FakePeers.Scripted.status(409, "{\"message\":\"a sweep is running\"}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status);
+    OpStep sweep = step(id, "mirror.sweep");
+    assertEquals(RunStatus.FAILED.name(), sweep.status);
+    assertEquals(409, sweep.httpStatus);
+    assertTrue(sweep.error.endsWith("/mirror/api/gc/sweep answered 409"), sweep.error);
+    assertEquals(RunStatus.SUCCEEDED.name(), step(id, "pins.mirror-images").status);
+    assertEveryOtherStoreRan(id);
+  }
+
+  @Test
+  void anUnreachableMirrorWithUnreadPinsSaysBothOnItsRow() {
+    peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.unreachable("qits-maintenance: no route"));
+    peers.answer(MIRROR_SWEEP, FakePeers.Scripted.unreachable("qits-mirror: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    OpStep sweep = step(id, "mirror.sweep");
+    assertEquals(RunStatus.FAILED.name(), sweep.status);
+    assertTrue(
+        sweep.error.equals(
+            "qits-mirror: no route; sent without image pins (pins.mirror-images failed:"
+                + " qits-maintenance: no route)"),
+        sweep.error);
+    assertEveryOtherStoreRan(id);
+  }
+
+  @Test
+  void aFailedFivePinReadStillSweepsTheMirror() {
+    // The other direction: the five sources guard the other stores, not the mirror's tags.
+    peers.answer(DEPLOYMENT_PINS, FakePeers.Scripted.unreachable("qits-deployments: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertNoDeleterWasCalled();
+    assertEquals(RunStatus.SUCCEEDED.name(), step(id, "mirror.sweep").status);
+    assertEquals(1, peers.callsTo(MIRROR_SWEEP));
   }
 
   @Test
@@ -644,11 +873,16 @@ class GcProcessTest {
             "pins.projects",
             "repos.catalogue",
             "claims.idp-clients",
+            "pins.mirror-images",
             "artifacts.usage.after",
             "usage.after");
+    // mirror.sweep deletes WITHOUT a pin edge, and on purpose (qits-2253): its tags are guarded by
+    // the image pins, and a sweep sent without them keeps qits-mirror's own window rule — the
+    // mirror's fail-safe, not this run's. Its edgelessness is asserted in its own test.
+    List<String> ownFailSafe = List.of("mirror.sweep");
     List<String> pins = List.of(PIN_EDGES.split(","));
     process.steps().stream()
-        .filter(step -> !reads.contains(step.id()))
+        .filter(step -> !reads.contains(step.id()) && !ownFailSafe.contains(step.id()))
         .forEach(
             step ->
                 assertTrue(
