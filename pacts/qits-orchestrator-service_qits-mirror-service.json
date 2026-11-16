@@ -1,0 +1,228 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-mirror-service",
+            "operationId": "sweepGc"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: sweepGc",
+      "key": "a0c60540",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a mirror holding a pinned and an unpinned tag"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "dryRun": true,
+            "pins": {
+              "images": [
+                {
+                  "name": "hub/library/postgres",
+                  "version": "18.4"
+                },
+                {
+                  "name": "node",
+                  "version": "24-alpine"
+                },
+                {
+                  "name": "quay/quarkus/ubi9-quarkus-mandrel-builder-image",
+                  "version": "jdk-25"
+                }
+              ]
+            }
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "method": "POST",
+        "path": "/mirror/api/gc/sweep"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "blobs": {
+              "reclaimable": 3,
+              "reclaimableBytes": 522,
+              "reclaimedBytes": 0,
+              "unlinked": 0
+            },
+            "dryRun": true,
+            "pins": {
+              "images": 3,
+              "supplied": true
+            },
+            "types": [
+              {
+                "condemned": 0,
+                "deleted": 0,
+                "errors": [],
+                "failure": null,
+                "kept": 0,
+                "pinned": 0,
+                "type": "maven-proxy"
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.blobs.reclaimable": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.blobs.reclaimableBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.blobs.reclaimedBytes": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.blobs.unlinked": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.dryRun": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.pins.images": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.pins.supplied": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.types": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 0
+                }
+              ]
+            },
+            "$.types[*].condemned": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.types[*].deleted": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.types[*].kept": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.types[*].pinned": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.types[*].type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-mirror-service"
+  }
+}
