@@ -214,12 +214,20 @@ final class GcContract {
               GcContract::claimsFromBody),
           // qits-mirror-service (qits-2253). Recorded on a dry run, so the row runs the step dry
           // (#run reads the flag off the recorded request); the pins are the recorded body's.
-          row(PeerTarget.MIRROR, GcProcess.MIRROR_SWEEP, "a mirror holding a pinned and an unpinned tag",
-              "sweepGc", GcContract::mirrorPinsFromBody,
-              "dryRun", "pins.supplied", "pins.images", "types[].type", "types[].condemned",
-              "types[].deleted", "types[].kept", "types[].pinned", "types[].errors[]",
-              "types[].failure", "blobs.reclaimable", "blobs.reclaimableBytes", "blobs.unlinked",
-              "blobs.reclaimedBytes"));
+          // anyLength("types"): GcSummaries#mirrorSweep sums whatever cache types the mirror reports,
+          // and how many it has today is not a contract — a fourth type must not break this pact.
+          new Row(
+              PeerTarget.MIRROR,
+              GcProcess.MIRROR_SWEEP,
+              GoldenInteraction.of(
+                      NIGHTLY, "a mirror holding a pinned and an unpinned tag", "sweepGc")
+                  .consumes(
+                      "dryRun", "pins.supplied", "pins.images", "types[].type",
+                      "types[].condemned", "types[].deleted", "types[].kept", "types[].pinned",
+                      "types[].errors[]", "types[].failure", "blobs.reclaimable",
+                      "blobs.reclaimableBytes", "blobs.unlinked", "blobs.reclaimedBytes")
+                  .anyLength("types"),
+              GcContract::mirrorPinsFromBody));
 
   /**
    * The call a row makes, as {@code "<target> <METHOD> <path>"}, for a row whose operation the

@@ -35,6 +35,12 @@ contracts:
     qits-projects-service: { packages: [maven] }
     qits-idp-service: { packages: [maven] }
     qits-events-service: { packages: [maven] }
+    # qits-mirror-service (qits-2253, mirror.sweep) joins here IN THE SAME COMMIT that first writes
+    # pacts/qits-orchestrator-service_qits-mirror-service.json — i.e. once the pinned
+    # qits-mirror-golden-masters records sweepGc. Declared before the file exists, the release's
+    # `qits artifacts publish contract --kind pacts --provider qits-mirror-service` finds no
+    # *_qits-mirror-service.json and refuses (exit 1), failing the release.
+    # qits-mirror-service: { packages: [maven] }
 # THE SITE IS SPELLED, AND IT NAMES THE COMPONENT. `true` derives it from the REPOSITORY name,
 # which would put the retired tier modifier in a storage id and then MOVE that id the day the
 # repository is renamed — a bundle's history stranded under a name nothing publishes to any
