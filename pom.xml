@@ -111,7 +111,7 @@
              pin. The pact-jvm version comes with qits-pact-consumer. -->
         <qits.pact-consumer.version>2026.1106.507</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1114.40637</qits.containers-golden-masters.version>
-        <qits.artifacts-golden-masters.version>2026.1120.62707</qits.artifacts-golden-masters.version>
+        <qits.artifacts-golden-masters.version>2026.1120.165405</qits.artifacts-golden-masters.version>
         <qits.deployments-golden-masters.version>2026.1119.141022</qits.deployments-golden-masters.version>
         <qits.ci-golden-masters.version>2026.1119.60052</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1119.183438</qits.maintenance-golden-masters.version>
