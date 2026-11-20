@@ -316,7 +316,8 @@ public class ProviderStates {
    *
    * <p><b>qits-artifacts' answers are its own golden masters</b>, copied verbatim into {@code
    * src/test/resources/contracts/artifacts-cleanup/} from its state {@code a repository with
-   * unpinned identities} (qits-artifacts-service 858f107): the doors hand qits-artifacts' text on
+   * unpinned identities} (qits-artifacts-service 858f107, re-copied for qits-2329 once the plan
+   * recorded its dead list, blob figures and configuration): the doors hand qits-artifacts' text on
    * untouched, so what a consumer of these doors pacts against is exactly what qits-artifacts
    * recorded. A copy rather than the published jar, because the service module does not carry
    * qits-artifacts' golden masters and the pinned version predates the three operations. When

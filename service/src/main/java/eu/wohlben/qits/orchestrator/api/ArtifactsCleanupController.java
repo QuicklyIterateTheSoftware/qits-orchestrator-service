@@ -1,5 +1,8 @@
 package eu.wohlben.qits.orchestrator.api;
 
+import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositoriesPlanResponse;
+import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositoryPlanReport;
+import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositorySweepReport;
 import eu.wohlben.qits.orchestrator.peer.PeerAnswer;
 import eu.wohlben.qits.orchestrator.peer.PeerClient;
 import eu.wohlben.qits.orchestrator.peer.PeerExchange;
@@ -18,6 +21,8 @@ import jakarta.ws.rs.core.SecurityContext;
 import java.security.Principal;
 import java.util.Map;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 /**
@@ -39,6 +44,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
  * answer larger than this service will read — is the answer this service's: a 502 with {@code
  * {"message": "..."}}, the platform's envelope.
  *
+ * <p><b>The 200s are documented with qits-artifacts' shapes</b> (qits-2329): the records in {@code
+ * api.cleanup} mirror its DTOs so a consumer can generate a typed client from this document. They
+ * are schema only — the answer is still the text qits-artifacts sent, never bound to them.
+ *
  * <p><b>The roles are {@link ProcessController#start}'s</b>, all five. A sweep deletes registry
  * content, which is what starting a gc run already lets each of them do across every repository at
  * once; one repository is less, not more. The sweep is refused with a 409 while a gc run is active,
@@ -58,7 +67,13 @@ public class ArtifactsCleanupController {
       description =
           "Reads the platform's pins and hands them to qits-artifacts' POST"
               + " /artifacts/api/gc/repositories; its answer is returned verbatim.")
-  @APIResponse(responseCode = "200", description = "qits-artifacts' repository listing")
+  @APIResponse(
+      responseCode = "200",
+      description = "qits-artifacts' repository listing",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON,
+              schema = @Schema(implementation = GcRepositoriesPlanResponse.class)))
   @APIResponse(responseCode = "502", description = "qits-artifacts could not be asked")
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
   public Response repositories() {
@@ -74,7 +89,13 @@ public class ArtifactsCleanupController {
           "Reads the platform's pins and hands them to qits-artifacts' POST"
               + " /artifacts/api/gc/repositories/{repository}/plan; its answer is returned"
               + " verbatim.")
-  @APIResponse(responseCode = "200", description = "qits-artifacts' plan for the repository")
+  @APIResponse(
+      responseCode = "200",
+      description = "qits-artifacts' plan for the repository",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON,
+              schema = @Schema(implementation = GcRepositoryPlanReport.class)))
   @APIResponse(responseCode = "404", description = "qits-artifacts has no such repository")
   @APIResponse(responseCode = "502", description = "qits-artifacts could not be asked")
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
@@ -92,7 +113,13 @@ public class ArtifactsCleanupController {
               + " /artifacts/api/gc/repositories/{repository}/sweep; its receipt is returned"
               + " verbatim. Refused while a gc run is active, and no gc run starts while it is in"
               + " flight.")
-  @APIResponse(responseCode = "200", description = "qits-artifacts' sweep receipt")
+  @APIResponse(
+      responseCode = "200",
+      description = "qits-artifacts' sweep receipt",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON,
+              schema = @Schema(implementation = GcRepositorySweepReport.class)))
   @APIResponse(responseCode = "404", description = "qits-artifacts has no such repository")
   @APIResponse(responseCode = "409", description = "A gc run is active")
   @APIResponse(responseCode = "502", description = "qits-artifacts could not be asked")
