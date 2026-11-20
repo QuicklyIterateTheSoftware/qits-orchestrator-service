@@ -50,6 +50,8 @@ public class ProviderStates {
   public static final String A_FINISHED_GC_DRY_RUN = "a finished gc dry run";
   public static final String NO_ACTIVE_GC_RUN = "no active gc run";
   public static final String A_REPOSITORY_THE_CLEANUP_CAN_PLAN = "a repository the cleanup can plan";
+  public static final String A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN =
+      "a repository the cleanup has nothing to delete in";
 
   /** The repository {@link #A_REPOSITORY_THE_CLEANUP_CAN_PLAN} plans and sweeps. */
   static final String CLEANUP_REPOSITORY = "daemons";
@@ -90,6 +92,9 @@ public class ProviderStates {
     states.put(A_FINISHED_GC_DRY_RUN, this::aFinishedGcDryRun);
     states.put(NO_ACTIVE_GC_RUN, this::noActiveGcRun);
     states.put(A_REPOSITORY_THE_CLEANUP_CAN_PLAN, this::aRepositoryTheCleanupCanPlan);
+    states.put(
+        A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN,
+        this::aRepositoryTheCleanupHasNothingToDeleteIn);
   }
 
   /** Every state name this provider answers for. */
@@ -324,6 +329,36 @@ public class ProviderStates {
    * qits-artifacts re-records them, copy them again.
    */
   private Setup aRepositoryTheCleanupCanPlan() {
+    answerCleanupPins();
+    peers.answer(
+        "/artifacts/api/gc/repositories",
+        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoriesWithSuppliedPins")));
+    peers.answer(
+        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/plan",
+        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoryWithSuppliedPins")));
+    peers.answer(
+        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/sweep",
+        FakePeers.Scripted.ok(artifactsAnswer("sweepGcRepository")));
+    return params(Map.of("repository", CLEANUP_REPOSITORY));
+  }
+
+  /**
+   * qits-2329: {@link #aRepositoryTheCleanupCanPlan()}'s repository where the rule condemns nothing
+   * — the plan qits-landing-app shows as "nothing to delete". qits-artifacts' answer is its {@code
+   * planGcRepositoryWithSuppliedPins} recording in its state {@code a repository with nothing to
+   * collect}, copied verbatim as {@code planGcRepositoryWithNothingToCollect.json}. Only the plan is
+   * answered: it is the one door recorded here.
+   */
+  private Setup aRepositoryTheCleanupHasNothingToDeleteIn() {
+    answerCleanupPins();
+    peers.answer(
+        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/plan",
+        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoryWithNothingToCollect")));
+    return params(Map.of("repository", CLEANUP_REPOSITORY));
+  }
+
+  /** No gc run active, and the five pin sources answering as the cleanup reads them. */
+  private void answerCleanupPins() {
     awaitNoActiveGcRun();
     peers.reset();
     peers.answer(
@@ -337,16 +372,6 @@ public class ProviderStates {
         FakePeers.Scripted.ok("{\"repositories\":[{\"name\":\"qits-ci-service\"}],\"pins\":[]}"));
     peers.answer("/workspaces/api/pins", FakePeers.Scripted.ok("{\"pins\":[]}"));
     peers.answer("/projects/api/pins", FakePeers.Scripted.ok("{\"pins\":[]}"));
-    peers.answer(
-        "/artifacts/api/gc/repositories",
-        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoriesWithSuppliedPins")));
-    peers.answer(
-        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/plan",
-        FakePeers.Scripted.ok(artifactsAnswer("planGcRepositoryWithSuppliedPins")));
-    peers.answer(
-        "/artifacts/api/gc/repositories/" + CLEANUP_REPOSITORY + "/sweep",
-        FakePeers.Scripted.ok(artifactsAnswer("sweepGcRepository")));
-    return params(Map.of("repository", CLEANUP_REPOSITORY));
   }
 
   /** One of qits-artifacts' recorded answers, as the copy under {@code contracts/} holds it. */

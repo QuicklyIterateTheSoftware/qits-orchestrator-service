@@ -150,6 +150,15 @@ class GoldenMasterRecordingTest {
               "/orchestrator/api/artifacts/repositories/{repository}/sweep",
               null,
               200,
+              null),
+          // qits-2329: the plan where the rule condemns nothing.
+          new Interaction(
+              ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN,
+              "planArtifactsCleanupRepository",
+              "GET",
+              "/orchestrator/api/artifacts/repositories/{repository}/plan",
+              null,
+              200,
               null));
 
   private static final ObjectMapper JSON = new ObjectMapper();

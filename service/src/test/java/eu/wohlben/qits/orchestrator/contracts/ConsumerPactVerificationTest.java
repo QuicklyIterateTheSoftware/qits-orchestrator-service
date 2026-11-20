@@ -140,4 +140,9 @@ class ConsumerPactVerificationTest {
   Map<String, String> aRepositoryTheCleanupCanPlan() {
     return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN);
   }
+
+  @State(ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN)
+  Map<String, String> aRepositoryTheCleanupHasNothingToDeleteIn() {
+    return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN);
+  }
 }

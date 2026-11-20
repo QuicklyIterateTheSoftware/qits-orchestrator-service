@@ -109,6 +109,32 @@
       ]
     },
     {
+      "name": "a repository the cleanup has nothing to delete in",
+      "slug": "a-repository-the-cleanup-has-nothing-to-delete-in",
+      "params": {
+        "repository": "daemons"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "planArtifactsCleanupRepository",
+          "method": "GET",
+          "path": "/orchestrator/api/artifacts/repositories/{repository}/plan",
+          "status": 200,
+          "file": "a-repository-the-cleanup-has-nothing-to-delete-in/planArtifactsCleanupRepository.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.generatedAt",
+              "$.pins[*].readAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
       "name": "no active gc run",
       "slug": "no-active-gc-run",
       "params": {
