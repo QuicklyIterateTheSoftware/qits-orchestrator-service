@@ -165,10 +165,18 @@
         </dependency>
         <dependency>
             <!-- contracts/ConsumerPactVerificationTest: verifies the consumer pacts this provider
-                 pins. None is pinned yet (qits-1933), so today it verifies nothing. -->
+                 pins (qits-1933). -->
             <groupId>au.com.dius.pact.provider</groupId>
             <artifactId>junit5</artifactId>
             <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- ConsumerPactVerificationTest's first pinned consumer (ticket qits-2329): qits-landing-app's
+                 cleanup page. The jar carries pacts/qits-landing-app_qits-orchestrator-service.json,
+                 read off the classpath by ClasspathPactLoader. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-landing-app-pacts-qits-orchestrator-service</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

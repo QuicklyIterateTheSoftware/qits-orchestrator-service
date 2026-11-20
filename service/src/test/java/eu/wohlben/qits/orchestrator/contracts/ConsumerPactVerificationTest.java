@@ -8,7 +8,6 @@ import au.com.dius.pact.core.model.ProviderState;
 import au.com.dius.pact.provider.junit5.HttpTestTarget;
 import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
-import au.com.dius.pact.provider.junitsupport.IgnoreNoPactsToVerify;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactSource;
@@ -34,11 +33,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * repo pins that jar as a test dependency, and qits-maintenance bumps the pin when the consumer
  * releases a changed pact. {@link ClasspathPactLoader} finds them all.
  *
- * <p><b>No consumer pins a pact yet.</b> The caller today is qits-orchestrator-frontend's {@code
- * orchestrator-api.ts}, which writes none. So this class carries {@link IgnoreNoPactsToVerify} and
- * {@link ClasspathPactLoader#REQUIRED} is false: today it verifies nothing, and it is where the
- * first consumer's pin lands. When one is pinned, drop the annotation and set {@code REQUIRED} to
- * true, so a classpath that lost it fails rather than verifying nothing.
+ * <p><b>qits-landing-app's cleanup page is the first pinned consumer</b> (ticket qits-2329): its
+ * pact, {@code pacts/qits-landing-app_qits-orchestrator-service.json}, pins the artifacts cleanup
+ * doors' two states, {@code A_REPOSITORY_THE_CLEANUP_CAN_PLAN} and {@code
+ * A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN}. {@link ClasspathPactLoader#REQUIRED} is true,
+ * so this class no longer carries {@code @IgnoreNoPactsToVerify}: a classpath that lost the pin now
+ * fails rather than silently verifying nothing.
  *
  * <p>Each interaction runs against this {@code @QuarkusTest} application over real HTTP, as an
  * operator holding {@code qits:admin} ({@code @TestSecurity}), with the peers faked at {@code
@@ -52,7 +52,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @TestProfile(ContractProfile.class)
 @Provider(ConsumerPactVerificationTest.PROVIDER)
 @PactSource(ClasspathPactLoader.class)
-@IgnoreNoPactsToVerify
 @TestSecurity(user = "operator", roles = "qits:admin")
 class ConsumerPactVerificationTest {
 
