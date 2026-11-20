@@ -84,7 +84,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces and
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1110.232501</qits.eventstream.version>
+        <qits.eventstream.version>2026.1118.215113</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
@@ -108,10 +108,10 @@
              pin. The pact-jvm version comes with qits-pact-consumer. -->
         <qits.pact-consumer.version>2026.1106.507</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1114.40637</qits.containers-golden-masters.version>
-        <qits.artifacts-golden-masters.version>2026.1114.172104</qits.artifacts-golden-masters.version>
-        <qits.deployments-golden-masters.version>2026.1117.72018</qits.deployments-golden-masters.version>
-        <qits.ci-golden-masters.version>2026.1113.31502</qits.ci-golden-masters.version>
-        <qits.maintenance-golden-masters.version>2026.1116.183857</qits.maintenance-golden-masters.version>
+        <qits.artifacts-golden-masters.version>2026.1119.211817</qits.artifacts-golden-masters.version>
+        <qits.deployments-golden-masters.version>2026.1119.141022</qits.deployments-golden-masters.version>
+        <qits.ci-golden-masters.version>2026.1119.60052</qits.ci-golden-masters.version>
+        <qits.maintenance-golden-masters.version>2026.1119.183438</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1117.154126</qits.workspaces-golden-masters.version>
         <qits.projects-golden-masters.version>2026.1116.190952</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
