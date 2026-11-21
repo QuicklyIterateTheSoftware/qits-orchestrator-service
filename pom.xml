@@ -103,7 +103,7 @@
         <pact.version>4.7.5</pact.version>
         <!-- qits-landing-app's cleanup page (ticket qits-2329), ConsumerPactVerificationTest's
              first pinned consumer: `pacts/qits-landing-app_qits-orchestrator-service.json`. -->
-        <qits.landing-app-pacts-qits-orchestrator-service.version>2026.1120.25645</qits.landing-app-pacts-qits-orchestrator-service.version>
+        <qits.landing-app-pacts-qits-orchestrator-service.version>2026.1121.35118</qits.landing-app-pacts-qits-orchestrator-service.version>
         <!-- The consumer pacts of the gc process (ticket qits-1149, epic qits-546): qits-pact-consumer
              reads each peer's published golden masters off the test classpath and turns a recorded
              (provider state, operation) into a pact interaction — orchestrator/src/test/.../
@@ -119,7 +119,7 @@
         <qits.projects-golden-masters.version>2026.1116.190952</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
         <!-- qits-mirror's, for mirror.sweep (qits-2253): the first version recording sweepGc. -->
-        <qits.mirror-golden-masters.version>2026.1120.232746</qits.mirror-golden-masters.version>
+        <qits.mirror-golden-masters.version>2026.1121.32635</qits.mirror-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
