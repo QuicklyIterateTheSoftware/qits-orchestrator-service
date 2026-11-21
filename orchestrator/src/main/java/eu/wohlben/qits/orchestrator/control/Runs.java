@@ -10,11 +10,13 @@ import eu.wohlben.qits.orchestrator.entity.OpRun;
 import eu.wohlben.qits.orchestrator.entity.OpStep;
 import eu.wohlben.qits.orchestrator.error.NoSuchProcessException;
 import eu.wohlben.qits.orchestrator.error.NoSuchRunException;
+import eu.wohlben.qits.orchestrator.error.NoSuchStepException;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
 import eu.wohlben.qits.orchestrator.process.ProcessRegistry;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -49,10 +51,19 @@ public class Runs {
     return store.runs(kind, limit).stream().map(Runs::summarise).toList();
   }
 
-  /** One run with its steps. */
-  public RunDetailDto run(UUID id) {
+  /**
+   * One run with its steps.
+   *
+   * <p><b>{@code bodies=false} drops each step's {@code request.body} and {@code response}</b>
+   * (ticket qits-2359) and keeps everything else, the request's method and url and the {@code
+   * responseBytes} size among it. A RUNNING run is polled every two seconds, and a gc run's stored
+   * answers reach a megabyte a step; the size is what lets a client fetch one step's whole body
+   * ({@link #step}) only when it is asked to show it.
+   */
+  public RunDetailDto run(UUID id, boolean bodies) {
     OpRun run = store.run(id).orElseThrow(() -> new NoSuchRunException(id));
-    List<RunStepDto> steps = store.steps(id).stream().map(Runs::describe).toList();
+    List<RunStepDto> steps =
+        store.steps(id).stream().map(step -> describe(step, bodies)).toList();
     return new RunDetailDto(
         run.id,
         run.kind,
@@ -63,6 +74,20 @@ public class Runs {
         run.finishedAt,
         run.summary,
         steps);
+  }
+
+  /**
+   * One step of one run, bodies included — the {@link RunStepDto} {@link #run} serves for it.
+   * {@code stepId} is the definition's step id ({@code artifacts.plan}), the row's {@code id} on
+   * the wire. An unknown run and a step the run does not hold are both a 404.
+   */
+  public RunStepDto step(UUID id, String stepId) {
+    store.run(id).orElseThrow(() -> new NoSuchRunException(id));
+    return store.steps(id).stream()
+        .filter(step -> step.stepId.equals(stepId))
+        .findFirst()
+        .map(step -> describe(step, true))
+        .orElseThrow(() -> new NoSuchStepException(id, stepId));
   }
 
   private static ProcessDto describe(TechnicalProcess process) {
@@ -87,11 +112,11 @@ public class Runs {
         run.summary);
   }
 
-  private static RunStepDto describe(OpStep step) {
+  private static RunStepDto describe(OpStep step, boolean bodies) {
     RequestDto request =
         step.requestUrl == null
             ? null
-            : new RequestDto(step.requestMethod, step.requestUrl, step.requestBody);
+            : new RequestDto(step.requestMethod, step.requestUrl, bodies ? step.requestBody : null);
     return new RunStepDto(
         step.stepId,
         step.name,
@@ -102,7 +127,10 @@ public class Runs {
         step.finishedAt,
         step.httpStatus,
         request,
-        step.responseBody,
+        bodies ? step.responseBody : null,
+        step.responseBody == null
+            ? null
+            : step.responseBody.getBytes(StandardCharsets.UTF_8).length,
         step.error,
         step.summary);
   }

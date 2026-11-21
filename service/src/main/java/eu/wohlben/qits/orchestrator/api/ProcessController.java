@@ -20,6 +20,8 @@ import jakarta.ws.rs.core.Response;
 import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 /**
@@ -36,6 +38,11 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
  * commissioned agent); starting a run takes it too, but only of the {@code gc} process — {@code gc}
  * is deleting whatever the process deems garbage, which an owner has decided an agent may trigger
  * (dry-run or real) with no more guard than that.
+ *
+ * <p><b>Every operation declares its {@code operationId}</b> (ticket qits-2359): {@code
+ * listProcesses}, {@code listProcessRuns} and {@code startProcessRun} here, {@code getProcessRun}
+ * and {@code getProcessRunStep} on {@link RunController}. They are what a generated client names
+ * its methods by and what the golden masters record under, so renaming one is a contract change.
  */
 @Path("/processes")
 @Produces(MediaType.APPLICATION_JSON)
@@ -57,12 +64,18 @@ public class ProcessController {
   /** The request body of a start: one flag. */
   public record StartRunRequest(boolean dryRun) {
 
-    /** What a 202 answers with — the id to poll. */
+    /**
+     * What a 202 answers with — the id to poll. Named in the document, since a bare {@code
+     * Response} would shadow the fetch API's own type in a generated TypeScript client.
+     */
+    @Schema(name = "StartProcessRunResponse")
     public record Response(UUID id) {}
   }
 
   @GET
-  @Operation(summary = "Every technical process, with its steps and their dependencies")
+  @Operation(
+      operationId = "listProcesses",
+      summary = "Every technical process, with its steps and their dependencies")
   @APIResponse(responseCode = "200", description = "The processes")
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
   public List<ProcessDto> processes() {
@@ -77,7 +90,7 @@ public class ProcessController {
    */
   @GET
   @Path("/{kind}/runs")
-  @Operation(summary = "One process's runs, newest first")
+  @Operation(operationId = "listProcessRuns", summary = "One process's runs, newest first")
   @APIResponse(responseCode = "200", description = "The runs")
   @APIResponse(responseCode = "404", description = "No process of that kind")
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
@@ -105,8 +118,14 @@ public class ProcessController {
    */
   @POST
   @Path("/{kind}/runs")
-  @Operation(summary = "Start a run of this process")
-  @APIResponse(responseCode = "202", description = "Started; poll GET /runs/{id}")
+  @Operation(operationId = "startProcessRun", summary = "Start a run of this process")
+  @APIResponse(
+      responseCode = "202",
+      description = "Started; poll GET /runs/{id}",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON,
+              schema = @Schema(implementation = StartRunRequest.Response.class)))
   @APIResponse(responseCode = "404", description = "No process of that kind")
   @APIResponse(
       responseCode = "409",

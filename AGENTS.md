@@ -452,4 +452,3 @@ Each is a decision, not an omission:
   trigger correct and what makes a single parent a lie.
 - **A size budget for the artifacts GC.** L1.4 of the storage plan; it is a policy the artifacts
   engine has to hold, not a number this service could pass.
-- **A committed `docs/openapi.yml`.** The document is served at `/orchestrator/q/openapi`.

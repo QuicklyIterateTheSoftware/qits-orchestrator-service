@@ -195,17 +195,23 @@ container) is admitted everywhere `qits:admin` is, for now (qits-628 follow-up),
 `qits:desk-admin` (epic qits-1621), wherever `qits:admin-agent` is.
 
 ```
-GET  /processes                      → [{kind, name, description,
+GET  /processes                      → [{kind, name, description,          listProcesses
                                          steps:[{id, name, target, dependsOn[]}]}]
-GET  /processes/{kind}/runs?limit=20 → [{id, kind, trigger, dryRun, status,
+GET  /processes/{kind}/runs?limit=20 → [{id, kind, trigger, dryRun, status, listProcessRuns
                                          startedAt, finishedAt, summary}]
 POST /processes/{kind}/runs {dryRun} → 202 {id}   404 unknown kind   409 one is active
-GET  /runs/{id}                      → the run above, plus
+                                                                           startProcessRun
+GET  /runs/{id}?bodies=true          → the run above, plus                 getProcessRun
                                         steps:[{id, name, target, dependsOn[], status,
                                                 startedAt, finishedAt, httpStatus,
                                                 request:{method, url, body},
-                                                response, error, summary}]
+                                                response, responseBytes, error, summary}]
+GET  /runs/{id}/steps/{stepId}       → one of those steps, bodies included getProcessRunStep
+                                        404 unknown run, or a step it does not hold
 ```
+
+The right-hand names are each operation's declared `operationId` (ticket qits-2359), what a
+generated client names its methods by and what the golden masters record under.
 
 - `status` is `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED` or `SKIPPED`. A run is only `RUNNING`,
   `SUCCEEDED` or `FAILED`, and it is `FAILED` if any step is — a skip does not fail it. **Two kinds
@@ -221,6 +227,12 @@ GET  /runs/{id}                      → the run above, plus
   answer.
 - `POST` answers 202 and does not wait. A gc run is minutes of somebody else's pruning; the client
   polls `GET /runs/{id}` every two seconds while it is `RUNNING`.
+- **`bodies=false` drops every step's `request.body` and `response`** and keeps the rest — the
+  request's method and url, and `responseBytes`, the stored response's size in UTF-8 bytes (null
+  when nothing was stored), which both modes carry. A client polling a `RUNNING` run asks for it
+  body-less and reads one step's bodies from `GET /runs/{id}/steps/{stepId}` when somebody opens
+  it; `stepId` is the definition's step id (`artifacts.plan`). The default is `true`, the answer
+  this door always gave.
 
 ### The artifacts cleanup doors (qits-2138)
 

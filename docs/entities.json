@@ -11,16 +11,22 @@
       "knownGap" : null,
       "dtos" : [
         {
+          "type" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "via",
+          "via" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
+          "site" : "RunStepDto.request()"
+        },
+        {
           "type" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
           "kind" : "assembler",
           "via" : null,
-          "site" : "Runs.run(UUID)"
+          "site" : "Runs.run(UUID, boolean)"
         },
         {
           "type" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
-          "kind" : "via",
-          "via" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
-          "site" : "RunDetailDto.steps()"
+          "kind" : "assembler",
+          "via" : null,
+          "site" : "Runs.step(UUID, String)"
         },
         {
           "type" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
@@ -31,20 +37,28 @@
       ],
       "operations" : [
         {
-          "operationId" : "ProcessController.runs",
+          "operationId" : "getProcessRun",
+          "method" : "GET",
+          "path" : "/runs/{id}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "returns",
+          "cardinality" : "single"
+        },
+        {
+          "operationId" : "getProcessRunStep",
+          "method" : "GET",
+          "path" : "/runs/{id}/steps/{stepId}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "returns",
+          "cardinality" : "single"
+        },
+        {
+          "operationId" : "listProcessRuns",
           "method" : "GET",
           "path" : "/processes/{kind}/runs",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RunSummaryDto",
           "kind" : "returns",
           "cardinality" : "collection"
-        },
-        {
-          "operationId" : "RunController.run",
-          "method" : "GET",
-          "path" : "/runs/{id}",
-          "dto" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
-          "kind" : "returns",
-          "cardinality" : "single"
         }
       ]
     },
@@ -60,7 +74,7 @@
           "type" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
           "kind" : "mapper",
           "via" : null,
-          "site" : "Runs.describe(OpStep)"
+          "site" : "Runs.describe(OpStep, boolean)"
         },
         {
           "type" : "eu.wohlben.qits.orchestrator.dto.RunDetailDto",
@@ -72,17 +86,25 @@
           "type" : "eu.wohlben.qits.orchestrator.dto.RunStepDto",
           "kind" : "mapper",
           "via" : null,
-          "site" : "Runs.describe(OpStep)"
+          "site" : "Runs.describe(OpStep, boolean)"
         }
       ],
       "operations" : [
         {
-          "operationId" : "RunController.run",
+          "operationId" : "getProcessRun",
           "method" : "GET",
           "path" : "/runs/{id}",
           "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
           "kind" : "returns",
           "cardinality" : "collection"
+        },
+        {
+          "operationId" : "getProcessRunStep",
+          "method" : "GET",
+          "path" : "/runs/{id}/steps/{stepId}",
+          "dto" : "eu.wohlben.qits.orchestrator.dto.RequestDto",
+          "kind" : "returns",
+          "cardinality" : "single"
         }
       ]
     }

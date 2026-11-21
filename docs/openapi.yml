@@ -345,6 +345,9 @@ components:
           $ref: "#/components/schemas/RequestDto"
         response:
           type: string
+        responseBytes:
+          type: integer
+          format: int32
         error:
           type: string
         summary:
@@ -368,6 +371,11 @@ components:
           $ref: "#/components/schemas/Instant"
         summary:
           type: string
+    StartProcessRunResponse:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
     StartRunRequest:
       type: object
       properties:
@@ -504,6 +512,7 @@ paths:
   /orchestrator/api/processes:
     get:
       summary: "Every technical process, with its steps and their dependencies"
+      operationId: listProcesses
       responses:
         "200":
           description: The processes
@@ -529,6 +538,7 @@ paths:
   /orchestrator/api/processes/{kind}/runs:
     post:
       summary: Start a run of this process
+      operationId: startProcessRun
       parameters:
       - name: kind
         in: path
@@ -544,6 +554,10 @@ paths:
       responses:
         "202":
           description: "Started; poll GET /runs/{id}"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartProcessRunResponse"
         "404":
           description: No process of that kind
         "409":
@@ -566,6 +580,7 @@ paths:
         - qits:agent
     get:
       summary: "One process's runs, newest first"
+      operationId: listProcessRuns
       parameters:
       - name: kind
         in: path
@@ -605,12 +620,20 @@ paths:
   /orchestrator/api/runs/{id}:
     get:
       summary: One run with its steps
+      operationId: getProcessRun
       parameters:
       - name: id
         in: path
         required: true
         schema:
           type: string
+      - description: false to leave out every step's request body and response; responseBytes
+          stays
+        name: bodies
+        in: query
+        schema:
+          type: boolean
+          default: true
       responses:
         "200":
           description: The run
@@ -620,6 +643,43 @@ paths:
                 $ref: "#/components/schemas/RunDetailDto"
         "404":
           description: No such run
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      tags:
+      - Run Controller
+      security:
+      - SecurityScheme:
+        - qits:admin
+        - qits:admin-agent
+        - qits:desk-admin
+        - qits:system
+        - qits:agent
+  /orchestrator/api/runs/{id}/steps/{stepId}:
+    get:
+      summary: "One step of a run, with its bodies"
+      operationId: getProcessRunStep
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stepId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunStepDto"
+        "404":
+          description: "No such run, or no such step in it"
         "401":
           description: Not Authorized
         "403":
