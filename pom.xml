@@ -119,7 +119,7 @@
         <qits.projects-golden-masters.version>2026.1116.190952</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
         <!-- qits-mirror's, for mirror.sweep (qits-2253): the first version recording sweepGc. -->
-        <qits.mirror-golden-masters.version>2026.1121.32635</qits.mirror-golden-masters.version>
+        <qits.mirror-golden-masters.version>2026.1121.190031</qits.mirror-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
