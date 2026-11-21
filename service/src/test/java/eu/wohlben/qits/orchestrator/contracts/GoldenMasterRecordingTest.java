@@ -52,7 +52,7 @@ import org.junit.jupiter.api.Test;
  * <p><b>Operation ids</b> are the ones each operation declares: {@code ProcessController}'s and
  * {@code RunController}'s since ticket qits-2359 (they were recorded under the Java method names
  * before, which is what the OpenAPI derived while neither declared one), {@code
- * ArtifactsCleanupController}'s three since qits-2138. The platform matches an index entry to the
+ * ArtifactsCleanupController}'s one since qits-2138 (three until qits-2477). The platform matches an index entry to the
  * OpenAPI by method and path. Renaming one here is a contract change all the same.
  *
  * <p><b>One recording per (state, operationId)</b>: the index keys an operation by that pair, and
@@ -199,37 +199,12 @@ class GoldenMasterRecordingTest {
               "{\"dryRun\": true}",
               202,
               null),
-          // The artifacts cleanup doors (ticket qits-2138): qits-artifacts' answers, handed on.
+          // The artifacts cleanup listing (ticket qits-2138): qits-artifacts' answer, handed on.
           new Interaction(
               ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
               "listArtifactsCleanupRepositories",
               "GET",
               "/orchestrator/api/artifacts/repositories",
-              null,
-              200,
-              null),
-          new Interaction(
-              ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
-              "planArtifactsCleanupRepository",
-              "GET",
-              "/orchestrator/api/artifacts/repositories/{repository}/plan",
-              null,
-              200,
-              null),
-          new Interaction(
-              ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN,
-              "sweepArtifactsCleanupRepository",
-              "POST",
-              "/orchestrator/api/artifacts/repositories/{repository}/sweep",
-              null,
-              200,
-              null),
-          // qits-2329: the plan where the rule condemns nothing.
-          new Interaction(
-              ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN,
-              "planArtifactsCleanupRepository",
-              "GET",
-              "/orchestrator/api/artifacts/repositories/{repository}/plan",
               null,
               200,
               null));

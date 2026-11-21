@@ -1,5 +1,6 @@
 /**
- * The wire shapes qits-artifacts answers the three artifacts cleanup doors with (qits-2329).
+ * The wire shape qits-artifacts answers the artifacts cleanup listing with (qits-2329; the plan's
+ * and the sweep's went with their doors, qits-2477).
  *
  * <p><b>Schema only.</b> {@code ArtifactsCleanupController} hands qits-artifacts' answer on
  * verbatim — its status and its text, never re-bound into a type here — so nothing in this package

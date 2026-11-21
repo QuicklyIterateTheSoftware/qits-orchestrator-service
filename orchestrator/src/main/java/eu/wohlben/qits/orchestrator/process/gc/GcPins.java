@@ -18,9 +18,9 @@ import java.util.function.Function;
  * <b>The five pin reads, and the {@code pins} object they make</b> — one copy, read by two callers
  * (ticket qits-2138).
  *
- * <p>{@link GcProcess} reads them as its five {@code pins.*} steps. The artifacts cleanup doors
- * ({@code ArtifactsCleanup}) read them on every request, because qits-artifacts' per-repository
- * cleanup UI can no longer read them itself: the five sources are private, qits-artifacts is not,
+ * <p>{@link GcProcess} reads them as its five {@code pins.*} steps. The artifacts cleanup listing
+ * ({@code ArtifactsCleanup}) reads them on every request, because qits-artifacts-frontend's
+ * repository listing can no longer read them itself: the five sources are private, qits-artifacts is not,
  * and this service is the one that holds a credential for all five and sits where they resolve.
  * Two readers of one keep-set must judge it identically, so what a source is — its peer, its path,
  * the name qits-artifacts takes it by, how its answer is judged and when it is asked again — lives

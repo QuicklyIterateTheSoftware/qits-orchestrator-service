@@ -331,8 +331,8 @@ final class GcContract {
   // --- the artifacts cleanup doors (qits-2138) ---------------------------------------------------
 
   /**
-   * The qits-artifacts state the three supplied-pins cleanup operations are recorded in. Its params
-   * name the repository the plan and the sweep address ({@code repository}).
+   * The qits-artifacts state the supplied-pins cleanup listing is recorded in (the plan and the
+   * sweep went with their doors, qits-2477).
    */
   static final String CLEANUP_STATE = "a repository with unpinned identities";
 
@@ -345,14 +345,12 @@ final class GcContract {
    * nothing of it; {@link #pact} adds these rows to the qits-artifacts pact beside the gc rows.
    *
    * <p><b>What a door reads is almost nothing</b>, and {@code consumes} says exactly that. The
-   * listing's and the plan's answers go back to the caller as the text qits-artifacts sent — that
+   * listing's answer goes back to the caller as the text qits-artifacts sent — that
    * shape is qits-artifacts' contract with its own UI, the same reasoning that leaves a forwarded pin
-   * answer unbound — so those rows bind the request and the status alone. The sweep's receipt is read
-   * for the one INFO line a sweep writes, exactly as {@link GcSummaries#artifactsSweep} reads a gc
-   * run's: {@code sweep.blobsUnlinked} and {@code sweep.bytesReclaimed}.
+   * answer unbound — so the row binds the request and the status alone.
    *
    * <p><b>Pending while the state is not in the pinned golden masters.</b> qits-artifacts recorded
-   * these three operations after the version {@code qits.artifacts-golden-masters.version} pins, so
+   * this operation after the version {@code qits.artifacts-golden-masters.version} pins, so
    * {@link ConsumerPact#recorded()} leaves them out of the pact file and {@code GcConsumerPactTest}
    * reports each one skipped with what it needs. The pin bump that brings them in is what turns them
    * on: from then the committed pact file fails its comparison until it is rewritten with {@code
@@ -371,22 +369,7 @@ final class GcContract {
                   Trigger.operation("listArtifactsCleanupRepositories"),
                   CLEANUP_STATE,
                   "planGcRepositoriesWithSuppliedPins"),
-              (cleanup, params) -> cleanup.repositories()),
-          new CleanupRow(
-              "planArtifactsCleanupRepository",
-              GoldenInteraction.of(
-                  Trigger.operation("planArtifactsCleanupRepository"),
-                  CLEANUP_STATE,
-                  "planGcRepositoryWithSuppliedPins"),
-              (cleanup, params) -> cleanup.plan(params.get("repository"))),
-          new CleanupRow(
-              "sweepArtifactsCleanupRepository",
-              GoldenInteraction.of(
-                      Trigger.operation("sweepArtifactsCleanupRepository"),
-                      CLEANUP_STATE,
-                      "sweepGcRepository")
-                  .consumes("sweep.blobsUnlinked", "sweep.bytesReclaimed"),
-              (cleanup, params) -> cleanup.sweep(params.get("repository"), "a contract test")));
+              (cleanup, params) -> cleanup.repositories()));
 
   /** Whether the pinned qits-artifacts golden masters record {@code row}'s operation. */
   static boolean recorded(CleanupRow row) {
@@ -397,7 +380,6 @@ final class GcContract {
    * {@code row}'s door, outside CDI and as shipped, with the five pins answering the members of the
    * recorded request body and {@code artifacts} answering the call: the pins it reads are exactly
    * the ones the provider recorded the request with, so the request it sends is the recorded one.
-   * No gc run is ever active here, so the sweep's exclusion always admits it.
    */
   static PeerExchange runCleanup(CleanupRow row, PeerClient artifacts) {
     Operation op = ARTIFACTS.operation(row.interaction().state(), row.interaction().operationId());
@@ -413,14 +395,6 @@ final class GcContract {
     cleanup.config = shippedConfig();
     cleanup.peers = peers;
     cleanup.sleeper = duration -> {};
-    cleanup.exclusion = new GcExclusion();
-    cleanup.exclusion.runs =
-        new eu.wohlben.qits.orchestrator.persistence.RunStore() {
-          @Override
-          public Optional<UUID> live(String kind, java.time.Instant now) {
-            return Optional.empty();
-          }
-        };
     PeerExchange exchange = row.call().apply(cleanup, op.params());
     for (GcPins.Source source : GcPins.Source.values()) {
       if (peers.callsTo(source.path()) != 1) {

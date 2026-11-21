@@ -33,10 +33,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * repo pins that jar as a test dependency, and qits-maintenance bumps the pin when the consumer
  * releases a changed pact. {@link ClasspathPactLoader} finds them all.
  *
- * <p><b>qits-landing-app's cleanup page is the first pinned consumer</b> (ticket qits-2329): its
- * pact, {@code pacts/qits-landing-app_qits-orchestrator-service.json}, pins the artifacts cleanup
- * doors' two states, {@code A_REPOSITORY_THE_CLEANUP_CAN_PLAN} and {@code
- * A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN}. {@link ClasspathPactLoader#REQUIRED} is true,
+ * <p><b>qits-landing-app is the pinned consumer</b> (ticket qits-2329): its pact, {@code
+ * pacts/qits-landing-app_qits-orchestrator-service.json}, pins the process page's states (its
+ * cleanup page and the two cleanup states went in qits-2477). {@link ClasspathPactLoader#REQUIRED} is true,
  * so this class no longer carries {@code @IgnoreNoPactsToVerify}: a classpath that lost the pin now
  * fails rather than silently verifying nothing.
  *
@@ -149,10 +148,5 @@ class ConsumerPactVerificationTest {
   @State(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN)
   Map<String, String> aRepositoryTheCleanupCanPlan() {
     return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN);
-  }
-
-  @State(ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN)
-  Map<String, String> aRepositoryTheCleanupHasNothingToDeleteIn() {
-    return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN);
   }
 }

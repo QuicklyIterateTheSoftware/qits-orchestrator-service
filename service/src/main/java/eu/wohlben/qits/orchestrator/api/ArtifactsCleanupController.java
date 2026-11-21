@@ -1,8 +1,6 @@
 package eu.wohlben.qits.orchestrator.api;
 
 import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositoriesPlanResponse;
-import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositoryPlanReport;
-import eu.wohlben.qits.orchestrator.api.cleanup.GcRepositorySweepReport;
 import eu.wohlben.qits.orchestrator.peer.PeerAnswer;
 import eu.wohlben.qits.orchestrator.peer.PeerClient;
 import eu.wohlben.qits.orchestrator.peer.PeerExchange;
@@ -10,15 +8,10 @@ import eu.wohlben.qits.orchestrator.process.gc.ArtifactsCleanup;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.SecurityContext;
-import java.security.Principal;
 import java.util.Map;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -26,33 +19,28 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 
 /**
- * qits-artifacts' per-repository cleanup, asked through this service (ticket qits-2138).
+ * qits-artifacts' cleanup listing, asked through this service (ticket qits-2138).
  *
  * <p>Served under {@code /orchestrator/api/artifacts/repositories} — {@code /orchestrator/api} is
  * {@code quarkus.rest.path}, as for every resource here.
  *
- * <p><b>Why these doors exist.</b> qits-artifacts' cleanup UI judges every repository against the
- * platform's pin set, and the five services that answer it are private now while qits-artifacts is
- * public: it cannot read them any more. This service is private, holds the credential all five
- * accept and already reads them for every gc run, so the UI asks here instead. Each door reads the
- * pins exactly as a gc run does and hands them to qits-artifacts' supplied-pins door of the same
- * name — {@link ArtifactsCleanup} is the whole of it, and this class is only the HTTP edge of it.
+ * <p><b>Why this door exists.</b> qits-artifacts-frontend's repository listing shows what a
+ * collection of each repository would reclaim, judged against the platform's pin set. The services
+ * that answer the pins are private and qits-artifacts is public, so it cannot read them; this
+ * service can, so the listing asks here. It reads the pins exactly as a gc run does and hands them
+ * to qits-artifacts' supplied-pins listing — {@link ArtifactsCleanup} is the whole of it.
+ *
+ * <p><b>The per-repository plan and sweep are gone</b> (qits-2477): only the landing app's cleanup
+ * page used them, and the daily gc does that work.
  *
  * <p><b>The answer is qits-artifacts' own, status and body verbatim</b>: the text it sent, never
- * re-bound into a type here, so its shapes stay its contract and a 404 for an unknown repository
- * stays a 404. Only when qits-artifacts could not be asked at all — unreachable, no bearer, an
- * answer larger than this service will read — is the answer this service's: a 502 with {@code
- * {"message": "..."}}, the platform's envelope.
+ * re-bound into a type here. Only when qits-artifacts could not be asked at all — unreachable, no
+ * bearer, an answer larger than this service will read — is the answer this service's: a 502 with
+ * {@code {"message": "..."}}, the platform's envelope. The 200 is documented with qits-artifacts'
+ * shape ({@code api.cleanup}), schema only.
  *
- * <p><b>The 200s are documented with qits-artifacts' shapes</b> (qits-2329): the records in {@code
- * api.cleanup} mirror its DTOs so a consumer can generate a typed client from this document. They
- * are schema only — the answer is still the text qits-artifacts sent, never bound to them.
- *
- * <p><b>The roles are {@link ProcessController#start}'s</b>, all five. A sweep deletes registry
- * content, which is what starting a gc run already lets each of them do across every repository at
- * once; one repository is less, not more. The sweep is refused with a 409 while a gc run is active,
- * and a gc start with a 409 while a sweep is in flight ({@code GcExclusion}). The two reads take no
- * lock: a plan deletes nothing.
+ * <p><b>The roles are {@link ProcessController#start}'s</b>, all five. A read deletes nothing and
+ * takes no lock.
  */
 @Path("/artifacts/repositories")
 @Produces(MediaType.APPLICATION_JSON)
@@ -78,56 +66,6 @@ public class ArtifactsCleanupController {
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
   public Response repositories() {
     return passThrough(cleanup.repositories());
-  }
-
-  @GET
-  @Path("/{repository}/plan")
-  @Operation(
-      operationId = "planArtifactsCleanupRepository",
-      summary = "One artifacts repository's collection plan; nothing is deleted",
-      description =
-          "Reads the platform's pins and hands them to qits-artifacts' POST"
-              + " /artifacts/api/gc/repositories/{repository}/plan; its answer is returned"
-              + " verbatim.")
-  @APIResponse(
-      responseCode = "200",
-      description = "qits-artifacts' plan for the repository",
-      content =
-          @Content(
-              mediaType = MediaType.APPLICATION_JSON,
-              schema = @Schema(implementation = GcRepositoryPlanReport.class)))
-  @APIResponse(responseCode = "404", description = "qits-artifacts has no such repository")
-  @APIResponse(responseCode = "502", description = "qits-artifacts could not be asked")
-  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
-  public Response plan(@PathParam("repository") String repository) {
-    return passThrough(cleanup.plan(repository));
-  }
-
-  @POST
-  @Path("/{repository}/sweep")
-  @Operation(
-      operationId = "sweepArtifactsCleanupRepository",
-      summary = "Sweep one artifacts repository",
-      description =
-          "Reads the platform's pins and hands them to qits-artifacts' POST"
-              + " /artifacts/api/gc/repositories/{repository}/sweep; its receipt is returned"
-              + " verbatim. Refused while a gc run is active, and no gc run starts while it is in"
-              + " flight.")
-  @APIResponse(
-      responseCode = "200",
-      description = "qits-artifacts' sweep receipt",
-      content =
-          @Content(
-              mediaType = MediaType.APPLICATION_JSON,
-              schema = @Schema(implementation = GcRepositorySweepReport.class)))
-  @APIResponse(responseCode = "404", description = "qits-artifacts has no such repository")
-  @APIResponse(responseCode = "409", description = "A gc run is active")
-  @APIResponse(responseCode = "502", description = "qits-artifacts could not be asked")
-  @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
-  public Response sweep(@PathParam("repository") String repository, @Context SecurityContext caller) {
-    Principal principal = caller == null ? null : caller.getUserPrincipal();
-    return passThrough(
-        cleanup.sweep(repository, principal == null ? null : principal.getName()));
   }
 
   /**

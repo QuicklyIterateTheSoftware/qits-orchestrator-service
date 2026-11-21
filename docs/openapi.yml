@@ -4,67 +4,6 @@
 openapi: 3.1.0
 components:
   schemas:
-    GcDiskReport:
-      type: object
-      properties:
-        state:
-          type: string
-        blobTablesBytesBefore:
-          type: integer
-          format: int64
-        blobTablesBytesAfter:
-          type: integer
-          format: int64
-        databaseBytesBefore:
-          type: integer
-          format: int64
-        databaseBytesAfter:
-          type: integer
-          format: int64
-        segmentsDrained:
-          type: integer
-          format: int32
-        segmentsDropped:
-          type: integer
-          format: int32
-        segmentsHeld:
-          type: integer
-          format: int32
-        bytesMoved:
-          type: integer
-          format: int64
-    GcIdentity:
-      type: object
-      properties:
-        repository:
-          type: string
-        identity:
-          type: string
-        rule:
-          type: string
-    GcPinSource:
-      type: object
-      properties:
-        source:
-          type: string
-        url:
-          type: string
-        answered:
-          type: boolean
-        outcome:
-          type: string
-        readAt:
-          $ref: "#/components/schemas/Instant"
-        tookMillis:
-          type: integer
-          format: int64
-        pinCount:
-          type: integer
-          format: int32
-        keeps:
-          type: array
-          items:
-            type: string
     GcRepositoriesPlanResponse:
       type: object
       properties:
@@ -82,51 +21,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GcRepositoryPlanSummary"
-    GcRepositoryPlanReport:
-      type: object
-      properties:
-        repository:
-          type: string
-        type:
-          type: string
-        generatedAt:
-          $ref: "#/components/schemas/Instant"
-        dryRun:
-          type: boolean
-        graceWindow:
-          type: string
-        executable:
-          type: boolean
-        pinFailures:
-          type: array
-          items:
-            type: string
-        pins:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcPinSource"
-        configuration:
-          $ref: "#/components/schemas/GcTypeConfiguration"
-        strategy:
-          type: string
-        note:
-          type: string
-        error:
-          type: string
-        dead:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcIdentity"
-        kept:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcIdentity"
-        sweep:
-          $ref: "#/components/schemas/GcSweepPlan"
-        structural:
-          $ref: "#/components/schemas/GcSweepPlan"
-        untouchable:
-          $ref: "#/components/schemas/GcUntouchablePool"
     GcRepositoryPlanSummary:
       type: object
       properties:
@@ -158,117 +52,6 @@ components:
         withheldBytes:
           type: integer
           format: int64
-    GcRepositorySweepReport:
-      type: object
-      properties:
-        repository:
-          type: string
-        type:
-          type: string
-        executedAt:
-          $ref: "#/components/schemas/Instant"
-        dryRun:
-          type: boolean
-        graceWindow:
-          type: string
-        aborted:
-          type: string
-        pins:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcPinSource"
-        strategy:
-          type: string
-        note:
-          type: string
-        error:
-          type: string
-        deleted:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcIdentity"
-        withheldByGraceWindow:
-          type: array
-          items:
-            $ref: "#/components/schemas/GcIdentity"
-        sweep:
-          $ref: "#/components/schemas/GcSweepOutcome"
-        disk:
-          $ref: "#/components/schemas/GcDiskReport"
-        untouchable:
-          $ref: "#/components/schemas/GcUntouchablePool"
-        runId:
-          type: string
-    GcSweepOutcome:
-      type: object
-      properties:
-        blobsUnlinked:
-          type: integer
-          format: int32
-        bytesReclaimed:
-          type: integer
-          format: int64
-        withheldByGraceWindow:
-          type: integer
-          format: int32
-        withheldBytes:
-          type: integer
-          format: int64
-        stillReferenced:
-          type: integer
-          format: int32
-        alreadyGone:
-          type: integer
-          format: int32
-        unlinkedBlobIds:
-          type: array
-          items:
-            type: string
-    GcSweepPlan:
-      type: object
-      properties:
-        blobCount:
-          type: integer
-          format: int32
-        reclaimableBytes:
-          type: integer
-          format: int64
-        withheldByGraceWindow:
-          type: integer
-          format: int32
-        withheldBytes:
-          type: integer
-          format: int64
-        blobIds:
-          type: array
-          items:
-            type: string
-    GcTypeConfiguration:
-      type: object
-      properties:
-        type:
-          type: string
-        strategy:
-          type: string
-        window:
-          type: string
-        rule:
-          type: string
-    GcUntouchablePool:
-      type: object
-      properties:
-        reason:
-          type: string
-        blobCount:
-          type: integer
-          format: int32
-        bytes:
-          type: integer
-          format: int64
-        blobIds:
-          type: array
-          items:
-            type: string
     Instant:
       type: string
       format: date-time
@@ -432,83 +215,6 @@ paths:
         - qits:desk-admin
         - qits:system
         - qits:agent
-  /orchestrator/api/artifacts/repositories/{repository}/plan:
-    get:
-      summary: One artifacts repository's collection plan; nothing is deleted
-      description: "Reads the platform's pins and hands them to qits-artifacts' POST\
-        \ /artifacts/api/gc/repositories/{repository}/plan; its answer is returned\
-        \ verbatim."
-      operationId: planArtifactsCleanupRepository
-      parameters:
-      - name: repository
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          description: qits-artifacts' plan for the repository
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GcRepositoryPlanReport"
-        "404":
-          description: qits-artifacts has no such repository
-        "502":
-          description: qits-artifacts could not be asked
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-      tags:
-      - Artifacts Cleanup Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
-  /orchestrator/api/artifacts/repositories/{repository}/sweep:
-    post:
-      summary: Sweep one artifacts repository
-      description: "Reads the platform's pins and hands them to qits-artifacts' POST\
-        \ /artifacts/api/gc/repositories/{repository}/sweep; its receipt is returned\
-        \ verbatim. Refused while a gc run is active, and no gc run starts while it\
-        \ is in flight."
-      operationId: sweepArtifactsCleanupRepository
-      parameters:
-      - name: repository
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          description: qits-artifacts' sweep receipt
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GcRepositorySweepReport"
-        "404":
-          description: qits-artifacts has no such repository
-        "409":
-          description: A gc run is active
-        "502":
-          description: qits-artifacts could not be asked
-        "401":
-          description: Not Authorized
-        "403":
-          description: Not Allowed
-      tags:
-      - Artifacts Cleanup Controller
-      security:
-      - SecurityScheme:
-        - qits:admin
-        - qits:admin-agent
-        - qits:desk-admin
-        - qits:system
-        - qits:agent
   /orchestrator/api/processes:
     get:
       summary: "Every technical process, with its steps and their dependencies"
@@ -561,8 +267,7 @@ paths:
         "404":
           description: No process of that kind
         "409":
-          description: "A run of that kind is already active, or (gc) an artifacts\
-            \ cleanup sweep is in flight"
+          description: A run of that kind is already active
         "401":
           description: Not Authorized
         "403":
@@ -695,4 +400,4 @@ paths:
         - qits:agent
 info:
   title: qits-platform-orchestrator API
-  version: 2026.1106.173839
+  version: 2026.1121.75621

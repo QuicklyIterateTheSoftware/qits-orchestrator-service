@@ -93,64 +93,6 @@
             "strings": [],
             "listFilteredTo": null
           }
-        },
-        {
-          "operationId": "planArtifactsCleanupRepository",
-          "method": "GET",
-          "path": "/orchestrator/api/artifacts/repositories/{repository}/plan",
-          "status": 200,
-          "file": "a-repository-the-cleanup-can-plan/planArtifactsCleanupRepository.json",
-          "frozen": {
-            "ids": [],
-            "instants": [
-              "$.generatedAt",
-              "$.pins[*].readAt"
-            ],
-            "strings": [],
-            "listFilteredTo": null
-          }
-        },
-        {
-          "operationId": "sweepArtifactsCleanupRepository",
-          "method": "POST",
-          "path": "/orchestrator/api/artifacts/repositories/{repository}/sweep",
-          "status": 200,
-          "file": "a-repository-the-cleanup-can-plan/sweepArtifactsCleanupRepository.json",
-          "frozen": {
-            "ids": [],
-            "instants": [
-              "$.executedAt",
-              "$.pins[*].readAt"
-            ],
-            "strings": [],
-            "listFilteredTo": null
-          }
-        }
-      ]
-    },
-    {
-      "name": "a repository the cleanup has nothing to delete in",
-      "slug": "a-repository-the-cleanup-has-nothing-to-delete-in",
-      "params": {
-        "repository": "daemons"
-      },
-      "dependsOn": [],
-      "operations": [
-        {
-          "operationId": "planArtifactsCleanupRepository",
-          "method": "GET",
-          "path": "/orchestrator/api/artifacts/repositories/{repository}/plan",
-          "status": 200,
-          "file": "a-repository-the-cleanup-has-nothing-to-delete-in/planArtifactsCleanupRepository.json",
-          "frozen": {
-            "ids": [],
-            "instants": [
-              "$.generatedAt",
-              "$.pins[*].readAt"
-            ],
-            "strings": [],
-            "listFilteredTo": null
-          }
         }
       ]
     },

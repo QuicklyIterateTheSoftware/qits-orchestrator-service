@@ -234,28 +234,22 @@ generated client names its methods by and what the golden masters record under.
   it; `stepId` is the definition's step id (`artifacts.plan`). The default is `true`, the answer
   this door always gave.
 
-### The artifacts cleanup doors (qits-2138)
+### The artifacts cleanup listing (qits-2138)
 
-qits-artifacts' per-repository cleanup UI judges every repository against the platform's pin set,
-and the five services that answer it are private while qits-artifacts is public, so it cannot read
-them. These doors read the pins exactly as a gc run's `pins.*` steps do (`process/gc/GcPins`, one
-copy for both: same peers, same keep-set judgement, same 503 retry, an unreadable source ABSENT
-from the body) and hand them to qits-artifacts' supplied-pins door of the same name. The answer is
+qits-artifacts-frontend's repository listing judges every repository against the platform's pin
+set, and the five services that answer it are private while qits-artifacts is public, so it cannot
+read them. This door reads the pins exactly as a gc run's `pins.*` steps do (`process/gc/GcPins`,
+one copy for both: same peers, same keep-set judgement, same 503 retry, an unreadable source ABSENT
+from the body) and hands them to qits-artifacts' supplied-pins listing. The answer is
 qits-artifacts' status and body verbatim; only a qits-artifacts that could not be asked is this
 service's `502 {"message"}`. The roles are `POST /processes/{kind}/runs`' five.
 
 ```
 GET  /artifacts/repositories                     → POST /artifacts/api/gc/repositories {pins}
-GET  /artifacts/repositories/{repository}/plan   → POST /artifacts/api/gc/repositories/{repository}/plan {pins}
-POST /artifacts/repositories/{repository}/sweep  → POST /artifacts/api/gc/repositories/{repository}/sweep {pins}
-                                                   409 while a gc run is active
 ```
 
-**A sweep and a gc run never overlap** (`process/gc/GcExclusion`): the sweep is refused while a gc
-run is active, and a gc run — manual, scheduled or deploy-triggered — is refused with a 409 (`a
-repository sweep is in flight: <repository>`) while a sweep is answering; the schedule skips and the
-deploy trigger re-arms, as they do for an active run. The two reads take no lock. Each sweep writes
-one INFO line: the repository, the caller, and the receipt's totals.
+The per-repository plan and sweep doors are gone (qits-2477): only the landing app's cleanup page
+used them, and the daily gc does that work.
 
 The document is at `/orchestrator/q/openapi`, the browsable UI at `/orchestrator/q/swagger-ui`, and
 readiness at `/orchestrator/q/health/ready`. **The client is served at `/` on this service's own

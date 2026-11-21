@@ -25,8 +25,8 @@ import org.junit.jupiter.api.Test;
  * land in the committed document unless it is {@code @Operation(hidden = true)}. There is none
  * today: the document is the five operations of {@code ProcessController} and {@code
  * RunController} (the step door arrived with ticket qits-2359), each recorded in the golden masters
- * (ticket qits-1933), plus the three of {@code ArtifactsCleanupController} (ticket qits-2138),
- * recorded in one state together.
+ * (ticket qits-1933), plus the listing of {@code ArtifactsCleanupController} (ticket qits-2138; its plan and sweep
+ * went in qits-2477).
  *
  * <p>A copy of qits-projects-service's.
  */
