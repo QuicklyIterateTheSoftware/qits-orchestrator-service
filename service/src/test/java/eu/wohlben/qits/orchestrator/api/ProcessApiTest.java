@@ -4,6 +4,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -382,6 +383,107 @@ class ProcessApiTest {
         .body(
             "steps[19].request.url",
             equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
+  }
+
+  @Test
+  void aBodylessReadKeepsTheRequestLineAndTheSizesAndDropsTheBodies() {
+    String id = start(true);
+    assertEquals("SUCCEEDED", awaitClosed(id));
+
+    io.restassured.path.json.JsonPath full =
+        given().when().get(BASE + "/runs/" + id).then().statusCode(200).extract().jsonPath();
+    String response = full.getString("steps[14].response");
+    // The size is the stored text's, in UTF-8 bytes, and the full read carries it too.
+    assertEquals(
+        response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
+        full.getInt("steps[14].responseBytes"));
+    // `bodies=true` is the default spelled out: the same answer.
+    assertEquals(
+        full.getList("steps"),
+        given()
+            .when()
+            .get(BASE + "/runs/" + id + "?bodies=true")
+            .then()
+            .statusCode(200)
+            .extract()
+            .jsonPath()
+            .getList("steps"));
+
+    given()
+        .when()
+        .get(BASE + "/runs/" + id + "?bodies=false")
+        .then()
+        .statusCode(200)
+        .body("id", equalTo(id))
+        .body("status", equalTo("SUCCEEDED"))
+        .body("steps.size()", equalTo(21))
+        .body("steps.response", everyItem(nullValue()))
+        .body("steps.findAll { it.request != null }.request.body", everyItem(nullValue()))
+        // branches.sweep POSTs a body: the request line stays, its body and the answer go.
+        .body("steps[14].id", equalTo("branches.sweep"))
+        .body("steps[14].request.method", equalTo("POST"))
+        .body(
+            "steps[14].request.url",
+            equalTo("http://dev-qits-workspaces:8080/workspaces/api/gc/branches"))
+        .body("steps[14].request.body", nullValue())
+        .body("steps[14].response", nullValue())
+        .body("steps[14].responseBytes", equalTo(full.getInt("steps[14].responseBytes")))
+        .body("steps[14].httpStatus", equalTo(200))
+        .body("steps[14].summary", containsString("removed 1 of 4 branches"))
+        // The step a dry run does not make stored nothing, so it has no size either.
+        .body("steps[9].id", equalTo("artifacts.sweep"))
+        .body("steps[9].request", nullValue())
+        .body("steps[9].responseBytes", nullValue());
+  }
+
+  @Test
+  void theStepDoorServesOneStepWholeAsTheRunReadDoes() {
+    String id = start(true);
+    assertEquals("SUCCEEDED", awaitClosed(id));
+
+    java.util.Map<String, Object> fromRun =
+        given()
+            .when()
+            .get(BASE + "/runs/" + id)
+            .then()
+            .statusCode(200)
+            .extract()
+            .jsonPath()
+            .getMap("steps[14]");
+    java.util.Map<String, Object> step =
+        given()
+            .when()
+            .get(BASE + "/runs/" + id + "/steps/branches.sweep")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo("branches.sweep"))
+            .body("request.body", containsString("\"dryRun\":true"))
+            .body("response", notNullValue())
+            .body("responseBytes", notNullValue())
+            .extract()
+            .jsonPath()
+            .getMap("$");
+    assertEquals(fromRun, step);
+  }
+
+  @Test
+  void theStepDoorIs404ForAnUnknownRunAndForAStepTheRunDoesNotHold() {
+    String id = start(true);
+    assertEquals("SUCCEEDED", awaitClosed(id));
+
+    given()
+        .when()
+        .get(BASE + "/runs/" + UUID.randomUUID() + "/steps/artifacts.plan")
+        .then()
+        .statusCode(404)
+        .body("message", containsString("no run"));
+    given().when().get(BASE + "/runs/not-a-uuid/steps/artifacts.plan").then().statusCode(404);
+    given()
+        .when()
+        .get(BASE + "/runs/" + id + "/steps/no.such-step")
+        .then()
+        .statusCode(404)
+        .body("message", containsString("has no step 'no.such-step'"));
   }
 
   @Test

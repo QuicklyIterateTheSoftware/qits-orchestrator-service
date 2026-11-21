@@ -48,6 +48,28 @@ class AgentReadAccessTest {
         .get(BASE + "/runs/" + UUID.randomUUID())
         .then()
         .statusCode(not(anyOf(is(401), is(403))));
+    given()
+        .get(BASE + "/runs/" + UUID.randomUUID() + "?bodies=false")
+        .then()
+        .statusCode(not(anyOf(is(401), is(403))));
+  }
+
+  @Test
+  @TestSecurity(user = CALLER, roles = "qits:agent")
+  void anAgentReadsOneStepOfARun() {
+    given()
+        .get(BASE + "/runs/" + UUID.randomUUID() + "/steps/artifacts.plan")
+        .then()
+        .statusCode(not(anyOf(is(401), is(403))));
+  }
+
+  @Test
+  @TestSecurity(user = CALLER, roles = "qits:reader")
+  void aRoleOutsideTheBoundaryIsRefusedOnTheStepDoor() {
+    given()
+        .get(BASE + "/runs/" + UUID.randomUUID() + "/steps/artifacts.plan")
+        .then()
+        .statusCode(403);
   }
 
   @Test

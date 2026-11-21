@@ -23,9 +23,10 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The test classpath is indexed too, so any {@code @Path} resource under {@code src/test} would
  * land in the committed document unless it is {@code @Operation(hidden = true)}. There is none
- * today: the document is the four operations of {@code ProcessController} and {@code
- * RunController}, and the golden masters record one state for each (ticket qits-1933), plus the
- * three of {@code ArtifactsCleanupController} (ticket qits-2138), recorded in one state together.
+ * today: the document is the five operations of {@code ProcessController} and {@code
+ * RunController} (the step door arrived with ticket qits-2359), each recorded in the golden masters
+ * (ticket qits-1933), plus the three of {@code ArtifactsCleanupController} (ticket qits-2138),
+ * recorded in one state together.
  *
  * <p>A copy of qits-projects-service's.
  */
