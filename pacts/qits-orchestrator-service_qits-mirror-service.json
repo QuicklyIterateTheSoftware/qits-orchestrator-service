@@ -18,11 +18,14 @@
         }
       },
       "description": "GcSchedule.onSchedule: sweepGc",
-      "key": "a0c60540",
+      "key": "150d54ff",
       "pending": false,
       "providerStates": [
         {
-          "name": "a mirror holding a pinned and an unpinned tag"
+          "name": "a mirror holding a pinned and an unpinned tag",
+          "params": {
+            "repository": "hub"
+          }
         }
       ],
       "request": {
