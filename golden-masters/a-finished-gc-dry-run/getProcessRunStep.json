@@ -1,0 +1,25 @@
+{
+  "id": "artifacts.plan",
+  "name": "Plan the registry collection",
+  "target": "artifacts",
+  "dependsOn": [
+    "pins.deployments",
+    "pins.ci",
+    "pins.dependencies",
+    "pins.workspaces",
+    "pins.projects"
+  ],
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "httpStatus": 200,
+  "request": {
+    "method": "POST",
+    "url": "http://dev-qits-artifacts:8080/artifacts/api/gc/plan",
+    "body": "{\"dryRun\":true}"
+  },
+  "response": "{\"summary\":{\"executable\":true}}",
+  "responseBytes": 31,
+  "error": null,
+  "summary": "plan executable"
+}

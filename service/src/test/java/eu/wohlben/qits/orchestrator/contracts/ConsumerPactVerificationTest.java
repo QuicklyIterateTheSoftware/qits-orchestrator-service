@@ -46,7 +46,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * GoldenMasterRecordingTest}). Every {@code @State} method delegates to {@link ProviderStates};
  * {@link #target} fails an unknown state, and an interaction without {@code
  * comments.references.qits-call} or {@code qits-trigger}. {@link #drain} waits out the run a
- * verified {@code start} leaves on the executor, as the recording does.
+ * verified {@code startProcessRun} leaves on the executor, as the recording does, and closes
+ * the run {@code a running gc run} seeds.
  */
 @QuarkusTest
 @TestProfile(ContractProfile.class)
@@ -125,9 +126,19 @@ class ConsumerPactVerificationTest {
     return states.params(ProviderStates.THE_GC_PROCESS);
   }
 
+  @State(ProviderStates.THE_GC_PROCESS_BEFORE_ITS_FIRST_RUN)
+  Map<String, String> theGcProcessBeforeItsFirstRun() {
+    return states.params(ProviderStates.THE_GC_PROCESS_BEFORE_ITS_FIRST_RUN);
+  }
+
   @State(ProviderStates.A_FINISHED_GC_DRY_RUN)
   Map<String, String> aFinishedGcDryRun() {
     return states.params(ProviderStates.A_FINISHED_GC_DRY_RUN);
+  }
+
+  @State(ProviderStates.A_RUNNING_GC_RUN)
+  Map<String, String> aRunningGcRun() {
+    return states.params(ProviderStates.A_RUNNING_GC_RUN);
   }
 
   @State(ProviderStates.NO_ACTIVE_GC_RUN)

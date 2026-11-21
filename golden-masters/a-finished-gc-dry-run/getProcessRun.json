@@ -22,7 +22,8 @@
         "url": "http://dev-qits-containers:8080/containers/api/gc/usage",
         "body": null
       },
-      "response": "{\"images\":{\"sizeBytes\":10,\"reclaimableBytes\":2},\"buildCache\":{\"sizeBytes\":4}}",
+      "response": null,
+      "responseBytes": 77,
       "error": null,
       "summary": "images 10 B (2 B reclaimable), build cache 4 B"
     },
@@ -40,7 +41,8 @@
         "url": "http://dev-qits-artifacts:8080/artifacts/api/store/summary",
         "body": null
       },
-      "response": "{\"diskTotalBytes\":10,\"ociUnionBytes\":8,\"docsBytes\":1,\"sbomBytes\":1}",
+      "response": null,
+      "responseBytes": 67,
       "error": null,
       "summary": "store 10 B: oci 8 B, docs 1 B, sbom 1 B"
     },
@@ -58,7 +60,8 @@
         "url": "http://dev-qits-deployments:8080/deployments/api/pins",
         "body": null
       },
-      "response": "{\"pins\":[{\"applicationName\":\"qits-ci\",\"shas\":[\"abc\"]}]}",
+      "response": null,
+      "responseBytes": 55,
       "error": null,
       "summary": "1 deployment pin across 1 application"
     },
@@ -76,7 +79,8 @@
         "url": "http://dev-qits-ci:8080/ci/api/daemon",
         "body": null
       },
-      "response": "{\"daemonName\":\"qits-ci-daemon\",\"daemonVersion\":\"1\"}",
+      "response": null,
+      "responseBytes": 51,
       "error": null,
       "summary": "qits-ci-daemon 1"
     },
@@ -94,7 +98,8 @@
         "url": "http://dev-qits-maintenance:8080/maintenance/api/pins",
         "body": null
       },
-      "response": "{\"repositories\":[{\"name\":\"qits-ci-service\"}],\"pins\":[]}",
+      "response": null,
+      "responseBytes": 55,
       "error": null,
       "summary": "0 manifest pins across 1 repository"
     },
@@ -112,7 +117,8 @@
         "url": "http://dev-qits-workspaces:8080/workspaces/api/pins",
         "body": null
       },
-      "response": "{\"pins\":[]}",
+      "response": null,
+      "responseBytes": 11,
       "error": null,
       "summary": "0 workspace launch pins"
     },
@@ -130,7 +136,8 @@
         "url": "http://dev-qits-projects:8080/projects/api/pins",
         "body": null
       },
-      "response": "{\"pins\":[]}",
+      "response": null,
+      "responseBytes": 11,
       "error": null,
       "summary": "0 project launch pins"
     },
@@ -148,7 +155,8 @@
         "url": "http://dev-qits-maintenance:8080/maintenance/api/pins/images",
         "body": null
       },
-      "response": "[{\"name\":\"node\",\"version\":\"24-alpine\"}]",
+      "response": null,
+      "responseBytes": 39,
       "error": null,
       "summary": "1 image pin — what qits-mirror keeps its mirrored tags by"
     },
@@ -170,9 +178,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-artifacts:8080/artifacts/api/gc/plan",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"summary\":{\"executable\":true}}",
+      "response": null,
+      "responseBytes": 31,
       "error": null,
       "summary": "plan executable"
     },
@@ -194,6 +203,7 @@
       "httpStatus": null,
       "request": null,
       "response": null,
+      "responseBytes": null,
       "error": "dry run",
       "summary": null
     },
@@ -215,9 +225,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-containers:8080/containers/api/gc/images",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"removed\":[],\"kept\":[]}",
+      "response": null,
+      "responseBytes": 24,
       "error": null,
       "summary": "removed 0 images, kept 0"
     },
@@ -240,9 +251,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-containers:8080/containers/api/gc/volumes",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"removed\":[],\"kept\":[]}",
+      "response": null,
+      "responseBytes": 24,
       "error": null,
       "summary": "removed 0 volumes, kept 0"
     },
@@ -265,9 +277,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-containers:8080/containers/api/gc/build-cache",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"host\":{\"reclaimedBytes\":0},\"builders\":[]}",
+      "response": null,
+      "responseBytes": 43,
       "error": null,
       "summary": "reclaimed 0 B"
     },
@@ -285,7 +298,8 @@
         "url": "http://dev-qits-projects:8080/projects/api/repositories",
         "body": null
       },
-      "response": "{\"repositories\":[]}",
+      "response": null,
+      "responseBytes": 19,
       "error": null,
       "summary": "0 repositories"
     },
@@ -308,9 +322,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-workspaces:8080/workspaces/api/gc/branches",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"dryRun\":true,\"removed\":[],\"errors\":[]}",
+      "response": null,
+      "responseBytes": 40,
       "error": null,
       "summary": "removed 0 of 0 branches"
     },
@@ -333,9 +348,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-projects:8080/projects/api/gc/tags",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"dryRun\":true,\"deleted\":[],\"errors\":[]}",
+      "response": null,
+      "responseBytes": 40,
       "error": null,
       "summary": "0 tags decommissioned"
     },
@@ -353,7 +369,8 @@
         "url": "http://dev-qits-deployments:8080/deployments/api/claims/idp-clients",
         "body": null
       },
-      "response": "{\"claims\":[]}",
+      "response": null,
+      "responseBytes": 13,
       "error": null,
       "summary": "0 service-client claims"
     },
@@ -376,9 +393,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-idp:8080/idp/api/gc/service-clients",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"dryRun\":true,\"removed\":[],\"kept\":[]}",
+      "response": null,
+      "responseBytes": 38,
       "error": null,
       "summary": "removed 0 service clients"
     },
@@ -394,9 +412,10 @@
       "request": {
         "method": "POST",
         "url": "http://dev-qits-mirror:8080/mirror/api/gc/sweep",
-        "body": "{\"dryRun\":true}"
+        "body": null
       },
-      "response": "{\"dryRun\":true,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],\"blobs\":{\"reclaimable\":0,\"reclaimableBytes\":0}}",
+      "response": null,
+      "responseBytes": 109,
       "error": null,
       "summary": "would delete 0 cached entries"
     },
@@ -416,7 +435,8 @@
         "url": "http://dev-qits-artifacts:8080/artifacts/api/store/summary",
         "body": null
       },
-      "response": "{\"diskTotalBytes\":10,\"ociUnionBytes\":8,\"docsBytes\":1,\"sbomBytes\":1}",
+      "response": null,
+      "responseBytes": 67,
       "error": null,
       "summary": "store 10 B: oci 8 B, docs 1 B, sbom 1 B"
     },
@@ -439,7 +459,8 @@
         "url": "http://dev-qits-containers:8080/containers/api/gc/usage",
         "body": null
       },
-      "response": "{\"images\":{\"sizeBytes\":10,\"reclaimableBytes\":2},\"buildCache\":{\"sizeBytes\":4}}",
+      "response": null,
+      "responseBytes": 77,
       "error": null,
       "summary": "images 10 B (2 B reclaimable), build cache 4 B"
     }

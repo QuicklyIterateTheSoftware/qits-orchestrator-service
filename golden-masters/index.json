@@ -7,16 +7,20 @@
       "slug": "a-finished-gc-dry-run",
       "params": {
         "kind": "gc",
-        "runId": "00000000-0000-4000-8000-000000000001"
+        "runId": "00000000-0000-4000-8000-000000000001",
+        "stepId": "artifacts.plan"
       },
       "dependsOn": [],
       "operations": [
         {
-          "operationId": "run",
+          "operationId": "getProcessRun",
           "method": "GET",
           "path": "/orchestrator/api/runs/{runId}",
+          "query": {
+            "bodies": "false"
+          },
           "status": 200,
-          "file": "a-finished-gc-dry-run/run.json",
+          "file": "a-finished-gc-dry-run/getProcessRun.json",
           "frozen": {
             "ids": [
               "$.id"
@@ -32,11 +36,27 @@
           }
         },
         {
-          "operationId": "runs",
+          "operationId": "getProcessRunStep",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}/steps/{stepId}",
+          "status": 200,
+          "file": "a-finished-gc-dry-run/getProcessRunStep.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "listProcessRuns",
           "method": "GET",
           "path": "/orchestrator/api/processes/{kind}/runs",
           "status": 200,
-          "file": "a-finished-gc-dry-run/runs.json",
+          "file": "a-finished-gc-dry-run/listProcessRuns.json",
           "frozen": {
             "ids": [
               "$[*].id"
@@ -135,6 +155,74 @@
       ]
     },
     {
+      "name": "a running gc run",
+      "slug": "a-running-gc-run",
+      "params": {
+        "kind": "gc",
+        "runId": "00000000-0000-4000-8000-000000000001"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "getProcessRun",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}",
+          "query": {
+            "bodies": "false"
+          },
+          "status": 200,
+          "file": "a-running-gc-run/getProcessRun.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [
+              "$.startedAt",
+              "$.steps[*].startedAt",
+              "$.steps[*].finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "listProcessRuns",
+          "method": "GET",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "status": 200,
+          "file": "a-running-gc-run/listProcessRuns.json",
+          "frozen": {
+            "ids": [
+              "$[*].id"
+            ],
+            "instants": [
+              "$[*].startedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": "$"
+          }
+        },
+        {
+          "operationId": "startProcessRun",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": true
+          },
+          "status": 409,
+          "file": "a-running-gc-run/startProcessRun.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [
+              "$.message"
+            ],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
       "name": "no active gc run",
       "slug": "no-active-gc-run",
       "params": {
@@ -143,14 +231,14 @@
       "dependsOn": [],
       "operations": [
         {
-          "operationId": "start",
+          "operationId": "startProcessRun",
           "method": "POST",
           "path": "/orchestrator/api/processes/{kind}/runs",
           "body": {
             "dryRun": true
           },
           "status": 202,
-          "file": "no-active-gc-run/start.json",
+          "file": "no-active-gc-run/startProcessRun.json",
           "frozen": {
             "ids": [
               "$.id"
@@ -171,11 +259,34 @@
       "dependsOn": [],
       "operations": [
         {
-          "operationId": "processes",
+          "operationId": "listProcesses",
           "method": "GET",
           "path": "/orchestrator/api/processes",
           "status": 200,
-          "file": "the-gc-process/processes.json",
+          "file": "the-gc-process/listProcesses.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the gc process before its first run",
+      "slug": "the-gc-process-before-its-first-run",
+      "params": {
+        "kind": "gc"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "listProcessRuns",
+          "method": "GET",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "status": 200,
+          "file": "the-gc-process-before-its-first-run/listProcessRuns.json",
           "frozen": {
             "ids": [],
             "instants": [],

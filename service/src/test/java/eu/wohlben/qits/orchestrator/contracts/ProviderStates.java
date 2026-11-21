@@ -1,5 +1,7 @@
 package eu.wohlben.qits.orchestrator.contracts;
 
+import eu.wohlben.qits.orchestrator.entity.OpRun;
+import eu.wohlben.qits.orchestrator.entity.OpStep;
 import eu.wohlben.qits.orchestrator.peer.FakePeers;
 import eu.wohlben.qits.orchestrator.peer.PeerAnswer;
 import eu.wohlben.qits.orchestrator.peer.PeerCall;
@@ -11,6 +13,7 @@ import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
 import eu.wohlben.qits.orchestrator.run.RunStatus;
 import eu.wohlben.qits.orchestrator.run.RunTrigger;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -18,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -42,12 +46,17 @@ import java.util.function.Supplier;
  * <p><b>Every state drains first.</b> One gc run at a time is the service's rule (a second start is
  * a 409, {@code RunStore.open} refuses a second open), so a run left RUNNING by the previous
  * interaction would make the next state's own open or start fail for a reason that is not its own.
+ * {@link #A_RUNNING_GC_RUN} is the one state that leaves a run RUNNING on purpose, and nothing on
+ * the executor will ever close it, so the drain closes it ({@link #awaitNoActiveGcRun}).
  */
 @ApplicationScoped
 public class ProviderStates {
 
   public static final String THE_GC_PROCESS = "the gc process";
+  public static final String THE_GC_PROCESS_BEFORE_ITS_FIRST_RUN =
+      "the gc process before its first run";
   public static final String A_FINISHED_GC_DRY_RUN = "a finished gc dry run";
+  public static final String A_RUNNING_GC_RUN = "a running gc run";
   public static final String NO_ACTIVE_GC_RUN = "no active gc run";
   public static final String A_REPOSITORY_THE_CLEANUP_CAN_PLAN = "a repository the cleanup can plan";
   public static final String A_REPOSITORY_THE_CLEANUP_HAS_NOTHING_TO_DELETE_IN =
@@ -55,6 +64,15 @@ public class ProviderStates {
 
   /** The repository {@link #A_REPOSITORY_THE_CLEANUP_CAN_PLAN} plans and sweeps. */
   static final String CLEANUP_REPOSITORY = "daemons";
+
+  /** The step {@link #A_FINISHED_GC_DRY_RUN} names as its {@code stepId}: a POST with a body. */
+  static final String SEEDED_STEP_ID = "artifacts.plan";
+
+  /**
+   * How many of {@link #SEEDED_STEPS} {@link #A_RUNNING_GC_RUN} has finished: the next one is
+   * RUNNING and the rest PENDING. The first three are the usage reads and the deployment pins.
+   */
+  static final int RUNNING_RUN_FINISHED_STEPS = 3;
 
   /** When the seeded run opened; every step and the close are offsets from it. */
   static final Instant SEEDED_START = Instant.parse("2026-10-01T03:00:00Z");
@@ -87,9 +105,17 @@ public class ProviderStates {
 
   @Inject FakePeers peers;
 
+  /**
+   * The runs {@link #A_RUNNING_GC_RUN} left RUNNING. No executor is driving them, so {@link
+   * #awaitNoActiveGcRun} closes them rather than waiting for an ending that never comes.
+   */
+  private final Set<UUID> seededRunning = Collections.synchronizedSet(new LinkedHashSet<>());
+
   public ProviderStates() {
     states.put(THE_GC_PROCESS, this::theGcProcess);
+    states.put(THE_GC_PROCESS_BEFORE_ITS_FIRST_RUN, this::theGcProcessBeforeItsFirstRun);
     states.put(A_FINISHED_GC_DRY_RUN, this::aFinishedGcDryRun);
+    states.put(A_RUNNING_GC_RUN, this::aRunningGcRun);
     states.put(NO_ACTIVE_GC_RUN, this::noActiveGcRun);
     states.put(A_REPOSITORY_THE_CLEANUP_CAN_PLAN, this::aRepositoryTheCleanupCanPlan);
     states.put(
@@ -126,9 +152,17 @@ public class ProviderStates {
    * Waits until no gc run is RUNNING. A state calls it on the way in; a caller that started a run
    * calls it on the way out, so the next class against this application does not get a 409 that is
    * not its own. The same wait as {@code ProcessApiTest.awaitNoActiveGcRun}, and the same clear: the
-   * reader's session would otherwise keep answering the row it first read.
+   * reader's session would otherwise keep answering the row it first read. A run {@link
+   * #A_RUNNING_GC_RUN} seeded is closed FAILED first: it is on no executor.
    */
   public void awaitNoActiveGcRun() {
+    synchronized (seededRunning) {
+      for (UUID seeded : seededRunning) {
+        runs.close(
+            seeded, RunStatus.FAILED, "closed by the provider state that seeded it", Instant.now());
+      }
+      seededRunning.clear();
+    }
     Instant deadline = Instant.now().plus(Duration.ofSeconds(60));
     while (Instant.now().isBefore(deadline)) {
       runs.getEntityManager().clear();
@@ -168,22 +202,14 @@ public class ProviderStates {
    * dry run leaves it: each step that called its peer SUCCEEDED with its request, the peer's 200
    * and a summary, and {@code artifacts.sweep} SKIPPED for {@code dry run}. Written through {@link
    * RunStore} — {@code open}, {@code stepRunning}, {@code stepFinished}, {@code close} — at fixed
-   * instants from {@link #SEEDED_START}. Its params are the {@code kind} and the {@code runId}
-   * {@code GET /runs/{id}} takes. Applying it twice writes a second run; each answers for itself.
+   * instants from {@link #SEEDED_START}. Its params are the {@code kind}, the {@code runId} {@code
+   * GET /runs/{id}} takes and the {@code stepId} {@code GET /runs/{id}/steps/{stepId}} takes
+   * ({@link #SEEDED_STEP_ID}, ticket qits-2359). Applying it twice writes a second run; each
+   * answers for itself.
    */
   private Setup aFinishedGcDryRun() {
     awaitNoActiveGcRun();
-    List<StepDefinition> steps = gc.steps();
-    List<String> ids = steps.stream().map(StepDefinition::id).toList();
-    if (!ids.equals(List.copyOf(SEEDED_STEPS.keySet()))) {
-      throw new IllegalStateException(
-          "State '"
-              + A_FINISHED_GC_DRY_RUN
-              + "' seeds the steps "
-              + SEEDED_STEPS.keySet()
-              + ", the gc process declares "
-              + ids);
-    }
+    List<StepDefinition> steps = definedSteps(A_FINISHED_GC_DRY_RUN);
     UUID runId = runs.open(GcProcess.KIND, RunTrigger.MANUAL, true, steps, SEEDED_START);
     List<String> lines = new ArrayList<>();
     Instant at = SEEDED_START;
@@ -218,7 +244,90 @@ public class ProviderStates {
     Map<String, String> params = new TreeMap<>();
     params.put("kind", GcProcess.KIND);
     params.put("runId", runId.toString());
+    params.put("stepId", SEEDED_STEP_ID);
     return params(params);
+  }
+
+  /**
+   * The gc process as it stands on a fresh install (ticket qits-2359): registered, and not one run
+   * of it recorded, so {@code GET /processes/gc/runs} answers {@code []}. It deletes every gc run
+   * row the run log holds — the earlier states' and interactions' — because a consumer pacting
+   * against "no runs yet" is shown an empty list and nothing else. Its param is the {@code kind}.
+   */
+  private Setup theGcProcessBeforeItsFirstRun() {
+    awaitNoActiveGcRun();
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              OpStep.delete(
+                  "runId in (select r.id from OpRun r where r.kind = ?1)", GcProcess.KIND);
+              OpRun.delete("kind", GcProcess.KIND);
+            });
+    runs.getEntityManager().clear();
+    return params(Map.of("kind", GcProcess.KIND));
+  }
+
+  /**
+   * One gc run in flight (ticket qits-2359): started by a person ({@code manual}), real rather than
+   * dry, RUNNING with no {@code finishedAt} and no {@code summary}. Its first {@value
+   * #RUNNING_RUN_FINISHED_STEPS} steps SUCCEEDED with {@link #SEEDED_STEPS}' calls and answers, the
+   * next one is RUNNING (started, nothing sent back yet) and the rest are PENDING — the page a
+   * client polls every two seconds. A {@code POST /processes/gc/runs} is refused with a 409 naming
+   * this run. Its params are the {@code kind} and the {@code runId}.
+   *
+   * <p><b>Its instants are the clock's, not {@link #SEEDED_START}'s</b>: {@code RunStore.open}
+   * treats a RUNNING row older than {@code abandon-after} as abandoned and opens over it, which
+   * would turn the 409 into a 202. The recording freezes them all the same. It leaves the run
+   * RUNNING; {@link #awaitNoActiveGcRun} closes it.
+   */
+  private Setup aRunningGcRun() {
+    awaitNoActiveGcRun();
+    List<StepDefinition> steps = definedSteps(A_RUNNING_GC_RUN);
+    Instant at = Instant.now().minusSeconds(60);
+    UUID runId = runs.open(GcProcess.KIND, RunTrigger.MANUAL, false, steps, at);
+    seededRunning.add(runId);
+    for (int i = 0; i <= RUNNING_RUN_FINISHED_STEPS; i++) {
+      StepDefinition step = steps.get(i);
+      runs.stepRunning(runId, step.id(), at);
+      at = at.plusSeconds(1);
+      if (i == RUNNING_RUN_FINISHED_STEPS) {
+        break; // the step in flight: started, not ended
+      }
+      SeededStep seeded = SEEDED_STEPS.get(step.id());
+      PeerCall call =
+          new PeerCall(seeded.method(), peers.url(step.target(), seeded.path()), null);
+      runs.stepFinished(
+          runId,
+          step.id(),
+          new StepResult(
+              RunStatus.SUCCEEDED,
+              call,
+              new PeerAnswer(200, seeded.response(), null, null),
+              seeded.summary(),
+              null,
+              null),
+          at);
+    }
+    Map<String, String> params = new TreeMap<>();
+    params.put("kind", GcProcess.KIND);
+    params.put("runId", runId.toString());
+    return params(params);
+  }
+
+  /** The gc process's steps, refused unless they are exactly {@link #SEEDED_STEPS}' ids in order. */
+  private List<StepDefinition> definedSteps(String state) {
+    List<StepDefinition> steps = gc.steps();
+    List<String> ids = steps.stream().map(StepDefinition::id).toList();
+    if (!ids.equals(List.copyOf(SEEDED_STEPS.keySet()))) {
+      throw new IllegalStateException(
+          "State '"
+              + state
+              + "' seeds the steps "
+              + SEEDED_STEPS.keySet()
+              + ", the gc process declares "
+              + ids);
+    }
+    return steps;
   }
 
   /**

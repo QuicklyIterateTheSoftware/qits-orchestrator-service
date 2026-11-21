@@ -49,15 +49,24 @@ import org.junit.jupiter.api.Test;
  * is filtered to the state's own run ({@code frozen.listFilteredTo}), whatever else the database
  * holds.
  *
- * <p><b>Operation ids</b> are the Java method names for {@code ProcessController} and {@code
- * RunController}, which is what the served OpenAPI would derive: neither declares an {@code
- * operationId}. {@code ArtifactsCleanupController} declares its three (ticket qits-2138), and they
- * are recorded as declared. The platform matches an index entry to the OpenAPI by method and path.
- * Renaming one here is a contract change all the same.
+ * <p><b>Operation ids</b> are the ones each operation declares: {@code ProcessController}'s and
+ * {@code RunController}'s since ticket qits-2359 (they were recorded under the Java method names
+ * before, which is what the OpenAPI derived while neither declared one), {@code
+ * ArtifactsCleanupController}'s three since qits-2138. The platform matches an index entry to the
+ * OpenAPI by method and path. Renaming one here is a contract change all the same.
  *
- * <p><b>It leaves no run RUNNING.</b> Recording {@code start} launches a real (dry) run on the
- * executor against {@link eu.wohlben.qits.orchestrator.peer.FakePeers}; every interaction ends by
- * waiting it out, so a class after this one does not get a 409 that is not its own.
+ * <p><b>One recording per (state, operationId)</b>: the index keys an operation by that pair, and
+ * a second one in a state is a {@code Duplicate interaction} failure. A query that selects a
+ * variant of the answer ({@code bodies=false}) is recorded in the operation's {@code query}.
+ *
+ * <p><b>A refusal is recorded like an answer</b>: an interaction names the status it expects, and
+ * {@code a running gc run}'s {@code startProcessRun} records the 409.
+ *
+ * <p><b>It leaves no run RUNNING.</b> Recording {@code startProcessRun} launches a real (dry) run
+ * on the executor against {@link eu.wohlben.qits.orchestrator.peer.FakePeers}; every interaction
+ * ends by waiting it out ({@link ProviderStates#awaitNoActiveGcRun}, which also closes the run
+ * {@code a running gc run} seeds), so a class after this one does not get a 409 that is not its
+ * own.
  *
  * <p>It <b>compares by default</b> and fails with a unified diff per differing file — including a
  * committed {@code .json} no interaction produces any more. {@code -Dgolden.update=true} (or {@code
@@ -79,6 +88,8 @@ class GoldenMasterRecordingTest {
    *
    * @param path the route as a template: a {@code {param}} is expanded from the state's params and
    *     recorded unexpanded
+   * @param query the query sent, recorded as the index's {@code query} (as qits-ci-service records
+   *     its own); empty for none. Its values are literals — none names a state param here
    * @param body the JSON request body sent, or null for none
    * @param listFilteredTo the array (a {@code $} or {@code $.a.b} path) reduced to the entries the
    *     state created, or null — the index's {@code frozen.listFilteredTo}
@@ -88,39 +99,101 @@ class GoldenMasterRecordingTest {
       String operationId,
       String method,
       String path,
+      Map<String, String> query,
       String body,
       int status,
-      String listFilteredTo) {}
+      String listFilteredTo) {
+
+    /** An interaction that sends no query. */
+    Interaction(
+        String state,
+        String operationId,
+        String method,
+        String path,
+        String body,
+        int status,
+        String listFilteredTo) {
+      this(state, operationId, method, path, Map.of(), body, status, listFilteredTo);
+    }
+  }
 
   static final List<Interaction> INTERACTIONS =
       List.of(
           new Interaction(
               ProviderStates.THE_GC_PROCESS,
-              "processes",
+              "listProcesses",
               "GET",
               "/orchestrator/api/processes",
               null,
               200,
               null),
+          // qits-2359: the run listing before the process has ever run — the whole answer, [].
+          new Interaction(
+              ProviderStates.THE_GC_PROCESS_BEFORE_ITS_FIRST_RUN,
+              "listProcessRuns",
+              "GET",
+              "/orchestrator/api/processes/{kind}/runs",
+              null,
+              200,
+              null),
           new Interaction(
               ProviderStates.A_FINISHED_GC_DRY_RUN,
-              "runs",
+              "listProcessRuns",
+              "GET",
+              "/orchestrator/api/processes/{kind}/runs",
+              null,
+              200,
+              "$"),
+          // qits-2359: the run read is recorded body-less. An index entry is one (state,
+          // operationId), so this replaces the full read rather than sitting beside it; the step
+          // door below is where a consumer is shown a step's bodies.
+          new Interaction(
+              ProviderStates.A_FINISHED_GC_DRY_RUN,
+              "getProcessRun",
+              "GET",
+              "/orchestrator/api/runs/{runId}",
+              Map.of("bodies", "false"),
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.A_FINISHED_GC_DRY_RUN,
+              "getProcessRunStep",
+              "GET",
+              "/orchestrator/api/runs/{runId}/steps/{stepId}",
+              null,
+              200,
+              null),
+          // qits-2359: a run in flight — its listing row, its body-less read, and the 409 a start
+          // is refused with while it stands.
+          new Interaction(
+              ProviderStates.A_RUNNING_GC_RUN,
+              "listProcessRuns",
               "GET",
               "/orchestrator/api/processes/{kind}/runs",
               null,
               200,
               "$"),
           new Interaction(
-              ProviderStates.A_FINISHED_GC_DRY_RUN,
-              "run",
+              ProviderStates.A_RUNNING_GC_RUN,
+              "getProcessRun",
               "GET",
               "/orchestrator/api/runs/{runId}",
+              Map.of("bodies", "false"),
               null,
               200,
               null),
           new Interaction(
+              ProviderStates.A_RUNNING_GC_RUN,
+              "startProcessRun",
+              "POST",
+              "/orchestrator/api/processes/{kind}/runs",
+              "{\"dryRun\": true}",
+              409,
+              null),
+          new Interaction(
               ProviderStates.NO_ACTIVE_GC_RUN,
-              "start",
+              "startProcessRun",
               "POST",
               "/orchestrator/api/processes/{kind}/runs",
               "{\"dryRun\": true}",
@@ -205,6 +278,10 @@ class GoldenMasterRecordingTest {
       operation.put("operationId", interaction.operationId());
       operation.put("method", interaction.method());
       operation.put("path", interaction.path());
+      if (!interaction.query().isEmpty()) {
+        ObjectNode query = operation.putObject("query");
+        new TreeMap<>(interaction.query()).forEach(query::put);
+      }
       if (interaction.body() != null) {
         operation.set("body", JSON.readTree(interaction.body()));
       }
@@ -277,7 +354,7 @@ class GoldenMasterRecordingTest {
 
     Response response;
     try {
-      var request = given().header("Accept", "application/json");
+      var request = given().header("Accept", "application/json").queryParams(interaction.query());
       if (interaction.body() != null) {
         request = request.contentType("application/json").body(interaction.body());
       } else {
