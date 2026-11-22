@@ -172,8 +172,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- ConsumerPactVerificationTest's first pinned consumer (ticket qits-2329): qits-landing-app's
-                 cleanup page. The jar carries pacts/qits-landing-app_qits-orchestrator-service.json,
+            <!-- ConsumerPactVerificationTest's pinned consumer: qits-landing-app (its cleanup page of
+                 qits-2329 is gone, qits-2477). The jar carries pacts/qits-landing-app_qits-orchestrator-service.json,
                  read off the classpath by ClasspathPactLoader. -->
             <groupId>${project.groupId}</groupId>
             <artifactId>qits-landing-app-pacts-qits-orchestrator-service</artifactId>
