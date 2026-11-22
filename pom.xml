@@ -116,7 +116,7 @@
         <qits.ci-golden-masters.version>2026.1119.60052</qits.ci-golden-masters.version>
         <qits.maintenance-golden-masters.version>2026.1121.195220</qits.maintenance-golden-masters.version>
         <qits.workspaces-golden-masters.version>2026.1117.154126</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1116.190952</qits.projects-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1122.94922</qits.projects-golden-masters.version>
         <qits.idp-golden-masters.version>2026.1109.13349</qits.idp-golden-masters.version>
         <!-- qits-mirror's, for mirror.sweep (qits-2253): the first version recording sweepGc. -->
         <qits.mirror-golden-masters.version>2026.1121.190031</qits.mirror-golden-masters.version>
