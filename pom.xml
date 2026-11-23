@@ -104,7 +104,7 @@
         <!-- qits-landing-app (its Orchestrator section's process pages; its cleanup page of qits-2329
              is gone, qits-2477), ConsumerPactVerificationTest's pinned consumer:
              `pacts/qits-landing-app_qits-orchestrator-service.json`. -->
-        <qits.landing-app-pacts-qits-orchestrator-service.version>2026.1122.234753</qits.landing-app-pacts-qits-orchestrator-service.version>
+        <qits.landing-app-pacts-qits-orchestrator-service.version>2026.1123.90130</qits.landing-app-pacts-qits-orchestrator-service.version>
         <!-- The consumer pacts of the gc process (ticket qits-1149, epic qits-546): qits-pact-consumer
              reads each peer's published golden masters off the test classpath and turns a recorded
              (provider state, operation) into a pact interaction — orchestrator/src/test/.../
