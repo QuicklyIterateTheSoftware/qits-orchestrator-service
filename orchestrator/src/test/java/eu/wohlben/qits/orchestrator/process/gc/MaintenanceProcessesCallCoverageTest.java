@@ -26,10 +26,12 @@ import org.junit.jupiter.api.Test;
  * <b>The guard</b> (ticket qits-2490), {@link GcCallCoverageTest}'s for the scan and SBOM check
  * processes: every call a full pass of each makes has a row in {@link
  * MaintenanceProcessesContract}, and every row is a call one of them still makes. The pass answers
- * each call with the recording where there is one; {@code requestScan}, which is recorded for one
- * repository rather than the whole catalogue, is answered with the recorded scan id so the follow
- * reads the recorded scan. A row that is not live counts all the same — it is written down, waiting
- * only on its recording.
+ * each call with the recording where there is one; {@code requestScan} is answered with a fixed 202
+ * naming the recorded scan id, scripted here rather than off a recording, so the follow reads the
+ * recorded scan regardless of whether {@code requestScan}'s own recording is live. A row that is
+ * not live counts all the same — it is written down, waiting only on its recording. A {@link
+ * MaintenanceProcessesContract#PENDING} row's call counts too, named by the row itself rather than
+ * read off a recording, since qits-maintenance has not published its state at all yet (qits-2490).
  */
 class MaintenanceProcessesCallCoverageTest {
 
@@ -75,6 +77,9 @@ class MaintenanceProcessesCallCoverageTest {
     for (MaintenanceProcessesContract.Row row : MaintenanceProcessesContract.ROWS) {
       rows.add(MaintenanceProcessesContract.call(row));
     }
+    for (MaintenanceProcessesContract.Pending pending : MaintenanceProcessesContract.PENDING) {
+      rows.add(PeerTarget.MAINTENANCE + " " + pending.method() + " " + pending.path());
+    }
     assertEquals(rows, made, "the calls a full pass makes against the rows");
 
     // The request bodies the rows say the steps send, are what they send.
@@ -98,6 +103,12 @@ class MaintenanceProcessesCallCoverageTest {
           MaintenanceProcessesContract.step(
               MaintenanceProcessesContract.process(row.kind()), row.stepId());
       assertEquals(PeerTarget.MAINTENANCE, step.target(), row.stepId());
+    }
+    for (MaintenanceProcessesContract.Pending pending : MaintenanceProcessesContract.PENDING) {
+      StepDefinition step =
+          MaintenanceProcessesContract.step(
+              MaintenanceProcessesContract.process(ScanProcess.KIND), pending.stepId());
+      assertEquals(PeerTarget.MAINTENANCE, step.target(), pending.stepId());
     }
   }
 }

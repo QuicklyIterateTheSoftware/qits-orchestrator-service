@@ -41,13 +41,25 @@ import java.util.UUID;
  * internal.*} and {@code external.*} differ only in the scope — so its rows are the internal pair.
  *
  * <p><b>A row is LIVE only when the recording is the request the step sends</b> ({@link #live}).
- * {@code requestScan} is recorded under {@value #A_FINISHED_SCAN} with a body naming ONE repository
- * ({@code {"scope":"INTERNAL","repository":"{repoName}"}}), and this process scans the whole
- * catalogue ({@code {"scope":"INTERNAL"}}): no honest run of the step sends the recorded request,
- * so the row is left out of the pact file and reported skipped with what it needs — the same
- * pending shape as {@link GcContract#PENDING}. A recording of the body the step sends switches it
- * on (then the committed pact fails its comparison until rewritten with {@code
- * -Dgolden.update=true}).
+ *
+ * <p><b>{@code requestScan} is {@link #PENDING}, not in {@link #ROWS}.</b> qits-maintenance records
+ * it under {@value #A_FINISHED_SCAN} with a body naming ONE repository ({@code
+ * {"scope":"INTERNAL","repository":"{repoName}"}}), while this process scans the whole catalogue
+ * ({@code {"scope":"INTERNAL"}}) — qits-2490 added the state it belongs under, {@value
+ * #A_CATALOGUE_WIDE_SCAN}, but qits-maintenance has not published a golden-masters version that
+ * carries it yet (the orchestrator still pins {@code qits.maintenance-golden-masters.version}
+ * 2026.1121.195220). A row whose state is entirely absent from the pinned jar is not merely not
+ * live — {@link GoldenMasters#operation} throws {@link ProviderStateMissing} for it, which {@link
+ * #call} would propagate out of the coverage pass's "every row is a call" guard rather than let it
+ * report skipped — so, like {@link GcContract#PENDING}, it names its call itself ({@code method}
+ * and {@code path}, as the step sends it) instead of reading them off a recording. Once
+ * qits-maintenance publishes the state, move the row into {@link #ROWS} with a real {@code consumes}
+ * list and {@code body} built the same way every live row's is.
+ *
+ * <p>{@code getScan} stays on {@value #A_FINISHED_SCAN} and in {@link #ROWS}: it is still a finished
+ * scan the follow step reads for its {@code scope} and {@code status}, whichever request started
+ * it, and keeping it live is what lets the coverage pass script an answer for the follow calls at
+ * all.
  */
 final class MaintenanceProcessesContract {
 
@@ -62,6 +74,13 @@ final class MaintenanceProcessesContract {
 
   /** qits-maintenance's states the rows are recorded in. */
   static final String A_FINISHED_SCAN = "a finished scan";
+
+  /**
+   * The whole-catalogue scan's state (qits-2490): {@code requestScan} recorded here with no {@code
+   * repository}, as this process's {@code internal.request}/{@code external.request} steps send it.
+   * Not published in the pinned qits-maintenance golden masters yet — see {@link #PENDING}.
+   */
+  static final String A_CATALOGUE_WIDE_SCAN = "a catalogue-wide scan";
 
   static final String A_STORED_SBOM_CHECK_REPORT = "a stored SBOM check report";
 
@@ -79,16 +98,6 @@ final class MaintenanceProcessesContract {
 
   static final List<Row> ROWS =
       List.of(
-          // internal.request: the 202 {id} the follow reads. Pending: see the class comment.
-          new Row(
-              ScanProcess.KIND,
-              ScanProcess.INTERNAL_REQUEST,
-              GoldenInteraction.of(SCAN_NIGHTLY, A_FINISHED_SCAN, "requestScan").consumes("id"),
-              "{\"scope\":\"INTERNAL\"}",
-              "a requestScan recording whose body is {\"scope\":\"INTERNAL\"} with no repository —"
-                  + " the scan process scans the whole catalogue, and the recording under '"
-                  + A_FINISHED_SCAN
-                  + "' names one repository"),
           // internal.follow: a finished scan, read for its scope and status. `message` is read too,
           // but only from a FAILED scan, and the recording is a SUCCEEDED one whose message is null.
           new Row(
@@ -108,6 +117,47 @@ final class MaintenanceProcessesContract {
                   .anyLength("entries"),
               null,
               null));
+
+  /**
+   * A row waiting on a provider state that is not on the classpath yet (qits-2490) — the same
+   * mechanism as {@link GcContract#PENDING}, and for the same reason: {@link
+   * GoldenMasters#operation} would throw {@link ProviderStateMissing} for it, raised here instead
+   * of from inside the coverage pass's "every row is a call" guard so the row can be reported as
+   * skipped rather than erroring the whole suite. Not in {@link #ROWS}: {@link GcContract#pact}
+   * never embeds it, and the guard cannot resolve its request from a recording, so a pending row
+   * names its call itself ({@code method} and {@code path}, as the step sends it) and the guard
+   * counts that instead.
+   *
+   * @param needs what the provider's state must carry, beyond the state existing
+   */
+  record Pending(
+      String stepId, String state, String operationId, String method, String path,
+      List<String> consumes, String needs) {
+    String reason() {
+      return ProviderStateMissing.message(MAINTENANCE.repository(), state, operationId)
+          + " — needs: " + needs;
+    }
+  }
+
+  /**
+   * {@code internal.request}: the scan process's {@code POST /maintenance/api/scans} with no
+   * repository, recorded under {@value #A_CATALOGUE_WIDE_SCAN} — not published in the pinned
+   * qits-maintenance golden masters yet. See the class comment.
+   */
+  static final List<Pending> PENDING =
+      List.of(
+          new Pending(
+              ScanProcess.INTERNAL_REQUEST,
+              A_CATALOGUE_WIDE_SCAN,
+              "requestScan",
+              "POST",
+              ScanProcess.SCANS_PATH,
+              List.of("id"),
+              "a requestScan recording whose body is {\"scope\":\"INTERNAL\"} with no repository —"
+                  + " the scan process scans the whole catalogue, and qits-maintenance has not"
+                  + " published a golden-masters version recording '"
+                  + A_CATALOGUE_WIDE_SCAN
+                  + "' yet"));
 
   /**
    * Whether {@code row} is in the pact: its operation is recorded, and recorded with the body the

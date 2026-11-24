@@ -60,4 +60,21 @@ class MaintenanceProcessesConsumerPactTest {
               assertNotNull(actual.summary(), "the step reads the pact's answer");
             });
   }
+
+  /**
+   * Each row of {@link MaintenanceProcessesContract#PENDING}, reported skipped with the state it is
+   * waiting for — the same shape {@link GcConsumerPactTest} reports {@link GcContract#PENDING}
+   * with. Not a failure: the state is not on the classpath yet because qits-maintenance has not
+   * published it (qits-2490), and a row here is a promise to switch it on once it does.
+   */
+  @TestFactory
+  Stream<DynamicTest> everyPendingRowWaitsForItsProviderState() {
+    return MaintenanceProcessesContract.PENDING.stream()
+        .map(
+            row ->
+                DynamicTest.dynamicTest(
+                    row.stepId() + " -> qits-maintenance-service " + row.operationId()
+                        + " [" + row.state() + "]",
+                    () -> Assumptions.abort(row.reason())));
+  }
 }
