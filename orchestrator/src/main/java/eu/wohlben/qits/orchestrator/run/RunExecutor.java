@@ -1,5 +1,6 @@
 package eu.wohlben.qits.orchestrator.run;
 
+import eu.wohlben.qits.orchestrator.error.DryRunNotOfferedException;
 import eu.wohlben.qits.orchestrator.error.NoSuchProcessException;
 import eu.wohlben.qits.orchestrator.peer.PeerClient;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
@@ -124,11 +125,16 @@ public class RunExecutor {
    *
    * @return the run id, which the route answers with a 202
    * @throws NoSuchProcessException the kind is not registered — a 404
+   * @throws DryRunNotOfferedException a dry run of a process that has none — 400, before any row
+   *     is written
    * @throws eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException one is already going — 409
    */
   public UUID start(String kind, RunTrigger trigger, boolean dryRun) {
     TechnicalProcess process =
         registry.byKind(kind).orElseThrow(() -> new NoSuchProcessException(kind));
+    if (dryRun && !process.dryRunnable()) {
+      throw new DryRunNotOfferedException(kind);
+    }
     Instant startedAt = Instant.now();
     UUID runId = runs.open(kind, trigger, dryRun, process.steps(), startedAt);
     // BEFORE the worker is handed the run, so the RUNNING event is certainly ahead of every step's.

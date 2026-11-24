@@ -3,8 +3,11 @@ package eu.wohlben.qits.orchestrator.api;
 import eu.wohlben.qits.orchestrator.control.Runs;
 import eu.wohlben.qits.orchestrator.dto.ProcessDto;
 import eu.wohlben.qits.orchestrator.dto.RunSummaryDto;
+import eu.wohlben.qits.orchestrator.error.StartNotAllowedException;
+import eu.wohlben.qits.orchestrator.process.ProcessRegistry;
 import eu.wohlben.qits.orchestrator.run.RunExecutor;
 import eu.wohlben.qits.orchestrator.run.RunTrigger;
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -37,7 +40,10 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
  * exists to offer. There is no anonymous route here. The reads also take {@code qits:agent} (a
  * commissioned agent); starting a run takes it too, but only of the {@code gc} process — {@code gc}
  * is deleting whatever the process deems garbage, which an owner has decided an agent may trigger
- * (dry-run or real) with no more guard than that.
+ * (dry-run or real) with no more guard than that. Which process that is is the process's own
+ * {@code agentStartable()}, so a caller holding {@code qits:agent} and no other admitted role is
+ * refused a start of any other kind with a 403 (ticket qits-2490: the scan and the SBOM check are
+ * not covered by that decision).
  *
  * <p><b>Every operation declares its {@code operationId}</b> (ticket qits-2359): {@code
  * listProcesses}, {@code listProcessRuns} and {@code startProcessRun} here, {@code getProcessRun}
@@ -60,6 +66,14 @@ public class ProcessController {
   @Inject Runs runs;
 
   @Inject RunExecutor executor;
+
+  @Inject ProcessRegistry registry;
+
+  @Inject SecurityIdentity identity;
+
+  /** Every role a start admits besides {@code qits:agent}; each may start any process. */
+  static final List<String> FULL_START_ROLES =
+      List.of("qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system");
 
   /** The request body of a start: one flag. */
   public record StartRunRequest(boolean dryRun) {
@@ -111,6 +125,11 @@ public class ProcessController {
    * <p><b>409 while a run of that kind is active.</b> Two runs overlapping would compute two pin
    * sets at two moments and hand each to a deleter the other is also driving.
    *
+   * <p><b>400 for a dry run of a process that has none</b> ({@code dryRunnable} false on {@code GET
+   * /processes}, ticket qits-2490) — refused before any row is written, never started as a real run.
+   *
+   * <p><b>403 for a commissioned agent and a process not open to one</b> — see the class comment.
+   *
    * @param request {@code {"dryRun": true}} to plan without deleting. A missing body is a real run —
    *     the same default the scheduled trigger has.
    */
@@ -124,6 +143,12 @@ public class ProcessController {
           @Content(
               mediaType = MediaType.APPLICATION_JSON,
               schema = @Schema(implementation = StartRunRequest.Response.class)))
+  @APIResponse(
+      responseCode = "400",
+      description = "A dry run of a process that has none (dryRunnable is false)")
+  @APIResponse(
+      responseCode = "403",
+      description = "A commissioned agent (qits:agent) starting a process not open to one")
   @APIResponse(responseCode = "404", description = "No process of that kind")
   @APIResponse(
       responseCode = "409",
@@ -131,6 +156,14 @@ public class ProcessController {
   @RolesAllowed({"qits:admin", "qits:admin-agent", "qits:desk-admin", "qits:system", "qits:agent"})
   public Response start(@PathParam("kind") String kind, StartRunRequest request) {
     boolean dryRun = request != null && request.dryRun();
+    registry
+        .byKind(kind)
+        .filter(process -> !process.agentStartable())
+        .filter(process -> FULL_START_ROLES.stream().noneMatch(identity::hasRole))
+        .ifPresent(
+            process -> {
+              throw new StartNotAllowedException(kind);
+            });
     UUID id = executor.start(kind, RunTrigger.MANUAL, dryRun);
     return Response.status(Response.Status.ACCEPTED)
         .entity(new StartRunRequest.Response(id))

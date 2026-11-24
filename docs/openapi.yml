@@ -66,6 +66,8 @@ components:
           type: string
         description:
           type: string
+        dryRunnable:
+          type: boolean
         steps:
           type: array
           items:
@@ -264,16 +266,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StartProcessRunResponse"
+        "400":
+          description: A dry run of a process that has none (dryRunnable is false)
+        "403":
+          description: A commissioned agent (qits:agent) starting a process not open
+            to one
         "404":
           description: No process of that kind
         "409":
           description: A run of that kind is already active
         "401":
           description: Not Authorized
-        "403":
-          description: Not Allowed
-        "400":
-          description: Bad Request
       tags:
       - Process Controller
       security:

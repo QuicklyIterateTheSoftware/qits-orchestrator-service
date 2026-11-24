@@ -128,7 +128,7 @@ public class PeerClient {
     return new PeerExchange(call, send(target, call));
   }
 
-  /** A POST with a JSON body, as the same pair. */
+  /** A POST with a JSON body, as the same pair. A null {@code body} sends none. */
   public PeerExchange post(String target, String path, String body) {
     return post(target, path, body, callTimeout);
   }
@@ -174,8 +174,13 @@ public class PeerClient {
             .timeout(timeout)
             .header("Accept", "application/json")
             .header("Authorization", "Bearer " + token.get());
-    if (call.body() == null) {
+    // The verb is the call's own, not inferred from the body: qits-maintenance's SBOM check is a
+    // POST with no body at all (ticket qits-2490), and it went out as a GET while a null body
+    // meant one.
+    if (!"POST".equals(call.method())) {
       request.GET();
+    } else if (call.body() == null) {
+      request.POST(HttpRequest.BodyPublishers.noBody());
     } else {
       request
           .header("Content-Type", "application/json")

@@ -281,6 +281,15 @@ public class GcProcess implements TechnicalProcess {
         + " the registry store before and after.";
   }
 
+  /**
+   * An owner decided a commissioned agent may start a gc run, dry or real, with no more guard than
+   * that — the one process {@code qits:agent} may start.
+   */
+  @Override
+  public boolean agentStartable() {
+    return true;
+  }
+
   @Override
   public List<StepDefinition> steps() {
     return List.of(

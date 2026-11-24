@@ -95,6 +95,7 @@ public class Runs {
         process.kind(),
         process.name(),
         process.description(),
+        process.dryRunnable(),
         process.steps().stream()
             .map(step -> new StepDto(step.id(), step.name(), step.target(), step.dependsOn()))
             .toList());
