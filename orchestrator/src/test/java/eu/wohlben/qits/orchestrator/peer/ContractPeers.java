@@ -45,7 +45,12 @@ public final class ContractPeers {
    * the peer back off a recorded call's url.
    */
   public static FakePeers fake() {
-    return wire(new FakePeers(), target -> "http://" + target);
+    return fake(new FakePeers());
+  }
+
+  /** {@link #fake()} for a subclass a test brings, wired the same way. */
+  public static <T extends FakePeers> T fake(T fake) {
+    return wire(fake, target -> "http://" + target);
   }
 
   /**

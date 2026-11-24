@@ -9,9 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import eu.wohlben.qits.orchestrator.entity.OpRun;
 import eu.wohlben.qits.orchestrator.entity.OpStep;
+import eu.wohlben.qits.orchestrator.error.DryRunNotOfferedException;
 import eu.wohlben.qits.orchestrator.error.NoSuchProcessException;
 import eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
+import eu.wohlben.qits.orchestrator.process.sbomcheck.SbomCheckProcess;
+import eu.wohlben.qits.orchestrator.process.scan.ScanProcess;
 import eu.wohlben.qits.orchestrator.run.RecordingRunAnnouncer.Announced;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -309,6 +312,24 @@ class RunExecutorTest {
     assertThrows(
         NoSuchProcessException.class,
         () -> executor.start("no-such-process", RunTrigger.MANUAL, false));
+  }
+
+  /**
+   * A dry run of a process whose peer door has none (ticket qits-2490) is refused, and before any
+   * row is written: a "dry" run that did the real work would be the worst of both answers.
+   */
+  @Test
+  void aDryRunOfAProcessWithoutOneIsRefusedBeforeAnyRowIsWritten() {
+    for (String kind : List.of(ScanProcess.KIND, SbomCheckProcess.KIND)) {
+      DryRunNotOfferedException refused =
+          assertThrows(
+              DryRunNotOfferedException.class,
+              () -> executor.start(kind, RunTrigger.MANUAL, true));
+      assertEquals(400, refused.statusCode());
+      assertTrue(refused.getMessage().contains("has no dry run"), refused.getMessage());
+      nextPoll();
+      assertTrue(runs.active(kind).isEmpty(), kind + ": no run row was opened");
+    }
   }
 
   @Test

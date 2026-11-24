@@ -460,6 +460,12 @@ final class GcContract {
       rows.add(TOKEN_MINT);
       rows.addAll(TENANT_READS);
     }
+    if (target.equals(PeerTarget.MAINTENANCE)) {
+      // The scan and SBOM check processes' calls (qits-2490): one pact per peer, whoever calls.
+      MaintenanceProcessesContract.ROWS.stream()
+          .filter(MaintenanceProcessesContract::live)
+          .forEach(row -> rows.add(row.interaction()));
+    }
     return ConsumerPact.of(CONSUMER, PEERS.get(target), rows);
   }
 
@@ -662,6 +668,29 @@ final class GcContract {
     fake.answer(
         recorded(row).examplePath(), FakePeers.Scripted.ok(consumed(whole, paths).toString()));
     return run(row, fake);
+  }
+
+  /**
+   * {@code whole} cut to the {@code consumes} paths of a row ({@code "a.b"}, {@code "a[]"}, {@code
+   * "[].x"}): what a row's step must read the same line from as from the whole answer.
+   */
+  static JsonNode cutTo(JsonNode whole, List<String> consumes) {
+    List<List<String>> paths = new ArrayList<>();
+    for (String path : consumes) {
+      List<String> steps = new ArrayList<>();
+      for (String key : path.split("\\.")) {
+        if (key.equals("[]")) {
+          steps.add("[]");
+        } else if (key.endsWith("[]")) {
+          steps.add(key.substring(0, key.length() - 2));
+          steps.add("[]");
+        } else {
+          steps.add(key);
+        }
+      }
+      paths.add(steps);
+    }
+    return consumed(whole, paths);
   }
 
   /** {@code node} holding only {@code paths}; an array read without fields keeps empty elements. */

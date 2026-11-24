@@ -1,0 +1,31 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "kind": "sbom-check",
+  "trigger": "scheduled",
+  "dryRun": false,
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "summary": "check SUCCEEDED (1 version without a usable SBOM, 1 ticket open, 0 warnings)",
+  "steps": [
+    {
+      "id": "check",
+      "name": "Check the SBOMs",
+      "target": "maintenance",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 202,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/sbom-check/runs",
+        "body": null
+      },
+      "response": null,
+      "responseBytes": 350,
+      "error": null,
+      "summary": "1 version without a usable SBOM, 1 ticket open, 0 warnings"
+    }
+  ]
+}

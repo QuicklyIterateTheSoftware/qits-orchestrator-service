@@ -181,6 +181,18 @@ public final class StoryPeers {
   public static final String SERVICE_CLIENTS_PATH = "/idp/api/gc/service-clients";
   public static final String MIRROR_IMAGE_PINS_PATH = "/maintenance/api/pins/images";
   public static final String MIRROR_SWEEP_PATH = "/mirror/api/gc/sweep";
+  /** qits-maintenance's scan door (qits-2490): POST queues one, {@code /{id}} reads it. */
+  public static final String SCANS_PATH = "/maintenance/api/scans";
+  /** qits-maintenance's SBOM check door (qits-2490): synchronous, answers the report. */
+  public static final String SBOM_CHECK_PATH = "/maintenance/api/sbom-check/runs";
+
+  /**
+   * The id every queued scan is answered with. A uuid, so {@code Labels} scrubs the follow's read
+   * to {@code GET /maintenance/api/scans/{id}} like any generated id.
+   */
+  public static final String SCAN_ID = "3b9e6c1a-7d24-4f80-9a5c-2e1f0d8b7c64";
+
+  public static final String SCAN_PATH = SCANS_PATH + "/" + SCAN_ID;
 
   /** The one service client the claims answer names — the orchestrator's own. */
   public static final String CLAIMED_CLIENT = "dev-qits-orchestrator";
@@ -445,6 +457,26 @@ public final class StoryPeers {
               + ",\"reclaimedBytes\":"
               + (dryRun ? 0 : 2400000000L)
               + "}}";
+      // The scan process (qits-2490): every scan is queued under one id and has ended by the
+      // first read, so a follow makes exactly one call and a story never waits a poll interval.
+      case SCANS_PATH -> "POST".equals(method) ? "{\"id\":\"" + SCAN_ID + "\"}" : null;
+      case SCAN_PATH ->
+          "{\"id\":\""
+              + SCAN_ID
+              + "\",\"scope\":\"INTERNAL\",\"repository\":null,\"trigger\":\"MANUAL\","
+              + "\"status\":\"SUCCEEDED\",\"startedAt\":\"2026-11-24T00:30:00Z\","
+              + "\"finishedAt\":\"2026-11-24T00:31:00Z\",\"message\":null}";
+      // The SBOM check (qits-2490): one released version without an SBOM, ticketed.
+      case SBOM_CHECK_PATH ->
+          "POST".equals(method)
+              ? "{\"ranAt\":\"2026-11-24T02:15:00Z\",\"filed\":true,\"entries\":["
+                  + "{\"project\":\"qits\",\"repository\":\"" + CATALOGUE_REPOSITORY + "\","
+                  + "\"ecosystem\":\"maven\",\"name\":\"eu.wohlben.qits:qits-orchestrator\","
+                  + "\"version\":\"" + MANIFEST_PIN_VERSION + "\",\"reason\":\"MISSING\"}],"
+                  + "\"warnings\":[],\"tickets\":[{\"project\":\"qits\",\"ecosystem\":\"maven\","
+                  + "\"name\":\"eu.wohlben.qits:qits-orchestrator\",\"ticketSlug\":\"qits-703\","
+                  + "\"versions\":[\"" + MANIFEST_PIN_VERSION + "\"]}]}"
+              : null;
       // An hour, so the mints land in exactly one story of the run — see the class javadoc.
       case TOKEN_PATH ->
           "POST".equals(method)

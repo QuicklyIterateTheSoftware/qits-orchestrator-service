@@ -1,0 +1,12 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "kind": "scan",
+    "trigger": "scheduled",
+    "dryRun": false,
+    "status": "SUCCEEDED",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "finishedAt": "2026-01-01T00:00:00Z",
+    "summary": "internal.request SUCCEEDED (queued scan 00000000-0000-4000-8000-000000000002); internal.follow SUCCEEDED (INTERNAL scan SUCCEEDED); external.request SUCCEEDED (queued scan 00000000-0000-4000-8000-000000000003); external.follow SUCCEEDED (EXTERNAL scan SUCCEEDED)"
+  }
+]

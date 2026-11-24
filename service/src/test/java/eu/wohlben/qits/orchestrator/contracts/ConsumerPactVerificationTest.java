@@ -20,6 +20,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * comments.references.qits-call} or {@code qits-trigger}. {@link #drain} waits out the run a
  * verified {@code startProcessRun} leaves on the executor, as the recording does, and closes
  * the run {@code a running gc run} seeds.
+ *
+ * <p><b>A pinned pact that is wrong is named in {@link #KNOWN_WRONG}, by its jar's version</b>, and
+ * its interaction is reported as skipped with the reason.
  */
 @QuarkusTest
 @TestProfile(ContractProfile.class)
@@ -62,6 +66,37 @@ class ConsumerPactVerificationTest {
     // pact-jvm reports usage metrics over the network unless told not to; a test never should.
     System.setProperty("pact_do_not_track", "true");
   }
+
+  /** A pinned pact interaction this provider cannot honour, and why: the consumer must fix it. */
+  record KnownWrong(String consumer, String version, String description, String reason) {
+
+    boolean names(Pact pact, Interaction interaction) {
+      return consumer.equals(pact.getConsumer().getName())
+          && description.equals(interaction.getDescription())
+          && String.valueOf(pact.getSource()).contains("/" + version + "/");
+    }
+  }
+
+  /**
+   * The pinned (or deployed) interactions that are wrong, each by the version of the consumer's
+   * jar: the entry is for that version alone, so the bump carrying the consumer's fix verifies the
+   * interaction for real. Each is skipped with its reason — never answered by bending the provider
+   * to it (the pattern of qits-observability-service's and qits-maintenance-service's).
+   *
+   * <p>qits-landing-app 2026.1123.90130 pins {@code GET /processes} under {@code the gc process} to
+   * exactly ONE process ({@code type} with {@code min}/{@code max} 1, the length of the recording it
+   * was generated from). The listing is every registered process, and since ticket qits-2490 that
+   * is gc, scan and sbom-check; the landing part of qits-2490 regenerates the pact from the new
+   * golden masters.
+   */
+  static final List<KnownWrong> KNOWN_WRONG =
+      List.of(
+          new KnownWrong(
+              "qits-landing-app",
+              "2026.1123.90130",
+              "show-orchestrator-process: listProcesses",
+              "the row pins the process listing to one entry; the orchestrator lists gc, scan and"
+                  + " sbom-check since qits-2490, whose landing part re-records it"));
 
   @Inject ProviderStates states;
 
@@ -99,6 +134,13 @@ class ConsumerPactVerificationTest {
                 + key);
       }
     }
+    for (KnownWrong wrong : KNOWN_WRONG) {
+      if (wrong.names(pact, interaction)) {
+        Assumptions.abort(
+            consumer + " " + wrong.version() + " '" + interaction.getDescription() + "': "
+                + wrong.reason());
+      }
+    }
     context.setTarget(new HttpTestTarget(base.getHost(), base.getPort()));
   }
 
@@ -107,7 +149,7 @@ class ConsumerPactVerificationTest {
    */
   @AfterEach
   void drain() {
-    states.awaitNoActiveGcRun();
+    states.awaitNoActiveRun();
   }
 
   @TestTemplate
@@ -148,5 +190,35 @@ class ConsumerPactVerificationTest {
   @State(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN)
   Map<String, String> aRepositoryTheCleanupCanPlan() {
     return states.params(ProviderStates.A_REPOSITORY_THE_CLEANUP_CAN_PLAN);
+  }
+
+  @State(ProviderStates.THE_SCAN_PROCESS)
+  Map<String, String> theScanProcess() {
+    return states.params(ProviderStates.THE_SCAN_PROCESS);
+  }
+
+  @State(ProviderStates.A_FINISHED_SCAN_RUN)
+  Map<String, String> aFinishedScanRun() {
+    return states.params(ProviderStates.A_FINISHED_SCAN_RUN);
+  }
+
+  @State(ProviderStates.NO_ACTIVE_SCAN_RUN)
+  Map<String, String> noActiveScanRun() {
+    return states.params(ProviderStates.NO_ACTIVE_SCAN_RUN);
+  }
+
+  @State(ProviderStates.THE_SBOM_CHECK_PROCESS)
+  Map<String, String> theSbomCheckProcess() {
+    return states.params(ProviderStates.THE_SBOM_CHECK_PROCESS);
+  }
+
+  @State(ProviderStates.A_FINISHED_SBOM_CHECK_RUN)
+  Map<String, String> aFinishedSbomCheckRun() {
+    return states.params(ProviderStates.A_FINISHED_SBOM_CHECK_RUN);
+  }
+
+  @State(ProviderStates.NO_ACTIVE_SBOM_CHECK_RUN)
+  Map<String, String> noActiveSbomCheckRun() {
+    return states.params(ProviderStates.NO_ACTIVE_SBOM_CHECK_RUN);
   }
 }

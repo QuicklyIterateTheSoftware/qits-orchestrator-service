@@ -1,0 +1,3 @@
+{
+  "message": "the sbom-check process has no dry run: the peer door it calls has no dry-run mode, so a run of it always does the real work; start it with {\"dryRun\":false}"
+}

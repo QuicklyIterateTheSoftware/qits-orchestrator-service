@@ -15,6 +15,8 @@ import eu.wohlben.qits.orchestrator.entity.OpStep;
 import eu.wohlben.qits.orchestrator.peer.FakePeers;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
+import eu.wohlben.qits.orchestrator.process.sbomcheck.SbomCheckProcess;
+import eu.wohlben.qits.orchestrator.process.scan.ScanProcess;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -57,7 +59,7 @@ class ProcessApiTest {
     // A neighbouring class (AdminAgentAccessTest, AgentReadAccessTest) may have started a gc run
     // against the one shared app and DB and returned without waiting; drain it before this class
     // scripts the peers and holds them, or `start` below gets a 409 that is not this class's own.
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     peers.reset();
     peers.answer(
         "/containers/api/gc/usage",
@@ -137,15 +139,17 @@ class ProcessApiTest {
   }
 
   /**
-   * Waits for any gc run a neighbouring {@code @QuarkusTest} class left RUNNING, so this class's
+   * Waits for any run a neighbouring {@code @QuarkusTest} class left RUNNING — of any kind, since
+   * one worker runs them all — so this class's
    * own single-flight assertions are not tripped by somebody else's leak. See {@code
    * GcDeployTriggerTest.awaitNoActiveRun} for the same wait and the clear it needs.
    */
-  private void awaitNoActiveGcRun() {
+  private void awaitNoActiveRun() {
     Instant deadline = Instant.now().plus(Duration.ofSeconds(60));
     while (Instant.now().isBefore(deadline)) {
       runs.getEntityManager().clear();
-      if (runs.active(GcProcess.KIND).isEmpty()) {
+      if (java.util.stream.Stream.of(GcProcess.KIND, ScanProcess.KIND, SbomCheckProcess.KIND)
+          .allMatch(kind -> runs.active(kind).isEmpty())) {
         return;
       }
       try {
@@ -155,7 +159,7 @@ class ProcessApiTest {
         throw new IllegalStateException(e);
       }
     }
-    throw new AssertionError("a gc run never finished");
+    throw new AssertionError("a run never finished");
   }
 
   /** Starts a run and returns its id. */
@@ -274,6 +278,126 @@ class ProcessApiTest {
         .body("find { it.kind == 'gc' }.steps[18].dependsOn", equalTo(java.util.List.of()))
         .body("find { it.kind == 'gc' }.steps[19].id", equalTo("artifacts.usage.after"))
         .body("find { it.kind == 'gc' }.steps[19].dependsOn", contains("artifacts.sweep"));
+  }
+
+  /**
+   * The scan and SBOM check processes (ticket qits-2490) beside gc: their steps and edges, and
+   * which of the three may be a dry run — what the client reads to hide the button.
+   */
+  @Test
+  void theListingCarriesTheScanAndSbomCheckProcessesAndWhichKindMayRunDry() {
+    given()
+        .when()
+        .get(BASE + "/processes")
+        .then()
+        .statusCode(200)
+        .body("kind", contains("gc", "sbom-check", "scan"))
+        .body("find { it.kind == 'gc' }.dryRunnable", equalTo(true))
+        .body("find { it.kind == 'scan' }.name", equalTo("Manifest scan"))
+        .body("find { it.kind == 'scan' }.dryRunnable", equalTo(false))
+        .body(
+            "find { it.kind == 'scan' }.steps.id",
+            contains("internal.request", "internal.follow", "external.request", "external.follow"))
+        .body("find { it.kind == 'scan' }.steps.target", everyItem(equalTo("maintenance")))
+        .body("find { it.kind == 'scan' }.steps[1].dependsOn", contains("internal.request"))
+        .body("find { it.kind == 'scan' }.steps[2].dependsOn", equalTo(java.util.List.of()))
+        .body("find { it.kind == 'scan' }.steps[3].dependsOn", contains("external.request"))
+        .body("find { it.kind == 'sbom-check' }.name", equalTo("SBOM check"))
+        .body("find { it.kind == 'sbom-check' }.dryRunnable", equalTo(false))
+        .body("find { it.kind == 'sbom-check' }.steps.id", contains("check"))
+        .body("find { it.kind == 'sbom-check' }.steps[0].target", equalTo("maintenance"));
+  }
+
+  /**
+   * A dry run of a process that has none is a 400 with the platform's envelope, and nothing is
+   * started — the listing has no run of it afterwards.
+   */
+  @Test
+  void aDryRunOfAProcessWithoutOneIsRefusedWithA400AndStartsNothing() {
+    for (String kind : java.util.List.of(ScanProcess.KIND, SbomCheckProcess.KIND)) {
+      given()
+          .contentType(ContentType.JSON)
+          .body("{\"dryRun\":true}")
+          .when()
+          .post(BASE + "/processes/" + kind + "/runs")
+          .then()
+          .statusCode(400)
+          .contentType(ContentType.JSON)
+          .body("message", containsString("the " + kind + " process has no dry run"));
+      given()
+          .when()
+          .get(BASE + "/processes/" + kind + "/runs")
+          .then()
+          .statusCode(200)
+          .body("findAll { it.dryRun == true }.size()", equalTo(0));
+    }
+  }
+
+  /** A scan run: both scans requested and followed, each request in its own scope. */
+  @Test
+  void aScanRunRequestsAndFollowsBothScans() {
+    String scanId = "00000000-0000-4000-8000-0000000000a1";
+    peers.answer(
+        ScanProcess.SCANS_PATH, FakePeers.Scripted.status(202, "{\"id\":\"" + scanId + "\"}"));
+    peers.answer(
+        ScanProcess.SCANS_PATH + "/" + scanId,
+        FakePeers.Scripted.ok(
+            "{\"id\":\"" + scanId + "\",\"scope\":\"INTERNAL\",\"status\":\"SUCCEEDED\","
+                + "\"message\":null}"));
+    String id = startKind(ScanProcess.KIND);
+    assertEquals("SUCCEEDED", awaitClosed(id));
+    given()
+        .when()
+        .get(BASE + "/runs/" + id)
+        .then()
+        .statusCode(200)
+        .body("kind", equalTo("scan"))
+        .body("dryRun", equalTo(false))
+        .body("steps.status", everyItem(equalTo("SUCCEEDED")))
+        .body("steps[0].request.method", equalTo("POST"))
+        .body("steps[0].request.body", equalTo("{\"scope\":\"INTERNAL\"}"))
+        .body("steps[0].httpStatus", equalTo(202))
+        .body("steps[1].request.method", equalTo("GET"))
+        .body("steps[1].summary", equalTo("INTERNAL scan SUCCEEDED"))
+        .body("steps[2].request.body", equalTo("{\"scope\":\"EXTERNAL\"}"));
+  }
+
+  /** An SBOM check run: one body-less POST, its report summarised. */
+  @Test
+  void anSbomCheckRunPostsTheCheckAndSummarisesTheReport() {
+    peers.answer(
+        SbomCheckProcess.RUNS_PATH,
+        FakePeers.Scripted.status(
+            202,
+            "{\"ranAt\":\"2026-11-24T02:15:00Z\",\"filed\":true,\"entries\":[],"
+                + "\"warnings\":[],\"tickets\":[]}"));
+    String id = startKind(SbomCheckProcess.KIND);
+    assertEquals("SUCCEEDED", awaitClosed(id));
+    given()
+        .when()
+        .get(BASE + "/runs/" + id)
+        .then()
+        .statusCode(200)
+        .body("kind", equalTo("sbom-check"))
+        .body("steps[0].id", equalTo("check"))
+        .body("steps[0].request.method", equalTo("POST"))
+        .body("steps[0].request.body", nullValue())
+        .body(
+            "steps[0].summary",
+            equalTo("0 versions without a usable SBOM, 0 tickets open, 0 warnings"));
+  }
+
+  /** Starts a real run of {@code kind} and returns its id. */
+  private String startKind(String kind) {
+    return given()
+        .contentType(ContentType.JSON)
+        .body("{\"dryRun\":false}")
+        .when()
+        .post(BASE + "/processes/" + kind + "/runs")
+        .then()
+        .statusCode(202)
+        .extract()
+        .path("id");
   }
 
   @Test

@@ -72,6 +72,155 @@
       ]
     },
     {
+      "name": "a finished sbom-check run",
+      "slug": "a-finished-sbom-check-run",
+      "params": {
+        "kind": "sbom-check",
+        "runId": "00000000-0000-4000-8000-000000000001",
+        "stepId": "check"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "getProcessRun",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}",
+          "query": {
+            "bodies": "false"
+          },
+          "status": 200,
+          "file": "a-finished-sbom-check-run/getProcessRun.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt",
+              "$.steps[*].startedAt",
+              "$.steps[*].finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "getProcessRunStep",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}/steps/{stepId}",
+          "status": 200,
+          "file": "a-finished-sbom-check-run/getProcessRunStep.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt"
+            ],
+            "strings": [
+              "$.response"
+            ],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "listProcessRuns",
+          "method": "GET",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "status": 200,
+          "file": "a-finished-sbom-check-run/listProcessRuns.json",
+          "frozen": {
+            "ids": [
+              "$[*].id"
+            ],
+            "instants": [
+              "$[*].startedAt",
+              "$[*].finishedAt"
+            ],
+            "strings": [],
+            "listFilteredTo": "$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a finished scan run",
+      "slug": "a-finished-scan-run",
+      "params": {
+        "kind": "scan",
+        "runId": "00000000-0000-4000-8000-000000000001",
+        "stepId": "internal.follow"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "getProcessRun",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}",
+          "query": {
+            "bodies": "false"
+          },
+          "status": 200,
+          "file": "a-finished-scan-run/getProcessRun.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt",
+              "$.steps[*].startedAt",
+              "$.steps[*].finishedAt"
+            ],
+            "strings": [
+              "$.summary",
+              "$.steps[*].summary",
+              "$.steps[*].request.url"
+            ],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "getProcessRunStep",
+          "method": "GET",
+          "path": "/orchestrator/api/runs/{runId}/steps/{stepId}",
+          "status": 200,
+          "file": "a-finished-scan-run/getProcessRunStep.json",
+          "frozen": {
+            "ids": [],
+            "instants": [
+              "$.startedAt",
+              "$.finishedAt"
+            ],
+            "strings": [
+              "$.request.url",
+              "$.response"
+            ],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "listProcessRuns",
+          "method": "GET",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "status": 200,
+          "file": "a-finished-scan-run/listProcessRuns.json",
+          "frozen": {
+            "ids": [
+              "$[*].id"
+            ],
+            "instants": [
+              "$[*].startedAt",
+              "$[*].finishedAt"
+            ],
+            "strings": [
+              "$[*].summary"
+            ],
+            "listFilteredTo": "$"
+          }
+        }
+      ]
+    },
+    {
       "name": "a repository the cleanup can plan",
       "slug": "a-repository-the-cleanup-can-plan",
       "params": {
@@ -193,6 +342,62 @@
       ]
     },
     {
+      "name": "no active sbom-check run",
+      "slug": "no-active-sbom-check-run",
+      "params": {
+        "kind": "sbom-check"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "startProcessRun",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": false
+          },
+          "status": 202,
+          "file": "no-active-sbom-check-run/startProcessRun.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "no active scan run",
+      "slug": "no-active-scan-run",
+      "params": {
+        "kind": "scan"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "startProcessRun",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": false
+          },
+          "status": 202,
+          "file": "no-active-scan-run/startProcessRun.json",
+          "frozen": {
+            "ids": [
+              "$.id"
+            ],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
       "name": "the gc process",
       "slug": "the-gc-process",
       "params": {
@@ -229,6 +434,84 @@
           "path": "/orchestrator/api/processes/{kind}/runs",
           "status": 200,
           "file": "the-gc-process-before-its-first-run/listProcessRuns.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the sbom-check process",
+      "slug": "the-sbom-check-process",
+      "params": {
+        "kind": "sbom-check"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "listProcesses",
+          "method": "GET",
+          "path": "/orchestrator/api/processes",
+          "status": 200,
+          "file": "the-sbom-check-process/listProcesses.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "startProcessRun",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": true
+          },
+          "status": 400,
+          "file": "the-sbom-check-process/startProcessRun.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the scan process",
+      "slug": "the-scan-process",
+      "params": {
+        "kind": "scan"
+      },
+      "dependsOn": [],
+      "operations": [
+        {
+          "operationId": "listProcesses",
+          "method": "GET",
+          "path": "/orchestrator/api/processes",
+          "status": 200,
+          "file": "the-scan-process/listProcesses.json",
+          "frozen": {
+            "ids": [],
+            "instants": [],
+            "strings": [],
+            "listFilteredTo": null
+          }
+        },
+        {
+          "operationId": "startProcessRun",
+          "method": "POST",
+          "path": "/orchestrator/api/processes/{kind}/runs",
+          "body": {
+            "dryRun": true
+          },
+          "status": 400,
+          "file": "the-scan-process/startProcessRun.json",
           "frozen": {
             "ids": [],
             "instants": [],

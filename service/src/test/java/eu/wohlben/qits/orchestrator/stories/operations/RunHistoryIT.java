@@ -119,7 +119,7 @@ public class RunHistoryIT {
         .get(StoryTarget.PROCESSES_PATH)
         .then()
         .statusCode(200)
-        .body("kind", hasItem(StoryTarget.GC))
+        .body("kind", contains(StoryTarget.GC, "sbom-check", "scan"))
         .body(gc() + ".name", equalTo("Garbage collection"))
         .body(gc() + ".description", notNullValue())
         .body(gc() + ".steps.size()", equalTo(21))
@@ -128,8 +128,9 @@ public class RunHistoryIT {
         .body(gc() + ".steps.target", hasItem("workspaces"));
     story
         .note(
-            "the catalogue: one process, twenty-one steps, each naming the peer it calls — the graph"
-                + " the client draws before a run exists")
+            "the catalogue: every process — gc's twenty-one steps, the scans' four, the SBOM"
+                + " check's one — each step naming the peer it calls: the graph the client draws"
+                + " before a run exists")
         .as("plan-served");
 
     StoryIdentities.person(given(), StoryIdentities.OPERATOR_ACCOUNT)

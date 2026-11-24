@@ -162,6 +162,175 @@
         "status": 200
       },
       "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-maintenance-service",
+            "operationId": "runSbomCheck"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "SbomCheckSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "SbomCheckSchedule.onSchedule: runSbomCheck",
+      "key": "cb0984ee",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a stored SBOM check report",
+          "params": {
+            "repoName": "contract-service"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/maintenance/api/sbom-check/runs"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "entries": [
+              {}
+            ],
+            "filed": false,
+            "tickets": [],
+            "warnings": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.entries": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 0
+                }
+              ]
+            },
+            "$.filed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 202
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-maintenance-service",
+            "operationId": "getScan"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "ScanSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "ScanSchedule.onSchedule: getScan",
+      "key": "35c8dd07",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a finished scan",
+          "params": {
+            "repoName": "contract-service",
+            "scanId": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "request": {
+        "generators": {
+          "path": {
+            "dataType": "RAW",
+            "expression": "/maintenance/api/scans/${scanId}",
+            "type": "ProviderState"
+          }
+        },
+        "method": "GET",
+        "path": "/maintenance/api/scans/00000000-0000-4000-8000-000000000001"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "scope": "INTERNAL",
+            "status": "SUCCEEDED"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.scope": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
     }
   ],
   "metadata": {

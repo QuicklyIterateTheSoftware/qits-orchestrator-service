@@ -1,0 +1,19 @@
+{
+  "id": "check",
+  "name": "Check the SBOMs",
+  "target": "maintenance",
+  "dependsOn": [],
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "httpStatus": 202,
+  "request": {
+    "method": "POST",
+    "url": "http://dev-qits-maintenance:8080/maintenance/api/sbom-check/runs",
+    "body": null
+  },
+  "response": "{\"ranAt\":\"2026-01-01T00:00:00Z\",\"filed\":true,\"entries\":[{\"project\":\"qits\",\"repository\":\"qits-ci-service\",\"ecosystem\":\"maven\",\"name\":\"eu.wohlben.qits:qits-ci\",\"version\":\"2026.930.1\",\"reason\":\"MISSING\"}],\"warnings\":[],\"tickets\":[{\"project\":\"qits\",\"ecosystem\":\"maven\",\"name\":\"eu.wohlben.qits:qits-ci\",\"ticketSlug\":\"qits-703\",\"versions\":[\"2026.930.1\"]}]}",
+  "responseBytes": 350,
+  "error": null,
+  "summary": "1 version without a usable SBOM, 1 ticket open, 0 warnings"
+}

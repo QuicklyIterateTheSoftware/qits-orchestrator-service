@@ -90,6 +90,31 @@ class AgentReadAccessTest {
     awaitClosed(UUID.fromString(id));
   }
 
+  /**
+   * The owner's decision covers gc alone (ticket qits-2490): an agent asking for a scan or an SBOM
+   * check — real, so the dry-run 400 cannot answer first — is refused with a 403 that names the
+   * kind, and nothing is started.
+   */
+  @Test
+  @TestSecurity(user = CALLER, roles = "qits:agent")
+  void anAgentMayNotStartAScanOrAnSbomCheck() {
+    for (String kind : java.util.List.of("scan", "sbom-check")) {
+      given()
+          .contentType(ContentType.JSON)
+          .body("{\"dryRun\":false}")
+          .post(BASE + "/processes/" + kind + "/runs")
+          .then()
+          .statusCode(403)
+          .body(
+              "message",
+              org.hamcrest.Matchers.containsString(
+                  "a commissioned agent may not start a " + kind + " run"));
+      runs.getEntityManager().clear();
+      org.junit.jupiter.api.Assertions.assertTrue(
+          runs.active(kind).isEmpty(), kind + ": nothing was started");
+    }
+  }
+
   /** Waits until the given run is no longer RUNNING. See {@code GcDeployTriggerTest.awaitClosed}. */
   private void awaitClosed(UUID id) {
     Instant deadline = Instant.now().plus(Duration.ofSeconds(60));

@@ -3,6 +3,7 @@
     "kind": "gc",
     "name": "Garbage collection",
     "description": "Reads the platform's pin set once, then asks every store's own owner to delete what nothing pins: registry identities and blobs (qits-artifacts), host images, orphan volumes and buildkit cache (qits-containers), service clients nothing claims (qits-idp), and mirrored images no manifest pins (qits-mirror). Measures host disk and the registry store before and after.",
+    "dryRunnable": true,
     "steps": [
       {
         "id": "usage.before",
@@ -189,6 +190,56 @@
           "containers.images",
           "containers.volumes",
           "containers.build-cache"
+        ]
+      }
+    ]
+  },
+  {
+    "kind": "sbom-check",
+    "name": "SBOM check",
+    "description": "Asks qits-maintenance to check every released version still in the registry for a usable SBOM, re-read the ones that are missing or failed, and keep one ticket open per artifact that still has none. Reports the versions without one, the open tickets and any warnings.",
+    "dryRunnable": false,
+    "steps": [
+      {
+        "id": "check",
+        "name": "Check the SBOMs",
+        "target": "maintenance",
+        "dependsOn": []
+      }
+    ]
+  },
+  {
+    "kind": "scan",
+    "name": "Manifest scan",
+    "description": "Asks qits-maintenance to re-scan every repository's manifests and refresh the latest versions: first the platform's own artifacts (INTERNAL), then everything published elsewhere (EXTERNAL), each followed until it ends. Bumps nothing — what is out of date is what the next release request's pre-run bumps.",
+    "dryRunnable": false,
+    "steps": [
+      {
+        "id": "internal.request",
+        "name": "Request the internal scan",
+        "target": "maintenance",
+        "dependsOn": []
+      },
+      {
+        "id": "internal.follow",
+        "name": "Follow the internal scan",
+        "target": "maintenance",
+        "dependsOn": [
+          "internal.request"
+        ]
+      },
+      {
+        "id": "external.request",
+        "name": "Request the external scan",
+        "target": "maintenance",
+        "dependsOn": []
+      },
+      {
+        "id": "external.follow",
+        "name": "Follow the external scan",
+        "target": "maintenance",
+        "dependsOn": [
+          "external.request"
         ]
       }
     ]

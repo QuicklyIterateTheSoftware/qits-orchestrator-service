@@ -1,0 +1,12 @@
+[
+  {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "kind": "sbom-check",
+    "trigger": "scheduled",
+    "dryRun": false,
+    "status": "SUCCEEDED",
+    "startedAt": "2026-01-01T00:00:00Z",
+    "finishedAt": "2026-01-01T00:00:00Z",
+    "summary": "check SUCCEEDED (1 version without a usable SBOM, 1 ticket open, 0 warnings)"
+  }
+]

@@ -1,0 +1,92 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "kind": "scan",
+  "trigger": "scheduled",
+  "dryRun": false,
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "summary": "internal.request SUCCEEDED (queued scan 00000000-0000-4000-8000-000000000002); internal.follow SUCCEEDED (INTERNAL scan SUCCEEDED); external.request SUCCEEDED (queued scan 00000000-0000-4000-8000-000000000003); external.follow SUCCEEDED (EXTERNAL scan SUCCEEDED)",
+  "steps": [
+    {
+      "id": "internal.request",
+      "name": "Request the internal scan",
+      "target": "maintenance",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 202,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/scans",
+        "body": null
+      },
+      "response": null,
+      "responseBytes": 45,
+      "error": null,
+      "summary": "queued scan 00000000-0000-4000-8000-000000000002"
+    },
+    {
+      "id": "internal.follow",
+      "name": "Follow the internal scan",
+      "target": "maintenance",
+      "dependsOn": [
+        "internal.request"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/scans/00000000-0000-4000-8000-000000000002",
+        "body": null
+      },
+      "response": null,
+      "responseBytes": 208,
+      "error": null,
+      "summary": "INTERNAL scan SUCCEEDED"
+    },
+    {
+      "id": "external.request",
+      "name": "Request the external scan",
+      "target": "maintenance",
+      "dependsOn": [],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 202,
+      "request": {
+        "method": "POST",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/scans",
+        "body": null
+      },
+      "response": null,
+      "responseBytes": 45,
+      "error": null,
+      "summary": "queued scan 00000000-0000-4000-8000-000000000003"
+    },
+    {
+      "id": "external.follow",
+      "name": "Follow the external scan",
+      "target": "maintenance",
+      "dependsOn": [
+        "external.request"
+      ],
+      "status": "SUCCEEDED",
+      "startedAt": "2026-01-01T00:00:00Z",
+      "finishedAt": "2026-01-01T00:00:00Z",
+      "httpStatus": 200,
+      "request": {
+        "method": "GET",
+        "url": "http://dev-qits-maintenance:8080/maintenance/api/scans/00000000-0000-4000-8000-000000000003",
+        "body": null
+      },
+      "response": null,
+      "responseBytes": 208,
+      "error": null,
+      "summary": "EXTERNAL scan SUCCEEDED"
+    }
+  ]
+}

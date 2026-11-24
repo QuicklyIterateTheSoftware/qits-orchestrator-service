@@ -11,6 +11,8 @@ import eu.wohlben.qits.orchestrator.process.StepDefinition;
 import eu.wohlben.qits.orchestrator.process.StepResult;
 import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
 import eu.wohlben.qits.orchestrator.process.gc.GcProcess;
+import eu.wohlben.qits.orchestrator.process.sbomcheck.SbomCheckProcess;
+import eu.wohlben.qits.orchestrator.process.scan.ScanProcess;
 import eu.wohlben.qits.orchestrator.run.RunStatus;
 import eu.wohlben.qits.orchestrator.run.RunTrigger;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -43,11 +45,18 @@ import java.util.function.Supplier;
  * executed row carries whatever the fakes and the clock produced, a written one carries exactly
  * what is spelled below.
  *
- * <p><b>Every state drains first.</b> One gc run at a time is the service's rule (a second start is
- * a 409, {@code RunStore.open} refuses a second open), so a run left RUNNING by the previous
- * interaction would make the next state's own open or start fail for a reason that is not its own.
- * {@link #A_RUNNING_GC_RUN} is the one state that leaves a run RUNNING on purpose, and nothing on
- * the executor will ever close it, so the drain closes it ({@link #awaitNoActiveGcRun}).
+ * <p><b>Every state drains first.</b> One run of a kind at a time is the service's rule (a second
+ * start is a 409, {@code RunStore.open} refuses a second open), and one worker runs every kind, so
+ * a run left RUNNING by the previous interaction would make the next state's own open or start fail
+ * — or wait — for a reason that is not its own. {@link #A_RUNNING_GC_RUN} is the one state that
+ * leaves a run RUNNING on purpose, and nothing on the executor will ever close it, so the drain
+ * closes it ({@link #awaitNoActiveRun}).
+ *
+ * <p><b>The scan and SBOM check processes</b> (ticket qits-2490) have states of their own, each
+ * naming its {@code kind}: the process ({@link #THE_SCAN_PROCESS}, {@link
+ * #THE_SBOM_CHECK_PROCESS} — the listing, and the 400 a dry run of it is refused with), one
+ * finished run of it ({@link #A_FINISHED_SCAN_RUN}, {@link #A_FINISHED_SBOM_CHECK_RUN}) and a
+ * start that is accepted ({@link #NO_ACTIVE_SCAN_RUN}, {@link #NO_ACTIVE_SBOM_CHECK_RUN}).
  */
 @ApplicationScoped
 public class ProviderStates {
@@ -59,6 +68,35 @@ public class ProviderStates {
   public static final String A_RUNNING_GC_RUN = "a running gc run";
   public static final String NO_ACTIVE_GC_RUN = "no active gc run";
   public static final String A_REPOSITORY_THE_CLEANUP_CAN_PLAN = "a repository the cleanup can plan";
+  public static final String THE_SCAN_PROCESS = "the scan process";
+  public static final String A_FINISHED_SCAN_RUN = "a finished scan run";
+  public static final String NO_ACTIVE_SCAN_RUN = "no active scan run";
+  public static final String THE_SBOM_CHECK_PROCESS = "the sbom-check process";
+  public static final String A_FINISHED_SBOM_CHECK_RUN = "a finished sbom-check run";
+  public static final String NO_ACTIVE_SBOM_CHECK_RUN = "no active sbom-check run";
+
+  /** The scan ids the seeded scan run's two requests were answered with. */
+  static final String SEEDED_INTERNAL_SCAN = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+
+  static final String SEEDED_EXTERNAL_SCAN = "7a2b3c4d-5e6f-4a70-8b8c-9d0e1f2a3b4c";
+
+  /** The step {@link #A_FINISHED_SCAN_RUN} names as its {@code stepId}: a follow, with its read. */
+  static final String SEEDED_SCAN_STEP_ID = ScanProcess.INTERNAL_FOLLOW;
+
+  /** When the seeded scan run opened — the scan schedule's 00:30. */
+  static final Instant SEEDED_SCAN_START = Instant.parse("2026-10-01T00:30:00Z");
+
+  /** When the seeded SBOM check run opened — its schedule's 02:15. */
+  static final Instant SEEDED_SBOM_CHECK_START = Instant.parse("2026-10-01T02:15:00Z");
+
+  /** What the seeded SBOM check's one call was answered: one version without an SBOM, ticketed. */
+  static final String SEEDED_SBOM_CHECK_REPORT =
+      "{\"ranAt\":\"2026-10-01T02:15:00Z\",\"filed\":true,\"entries\":[{\"project\":\"qits\","
+          + "\"repository\":\"qits-ci-service\",\"ecosystem\":\"maven\","
+          + "\"name\":\"eu.wohlben.qits:qits-ci\",\"version\":\"2026.930.1\","
+          + "\"reason\":\"MISSING\"}],\"warnings\":[],\"tickets\":[{\"project\":\"qits\","
+          + "\"ecosystem\":\"maven\",\"name\":\"eu.wohlben.qits:qits-ci\","
+          + "\"ticketSlug\":\"qits-703\",\"versions\":[\"2026.930.1\"]}]}";
 
   /** The repository {@link #A_REPOSITORY_THE_CLEANUP_CAN_PLAN} names (its param). */
   static final String CLEANUP_REPOSITORY = "daemons";
@@ -99,13 +137,17 @@ public class ProviderStates {
 
   @Inject GcProcess gc;
 
+  @Inject ScanProcess scan;
+
+  @Inject SbomCheckProcess sbomCheck;
+
   @Inject RunStore runs;
 
   @Inject FakePeers peers;
 
   /**
    * The runs {@link #A_RUNNING_GC_RUN} left RUNNING. No executor is driving them, so {@link
-   * #awaitNoActiveGcRun} closes them rather than waiting for an ending that never comes.
+   * #awaitNoActiveRun} closes them rather than waiting for an ending that never comes.
    */
   private final Set<UUID> seededRunning = Collections.synchronizedSet(new LinkedHashSet<>());
 
@@ -116,6 +158,12 @@ public class ProviderStates {
     states.put(A_RUNNING_GC_RUN, this::aRunningGcRun);
     states.put(NO_ACTIVE_GC_RUN, this::noActiveGcRun);
     states.put(A_REPOSITORY_THE_CLEANUP_CAN_PLAN, this::aRepositoryTheCleanupCanPlan);
+    states.put(THE_SCAN_PROCESS, () -> theProcess(ScanProcess.KIND));
+    states.put(A_FINISHED_SCAN_RUN, this::aFinishedScanRun);
+    states.put(NO_ACTIVE_SCAN_RUN, this::noActiveScanRun);
+    states.put(THE_SBOM_CHECK_PROCESS, () -> theProcess(SbomCheckProcess.KIND));
+    states.put(A_FINISHED_SBOM_CHECK_RUN, this::aFinishedSbomCheckRun);
+    states.put(NO_ACTIVE_SBOM_CHECK_RUN, this::noActiveSbomCheckRun);
   }
 
   /** Every state name this provider answers for. */
@@ -144,13 +192,13 @@ public class ProviderStates {
   }
 
   /**
-   * Waits until no gc run is RUNNING. A state calls it on the way in; a caller that started a run
-   * calls it on the way out, so the next class against this application does not get a 409 that is
-   * not its own. The same wait as {@code ProcessApiTest.awaitNoActiveGcRun}, and the same clear: the
-   * reader's session would otherwise keep answering the row it first read. A run {@link
+   * Waits until no run of any kind is RUNNING. A state calls it on the way in; a caller that started
+   * a run calls it on the way out, so the next class against this application does not get a 409
+   * that is not its own. The same wait as {@code ProcessApiTest.awaitNoActiveRun}, and the same
+   * clear: the reader's session would otherwise keep answering the row it first read. A run {@link
    * #A_RUNNING_GC_RUN} seeded is closed FAILED first: it is on no executor.
    */
-  public void awaitNoActiveGcRun() {
+  public void awaitNoActiveRun() {
     synchronized (seededRunning) {
       for (UUID seeded : seededRunning) {
         runs.close(
@@ -161,7 +209,7 @@ public class ProviderStates {
     Instant deadline = Instant.now().plus(Duration.ofSeconds(60));
     while (Instant.now().isBefore(deadline)) {
       runs.getEntityManager().clear();
-      if (runs.active(GcProcess.KIND).isEmpty()) {
+      if (registry.all().stream().allMatch(process -> runs.active(process.kind()).isEmpty())) {
         return;
       }
       try {
@@ -171,25 +219,31 @@ public class ProviderStates {
         throw new IllegalStateException(e);
       }
     }
-    throw new AssertionError("a gc run never finished");
+    throw new AssertionError("a run never finished");
   }
 
   // --- the states ------------------------------------------------------------------------------
 
   /**
-   * The service's real registry, nothing seeded: {@code GET /processes} answers the gc process
-   * with its steps and edges. It checks that the registry holds the gc process and nothing else —
-   * {@code ProbeProcess} lives in the {@code orchestrator} module's test sources, off this
-   * classpath, and a recording that listed a test-only process would publish it as the contract.
-   * Its param is the process's {@code kind}.
+   * The service's real registry, nothing seeded: {@code GET /processes} answers every process with
+   * its steps and edges — gc, and since ticket qits-2490 the scan and SBOM check processes beside
+   * it. It checks that the registry holds exactly those three — {@code ProbeProcess} lives in the
+   * {@code orchestrator} module's test sources, off this classpath, and a recording that listed a
+   * test-only process would publish it as the contract. Its param is the gc process's {@code kind}.
    */
   private Setup theGcProcess() {
+    return theProcess(GcProcess.KIND);
+  }
+
+  /** The registry as {@link #theGcProcess} checks it, with {@code kind} as the param. */
+  private Setup theProcess(String kind) {
     List<String> kinds = registry.all().stream().map(TechnicalProcess::kind).toList();
-    if (!kinds.equals(List.of(GcProcess.KIND))) {
+    List<String> expected = List.of(GcProcess.KIND, SbomCheckProcess.KIND, ScanProcess.KIND);
+    if (!kinds.equals(expected)) {
       throw new IllegalStateException(
-          "State '" + THE_GC_PROCESS + "' expects the gc process alone, the registry holds " + kinds);
+          "The process states expect the processes " + expected + ", the registry holds " + kinds);
     }
-    return params(Map.of("kind", GcProcess.KIND));
+    return params(Map.of("kind", kind));
   }
 
   /**
@@ -203,7 +257,7 @@ public class ProviderStates {
    * answers for itself.
    */
   private Setup aFinishedGcDryRun() {
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     List<StepDefinition> steps = definedSteps(A_FINISHED_GC_DRY_RUN);
     UUID runId = runs.open(GcProcess.KIND, RunTrigger.MANUAL, true, steps, SEEDED_START);
     List<String> lines = new ArrayList<>();
@@ -250,7 +304,7 @@ public class ProviderStates {
    * against "no runs yet" is shown an empty list and nothing else. Its param is the {@code kind}.
    */
   private Setup theGcProcessBeforeItsFirstRun() {
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
@@ -273,10 +327,10 @@ public class ProviderStates {
    * <p><b>Its instants are the clock's, not {@link #SEEDED_START}'s</b>: {@code RunStore.open}
    * treats a RUNNING row older than {@code abandon-after} as abandoned and opens over it, which
    * would turn the 409 into a 202. The recording freezes them all the same. It leaves the run
-   * RUNNING; {@link #awaitNoActiveGcRun} closes it.
+   * RUNNING; {@link #awaitNoActiveRun} closes it.
    */
   private Setup aRunningGcRun() {
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     List<StepDefinition> steps = definedSteps(A_RUNNING_GC_RUN);
     Instant at = Instant.now().minusSeconds(60);
     UUID runId = runs.open(GcProcess.KIND, RunTrigger.MANUAL, false, steps, at);
@@ -329,10 +383,10 @@ public class ProviderStates {
    * No gc run RUNNING, and every peer scripted with the happy path — the answers {@code
    * ProcessApiTest.scriptTheHappyPath} gives — so a {@code POST /processes/gc/runs} is a 202 and
    * the run it starts SUCCEEDS without reaching a network. Its param is the {@code kind}. The run
-   * it starts is the caller's to wait out ({@link #awaitNoActiveGcRun}).
+   * it starts is the caller's to wait out ({@link #awaitNoActiveRun}).
    */
   private Setup noActiveGcRun() {
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     peers.reset();
     peers.answer(
         "/containers/api/gc/usage",
@@ -441,7 +495,7 @@ public class ProviderStates {
 
   /** No gc run active, and the five pin sources answering as the cleanup reads them. */
   private void answerCleanupPins() {
-    awaitNoActiveGcRun();
+    awaitNoActiveRun();
     peers.reset();
     peers.answer(
         "/deployments/api/pins",
@@ -467,6 +521,168 @@ public class ProviderStates {
     } catch (java.io.IOException e) {
       throw new java.io.UncheckedIOException(e);
     }
+  }
+
+  // --- the scan and SBOM check processes (qits-2490) -------------------------------------------
+
+  /**
+   * One scan run, started by the clock ({@code scheduled}), SUCCEEDED: each scan requested (202,
+   * its id) and followed to SUCCEEDED, written through {@link RunStore} at fixed instants from
+   * {@link #SEEDED_SCAN_START}. Its params are the {@code kind}, the {@code runId} and the {@code
+   * stepId} {@code GET /runs/{id}/steps/{stepId}} takes ({@link #SEEDED_SCAN_STEP_ID}).
+   */
+  private Setup aFinishedScanRun() {
+    awaitNoActiveRun();
+    Map<String, SeededStep> seeded = new LinkedHashMap<>();
+    seeded.put(
+        ScanProcess.INTERNAL_REQUEST,
+        new SeededStep(
+            "POST",
+            ScanProcess.SCANS_PATH,
+            "{\"id\":\"" + SEEDED_INTERNAL_SCAN + "\"}",
+            "queued scan " + SEEDED_INTERNAL_SCAN));
+    seeded.put(
+        ScanProcess.INTERNAL_FOLLOW,
+        new SeededStep(
+            "GET",
+            ScanProcess.SCANS_PATH + "/" + SEEDED_INTERNAL_SCAN,
+            scanAnswer(SEEDED_INTERNAL_SCAN, "INTERNAL"),
+            "INTERNAL scan SUCCEEDED"));
+    seeded.put(
+        ScanProcess.EXTERNAL_REQUEST,
+        new SeededStep(
+            "POST",
+            ScanProcess.SCANS_PATH,
+            "{\"id\":\"" + SEEDED_EXTERNAL_SCAN + "\"}",
+            "queued scan " + SEEDED_EXTERNAL_SCAN));
+    seeded.put(
+        ScanProcess.EXTERNAL_FOLLOW,
+        new SeededStep(
+            "GET",
+            ScanProcess.SCANS_PATH + "/" + SEEDED_EXTERNAL_SCAN,
+            scanAnswer(SEEDED_EXTERNAL_SCAN, "EXTERNAL"),
+            "EXTERNAL scan SUCCEEDED"));
+    Map<String, String> bodies =
+        Map.of(
+            ScanProcess.INTERNAL_REQUEST, "{\"scope\":\"INTERNAL\"}",
+            ScanProcess.EXTERNAL_REQUEST, "{\"scope\":\"EXTERNAL\"}");
+    UUID runId = seedFinishedRun(scan, seeded, bodies, SEEDED_SCAN_START);
+    Map<String, String> params = new TreeMap<>();
+    params.put("kind", ScanProcess.KIND);
+    params.put("runId", runId.toString());
+    params.put("stepId", SEEDED_SCAN_STEP_ID);
+    return params(params);
+  }
+
+  /**
+   * One SBOM check run, started by the clock ({@code scheduled}), SUCCEEDED: its one call answered
+   * 202 with {@link #SEEDED_SBOM_CHECK_REPORT}. Its params are the {@code kind}, the {@code runId}
+   * and the {@code stepId} ({@code check}).
+   */
+  private Setup aFinishedSbomCheckRun() {
+    awaitNoActiveRun();
+    Map<String, SeededStep> seeded = new LinkedHashMap<>();
+    seeded.put(
+        SbomCheckProcess.CHECK,
+        new SeededStep(
+            "POST",
+            SbomCheckProcess.RUNS_PATH,
+            SEEDED_SBOM_CHECK_REPORT,
+            "1 version without a usable SBOM, 1 ticket open, 0 warnings"));
+    UUID runId = seedFinishedRun(sbomCheck, seeded, Map.of(), SEEDED_SBOM_CHECK_START);
+    Map<String, String> params = new TreeMap<>();
+    params.put("kind", SbomCheckProcess.KIND);
+    params.put("runId", runId.toString());
+    params.put("stepId", SbomCheckProcess.CHECK);
+    return params(params);
+  }
+
+  /**
+   * No run RUNNING, and qits-maintenance's scan door scripted to queue a scan and answer it
+   * SUCCEEDED at the first read — so a {@code POST /processes/scan/runs} is a 202 and the run it
+   * starts SUCCEEDS at once, without a network or a wait. Its param is the {@code kind}.
+   */
+  private Setup noActiveScanRun() {
+    awaitNoActiveRun();
+    peers.reset();
+    peers.answer(
+        ScanProcess.SCANS_PATH,
+        FakePeers.Scripted.status(202, "{\"id\":\"" + SEEDED_INTERNAL_SCAN + "\"}"));
+    peers.answer(
+        ScanProcess.SCANS_PATH + "/" + SEEDED_INTERNAL_SCAN,
+        FakePeers.Scripted.ok(scanAnswer(SEEDED_INTERNAL_SCAN, "INTERNAL")));
+    return params(Map.of("kind", ScanProcess.KIND));
+  }
+
+  /**
+   * No run RUNNING, and qits-maintenance's check door scripted with {@link
+   * #SEEDED_SBOM_CHECK_REPORT} — so a {@code POST /processes/sbom-check/runs} is a 202 and the run it
+   * starts SUCCEEDS. Its param is the {@code kind}.
+   */
+  private Setup noActiveSbomCheckRun() {
+    awaitNoActiveRun();
+    peers.reset();
+    peers.answer(
+        SbomCheckProcess.RUNS_PATH, FakePeers.Scripted.status(202, SEEDED_SBOM_CHECK_REPORT));
+    return params(Map.of("kind", SbomCheckProcess.KIND));
+  }
+
+  /** A finished scan as qits-maintenance's {@code getScan} answers one. */
+  private static String scanAnswer(String id, String scope) {
+    return "{\"id\":\""
+        + id
+        + "\",\"scope\":\""
+        + scope
+        + "\",\"repository\":null,\"trigger\":\"MANUAL\",\"status\":\"SUCCEEDED\","
+        + "\"startedAt\":\"2026-10-01T00:30:01Z\",\"finishedAt\":\"2026-10-01T00:31:00Z\","
+        + "\"message\":null}";
+  }
+
+  /**
+   * One SUCCEEDED, scheduled run of {@code process}, every step as {@code seeded} spells it and in
+   * the process's own order — a definition that gains, loses or reorders a step fails the state.
+   * Each step RUNNING first and ended a second later, as the executor writes it; a POST carries its
+   * {@code bodies} entry. The run's id.
+   */
+  private UUID seedFinishedRun(
+      TechnicalProcess process,
+      Map<String, SeededStep> seeded,
+      Map<String, String> bodies,
+      Instant start) {
+    List<StepDefinition> steps = process.steps();
+    List<String> ids = steps.stream().map(StepDefinition::id).toList();
+    if (!ids.equals(List.copyOf(seeded.keySet()))) {
+      throw new IllegalStateException(
+          "The seeded "
+              + process.kind()
+              + " run has the steps "
+              + seeded.keySet()
+              + ", the process declares "
+              + ids);
+    }
+    UUID runId = runs.open(process.kind(), RunTrigger.SCHEDULED, false, steps, start);
+    List<String> lines = new ArrayList<>();
+    Instant at = start;
+    for (StepDefinition step : steps) {
+      SeededStep one = seeded.get(step.id());
+      runs.stepRunning(runId, step.id(), at);
+      at = at.plusSeconds(1);
+      PeerCall call =
+          new PeerCall(one.method(), peers.url(step.target(), one.path()), bodies.get(step.id()));
+      int status = "POST".equals(one.method()) ? 202 : 200;
+      StepResult result =
+          new StepResult(
+              RunStatus.SUCCEEDED,
+              call,
+              new PeerAnswer(status, one.response(), null, null),
+              one.summary(),
+              null,
+              null);
+      lines.add(step.id() + " " + result.status() + " (" + result.summary() + ")");
+      runs.stepFinished(runId, step.id(), result, at);
+    }
+    runs.close(runId, RunStatus.SUCCEEDED, String.join("; ", lines), at.plusSeconds(1));
+    return runId;
   }
 
   private static Setup params(Map<String, String> params) {

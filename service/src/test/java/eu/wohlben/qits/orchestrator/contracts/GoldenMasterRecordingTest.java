@@ -33,7 +33,8 @@ import org.junit.jupiter.api.Test;
  * repository root, the source of the published golden-master packages ({@code
  * eu.wohlben.qits:qits-orchestrator-golden-masters}, {@code @qits/orchestrator-golden-masters})
  * consumers write their pacts against: qits-orchestrator-frontend, and the agents and the desk
- * that start gc runs.
+ * that start gc runs. Since ticket qits-2490 the scan and SBOM check processes are recorded beside
+ * gc, each under states naming its own {@code kind}.
  *
  * <p>For each (state, operation) pair in {@link #INTERACTIONS} it runs the state ({@link
  * ProviderStates}), calls the operation as an operator holding {@code qits:admin}, keeps only the
@@ -64,7 +65,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p><b>It leaves no run RUNNING.</b> Recording {@code startProcessRun} launches a real (dry) run
  * on the executor against {@link eu.wohlben.qits.orchestrator.peer.FakePeers}; every interaction
- * ends by waiting it out ({@link ProviderStates#awaitNoActiveGcRun}, which also closes the run
+ * ends by waiting it out ({@link ProviderStates#awaitNoActiveRun}, which also closes the run
  * {@code a running gc run} seeds), so a class after this one does not get a 409 that is not its
  * own.
  *
@@ -207,6 +208,107 @@ class GoldenMasterRecordingTest {
               "/orchestrator/api/artifacts/repositories",
               null,
               200,
+              null),
+          // qits-2490: the scan and SBOM check processes, each the way a page of one kind reads it —
+          // the listing under a state naming its kind, the 400 its Dry run is refused with, one
+          // finished run (listing row, body-less read, one step whole) and a start accepted.
+          new Interaction(
+              ProviderStates.THE_SCAN_PROCESS,
+              "listProcesses",
+              "GET",
+              "/orchestrator/api/processes",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.THE_SCAN_PROCESS,
+              "startProcessRun",
+              "POST",
+              "/orchestrator/api/processes/{kind}/runs",
+              "{\"dryRun\": true}",
+              400,
+              null),
+          new Interaction(
+              ProviderStates.A_FINISHED_SCAN_RUN,
+              "listProcessRuns",
+              "GET",
+              "/orchestrator/api/processes/{kind}/runs",
+              null,
+              200,
+              "$"),
+          new Interaction(
+              ProviderStates.A_FINISHED_SCAN_RUN,
+              "getProcessRun",
+              "GET",
+              "/orchestrator/api/runs/{runId}",
+              Map.of("bodies", "false"),
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.A_FINISHED_SCAN_RUN,
+              "getProcessRunStep",
+              "GET",
+              "/orchestrator/api/runs/{runId}/steps/{stepId}",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.NO_ACTIVE_SCAN_RUN,
+              "startProcessRun",
+              "POST",
+              "/orchestrator/api/processes/{kind}/runs",
+              "{\"dryRun\": false}",
+              202,
+              null),
+          new Interaction(
+              ProviderStates.THE_SBOM_CHECK_PROCESS,
+              "listProcesses",
+              "GET",
+              "/orchestrator/api/processes",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.THE_SBOM_CHECK_PROCESS,
+              "startProcessRun",
+              "POST",
+              "/orchestrator/api/processes/{kind}/runs",
+              "{\"dryRun\": true}",
+              400,
+              null),
+          new Interaction(
+              ProviderStates.A_FINISHED_SBOM_CHECK_RUN,
+              "listProcessRuns",
+              "GET",
+              "/orchestrator/api/processes/{kind}/runs",
+              null,
+              200,
+              "$"),
+          new Interaction(
+              ProviderStates.A_FINISHED_SBOM_CHECK_RUN,
+              "getProcessRun",
+              "GET",
+              "/orchestrator/api/runs/{runId}",
+              Map.of("bodies", "false"),
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.A_FINISHED_SBOM_CHECK_RUN,
+              "getProcessRunStep",
+              "GET",
+              "/orchestrator/api/runs/{runId}/steps/{stepId}",
+              null,
+              200,
+              null),
+          new Interaction(
+              ProviderStates.NO_ACTIVE_SBOM_CHECK_RUN,
+              "startProcessRun",
+              "POST",
+              "/orchestrator/api/processes/{kind}/runs",
+              "{\"dryRun\": false}",
+              202,
               null));
 
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -339,7 +441,7 @@ class GoldenMasterRecordingTest {
       response = request.when().request(interaction.method(), expand(interaction.path(), params));
     } finally {
       // A start leaves its run on the executor; nothing after this may find it RUNNING.
-      states.awaitNoActiveGcRun();
+      states.awaitNoActiveRun();
     }
     String raw = response.asString();
     if (response.statusCode() != interaction.status()) {

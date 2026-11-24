@@ -1,0 +1,21 @@
+{
+  "id": "internal.follow",
+  "name": "Follow the internal scan",
+  "target": "maintenance",
+  "dependsOn": [
+    "internal.request"
+  ],
+  "status": "SUCCEEDED",
+  "startedAt": "2026-01-01T00:00:00Z",
+  "finishedAt": "2026-01-01T00:00:00Z",
+  "httpStatus": 200,
+  "request": {
+    "method": "GET",
+    "url": "http://dev-qits-maintenance:8080/maintenance/api/scans/00000000-0000-4000-8000-000000000002",
+    "body": null
+  },
+  "response": "{\"id\":\"00000000-0000-4000-8000-000000000002\",\"scope\":\"INTERNAL\",\"repository\":null,\"trigger\":\"MANUAL\",\"status\":\"SUCCEEDED\",\"startedAt\":\"2026-01-01T00:00:00Z\",\"finishedAt\":\"2026-01-01T00:00:00Z\",\"message\":null}",
+  "responseBytes": 208,
+  "error": null,
+  "summary": "INTERNAL scan SUCCEEDED"
+}
