@@ -54,6 +54,13 @@ One class and nothing else:
    anyway, but the row it writes then says less than the body could have.
 4. Write the summariser beside it. It reads figures out of the peer's answer and **computes
    nothing** — a summary that re-derived what would die would be a second policy.
+5. Say whether it has a dry run (`dryRunnable()`, default true) and whether a commissioned agent may
+   start it (`agentStartable()`, default false — gc alone is). A process whose peer door has no dry
+   mode answers false: a "dry" run of it would do the real work (`scan`, `sbom-check`, qits-2490).
+6. Its calls get rows in a contract and the pact file of their peer: gc's are `GcContract`,
+   `scan`'s and `sbom-check`'s are `MaintenanceProcessesContract`, which `GcContract.pact` adds to the
+   one qits-maintenance pact — one pact per peer, whoever calls. A row whose recording is not the
+   request the step sends stays out of the file and is reported skipped with what it needs.
 
 Its schedule, if it has one, is a class in `service/schedule` beside `GcSchedule` — and so is
 anything else that starts it unattended: `GcDeployTrigger` is a class in the same package, because
@@ -341,7 +348,7 @@ therefore mints an audience from outside the platform — a sibling's bearer is 
   so the jar's own `${…}` indirection is under test, it reads the rows back over JDBC, and **its
   peers are real calls to a dead loopback port** — the honest end-to-end proof that a failure reaches
   a readable row with none of the suite's fakes involved. It is also the only place the SPA is real.
-  The five **story** ITs are the gate-ON ones; see below. ITs are skipped by default;
+  The six **story** ITs are the gate-ON ones; see below. ITs are skipped by default;
   `-DskipITs=false` runs against the fast-jar and `-Dnative` against the binary.
 - **`PackagedSurfaceIT.PackagedUnderTarget` is the profile base, and its `databaseUrl(property,
   database)` is `protected` on purpose.** What a launched process needs in order to boot at all —
@@ -351,8 +358,8 @@ therefore mints an audience from outside the platform — a sibling's bearer is 
 
 ## The userflow stories
 
-`service/src/test/java/.../stories/` is this repository's **user-story catalogue**: ten stories in
-five categories, written with the `qits-userflows` framework, emitting
+`service/src/test/java/.../stories/` is this repository's **user-story catalogue**: twelve stories in
+six categories, written with the `qits-userflows` framework, emitting
 `service/target/userstories/` — steps, a description a person can read, and a **network diagram that
 is observed rather than narrated**. The userflow half of `.config/qits/ci-event-release-request.yml`
 runs them on every release-request fold and publishes the bundle as docs. They are proofs first and
@@ -363,16 +370,17 @@ documentation second; nothing in them is drawn by hand.
 | `api.TokenValidationBootstrapIT` | authentication | the gate on, the discovery document read and the JWKS fetched at boot, the plan served to a peer's bearer — and the three refusals on the cheapest read |
 | `stories.collection.GarbageCollectionRunIT` | garbage collection | a run end to end against six peers; a dry run; one run at a time |
 | `stories.faults.PeerFailureIT` | resilience | a pin read that answered 503, what it skipped and what it did not |
+| `stories.maintenance.MaintenanceProcessesRunIT` | maintenance | the manifest scans run now and followed to their end, a dry run refused; the SBOM check run now (qits-2490) |
 | `stories.operations.RunHistoryIT` | operations | the plan before a run, the account after it |
 | `stories.refusals.DeletionRefusalIT` | refusals | the doors on the write surface, and what is not there |
 
-**ONE `@TestProfile` for all five**, `stories.support.StoryProfile`, so they are one launched
+**ONE `@TestProfile` for all six**, `stories.support.StoryProfile`, so they are one launched
 process: one boot, one discovery read and JWKS fetch, one database, one executor. Two profiles would be two
 orchestrators and a diagram whose startup traffic landed in whichever one happened to be running.
 
 **Class order is load-bearing and the package names carry it.** `UserflowClassOrderer` is a
 topological sort over `@UserflowRunsAfter` with ties broken by fully-qualified class name, so `api.*`
-runs before `stories.*` and inside `stories` it is `collection` → `faults` → `operations` →
+runs before `stories.*` and inside `stories` it is `collection` → `faults` → `maintenance` → `operations` →
 `refusals`. Two cumulative recordings are attributed by a cursor and therefore land in whichever
 story drains FIRST: the **startup discovery read and JWKS fetch** (owned by the boot story) and the **outbound token
 mint**, which quarkus-oidc-client caches for the hour the stub's `expires_in` grants, so it happens
@@ -400,8 +408,9 @@ as MockIdp-minted bearers (a person's carries `qits:admin`, a machine's `qits:sy
   cron at 03:00 would start an unattended run out of a CI JVM against peers that now answer, and a
   recording could not tell its ten calls from a story's. Every run in the catalogue is `manual`, and
   `GcSchedule`'s own gates — `gc.enabled`, `gc.dry-run`, the `SKIP` on concurrent execution, the
-  swallowed `RunAlreadyActiveException` — have **no test in this repository at all**. That is a real
-  gap, not a story's blind spot.
+  swallowed `RunAlreadyActiveException` — have **no test in this repository at all**, and neither
+  have `ScanSchedule`'s and `SbomCheckSchedule`'s (qits-2490). That is a real gap, not a story's
+  blind spot.
 - **a run against real infrastructure.** No docker socket, no registry, no second postgres: what
   each peer would actually delete is that peer's own repository's claim. What is proved here is the
   request that went out, the answer that came back and the row it became.

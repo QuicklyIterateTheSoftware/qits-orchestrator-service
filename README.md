@@ -1,7 +1,9 @@
 # qits-platform-orchestrator
 
 **Technical processes**: multi-step jobs that only send requests to other services and record what
-happened. One process exists, `gc` — the platform's unified deletion run.
+happened. Three exist: `gc` — the platform's unified deletion run — and, since qits-2490, `scan` and
+`sbom-check`, qits-maintenance's nightly manifest scans and SBOM check (see "The scan and SBOM check
+processes").
 
 It deletes nothing itself and holds no docker socket. Registry blobs, tags and manifests are
 qits-artifacts' own GC engine; host images, orphan volumes and buildkit cache are qits-containers',
@@ -161,6 +163,7 @@ on the row says which, as `manual`, `scheduled` or `event`.
 |---|---|---|
 | `manual` | a person pressed Run now, or a machine posted `POST /processes/gc/runs` | none — a person is the decision, and the request carries its own `dryRun` |
 | `scheduled` | the cron, 03:00 UTC (`schedule/GcSchedule`) | `gc.enabled`; deletes unless `gc.dry-run` |
+| `scheduled` | for `scan` and `sbom-check`: their crons, 00:30 and 02:15 UTC (`schedule/ScanSchedule`, `schedule/SbomCheckSchedule`) | `scan.enabled` / `sbom-check.enabled`; never dry (qits-2490) |
 | `event` | **a deployment went live** (`bus/DeploymentActiveListener` → `schedule/GcDeployTrigger`) | `gc.enabled` and `gc.deploy-trigger.enabled`; **never** dry |
 
 **The cron is a backstop now rather than the policy.** A clock is a guess about when there is
@@ -204,23 +207,63 @@ write that threw announces nothing — a run whose close could not be written ge
 because its row still says `RUNNING`. **An announcement can never break a run**: anything thrown out
 of it is a WARN and the run carries on, because the executor must never throw.
 
+## The scan and SBOM check processes (qits-2490)
+
+qits-maintenance's nightly chores, which were crons inside qits-maintenance with nothing but a log
+line to show for a failed night. Run here they get a run history, Run now and the run events like
+gc. Both call one qits-maintenance door per step with this service's `qits:system` bearer, and
+**neither has a dry run** — the doors have no such mode — so `dryRunnable` is false on `GET
+/processes` and a start with `{"dryRun": true}` is a 400.
+
+**`scan`** ("Manifest scan"), 00:30 UTC:
+
+| step | target | call | depends on |
+|---|---|---|---|
+| `internal.request` | maintenance | `POST /maintenance/api/scans {"scope":"INTERNAL"}` → 202 `{id}`; FAILED on a 2xx without an id | — |
+| `internal.follow` | maintenance | `GET /maintenance/api/scans/{id}` every `scan.poll-interval` until it ends | internal.request |
+| `external.request` | maintenance | `POST /maintenance/api/scans {"scope":"EXTERNAL"}` | — |
+| `external.follow` | maintenance | the same read of the external scan | external.request |
+
+A follow is SUCCEEDED when the scan is, FAILED with the scan's own `message` when it FAILED, and
+FAILED saying so when the scan is still `REQUESTED`/`RUNNING` after `scan.follow-timeout` — the scan
+itself is left to qits-maintenance. A read that fails (a status, an unreachable peer) ends the follow
+at once. The row keeps the last read. **External does not depend on internal**: a broken internal
+scan says nothing about the external registries; declaration order alone runs it second, which is
+what replaced the old 30 minutes between the two crons. A scan the orchestrator requested is
+`trigger=MANUAL` in qits-maintenance's `mt_scan` (the door takes no trigger); the run here records
+SCHEDULED or MANUAL.
+
+**`sbom-check`** ("SBOM check"), 02:15 UTC: one step, `check` — `POST
+/maintenance/api/sbom-check/runs` with no body. The door is synchronous: it answers 202 with the
+report it stored (`{ranAt, filed, entries[], warnings[], tickets[]}`) once the whole check is done,
+and 502 when qits-artifacts could not be asked (a FAILED step). The call has its own read timeout,
+`sbom-check.call-timeout`. The summary reads the report: versions without a usable SBOM, open
+tickets, warnings, and "report only" when qits-maintenance filed nothing.
+
+The single run worker serialises every kind, so a long scan delays a manual gc: scans at 00:30, the
+check at 02:15 and gc at 03:00 keep out of each other's way.
+
 ## API
 
 Under `/orchestrator/api`. Every route takes `qits:admin` (a person, via qits-gateway's
 `X-Qits-User` / `X-Qits-Roles`) or `qits:system` (a machine, via a bearer). Every `GET` also takes
-`qits:agent` (a commissioned agent), and so does starting a run — `gc` is the only technical process
-this service knows, and a `qits:agent` caller may start one, dry-run or real, the same as the other
-two roles. There is no anonymous route. `qits:admin-agent` (an ADMIN workspace's own coding-agent
+`qits:agent` (a commissioned agent), and so does starting a run — of `gc` only: an owner decided a
+`qits:agent` caller may start a gc run, dry-run or real, the same as the other two roles, and a
+process says whether it is open to agents (`TechnicalProcess.agentStartable()`, gc alone). A
+`qits:agent` caller holding no other admitted role asking for a `scan` or `sbom-check` run is a 403
+(qits-2490). There is no anonymous route. `qits:admin-agent` (an ADMIN workspace's own coding-agent
 container) is admitted everywhere `qits:admin` is, for now (qits-628 follow-up), and so is
 `qits:desk-admin` (epic qits-1621), wherever `qits:admin-agent` is.
 
 ```
 GET  /processes                      → [{kind, name, description,          listProcesses
+                                         dryRunnable,
                                          steps:[{id, name, target, dependsOn[]}]}]
 GET  /processes/{kind}/runs?limit=20 → [{id, kind, trigger, dryRun, status, listProcessRuns
                                          startedAt, finishedAt, summary}]
-POST /processes/{kind}/runs {dryRun} → 202 {id}   404 unknown kind   409 one is active
-                                                                           startProcessRun
+POST /processes/{kind}/runs {dryRun} → 202 {id}   400 dry run of a kind with none
+                                     403 qits:agent, kind not open to it
+                                     404 unknown kind   409 one is active  startProcessRun
 GET  /runs/{id}?bodies=true          → the run above, plus                 getProcessRun
                                         steps:[{id, name, target, dependsOn[], status,
                                                 startedAt, finishedAt, httpStatus,
@@ -306,6 +349,15 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.gc.builder-cache-keep-bytes` | `1073741824` | what a `buildx_buildkit_*` BUILDER container may keep |
 | `qits.orchestrator.gc.call-timeout` | `PT120S` | how long one peer call may take |
 | `qits.orchestrator.gc.mirror-sweep-call-timeout` | `PT30M` | how long `mirror.sweep` alone may take: qits-mirror sweeps synchronously in the request |
+| `qits.orchestrator.scan.enabled` | `true` | whether the CLOCK may start a scan run (qits-2490) |
+| `qits.orchestrator.scan.cron` | `0 30 0 * * ?` | when it does: 00:30 every day |
+| `qits.orchestrator.scan.time-zone` | `UTC` | the zone that cron is read in |
+| `qits.orchestrator.scan.poll-interval` | `PT10S` | how often a follow step reads a queued scan |
+| `qits.orchestrator.scan.follow-timeout` | `PT1H` | how long a follow waits on a scan still `REQUESTED`/`RUNNING` before it fails |
+| `qits.orchestrator.sbom-check.enabled` | `true` | whether the CLOCK may start an SBOM check run (qits-2490) |
+| `qits.orchestrator.sbom-check.cron` | `0 15 2 * * ?` | when it does: 02:15 every day |
+| `qits.orchestrator.sbom-check.time-zone` | `UTC` | the zone that cron is read in |
+| `qits.orchestrator.sbom-check.call-timeout` | `PT15M` | how long the check's one synchronous call may take |
 
 **Two build-cache budgets, because the two caches are not the same kind of thing.** The host cache
 is what every CI build warms and re-reads, so 10 GiB of it is kept — measured against a host sitting
