@@ -12,8 +12,8 @@ artifacts:
 # `@qits/orchestrator-golden-masters`, each published only when its content changed — what
 # qits-orchestrator-frontend, and the agents and the desk that start gc runs, pact against.
 # THE PACTS (qits-1163): what qits-eventstream asks qits-events on qits-orchestrator's behalf (the
-# durable listener's catch-up reads; it publishes nothing), flat in `pacts/` as
-# `qits-orchestrator-service_qits-eventstream-javalib_qits-events-service.json`, written by
+# durable listener's catch-up reads, and since qits-2472 the publish of the run events), flat in
+# `pacts/` as `qits-orchestrator-service_qits-eventstream-javalib_qits-events-service.json`, written by
 # contracts/eventstream/EventstreamPactTest from the library's kit. The platform packs it for
 # qits-events-service, published only when it changed.
 contracts:

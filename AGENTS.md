@@ -183,11 +183,12 @@ telemetry source key — it follows the deployed identity, so do not touch it.
 
 `service/…/bus/` is the whole of the bus's **SEAMS**. The machinery is the published
 `qits-eventstream` jar; its rules live in that library's own repository and are not restated here.
-This service **consumes one event and publishes none**.
+This service **consumes one event and publishes two**.
 
-- **`DeploymentActiveListener` is the gc run's second unattended trigger**, and it is the only reason
-  this repository is on the bus at all. A deployment going live is the moment the images and registry
-  identities it superseded stop being referenced; the cron is a guess about when that has happened.
+- **`DeploymentActiveListener` is the gc run's second unattended trigger**, and its
+  `DeploymentActive` is the only event this repository consumes. A deployment going live is the
+  moment the images and registry identities it superseded stop being referenced; the cron is a guess
+  about when that has happened.
   `schedule/GcDeployTrigger` is where every decision behind it sits — the trailing-edge debounce, the
   two gates, never a dry run, and what a busy executor means — and the listener is decode-and-hand-over.
 - **The payload is a LOCAL record.** qits-deployments publishes `qits-platform-deployments-events`
@@ -212,6 +213,16 @@ This service **consumes one event and publishes none**.
   opens and migrates at boot regardless. That is why the suite hands out a second database
   (`testdb/EmbeddedPgConfigSource`) and why `PackagedSurfaceIT`'s profile supplies a second triple
   and the darkening key: a launched artifact runs in `NORMAL` mode, where `%test` reaches nothing.
+- **`RunEventAnnouncer` publishes `ProcessRunChanged` and `ProcessRunStepChanged`** (qits-2472;
+  the payloads are in README.md). The executor does not know the bus: `orchestrator/` declares the
+  port `run/RunAnnouncer` and injects it as an `Instance<RunAnnouncer>`, so the domain jar on its
+  own announces nothing, and `service/` implements it as a `@DefaultBean` — qits-projects'
+  `IdeaAnnouncer` is the model. Two rules, both in `RunExecutor`: **after the write, never inside
+  it** (each announcement follows the `RunStore` call that made it true, and a close that threw is
+  not announced), and **never throws** (every call is caught and WARNed — `execute` throwing leaves
+  a RUNNING row nothing closes). The events are records in `bus/`, first component `UUID eventId`;
+  **never name a component `name` or `signature`** — it would override `QitsEvent`'s method
+  (qits-2055). A new event joins `EventWireReflection` in the same commit.
 - **`bus/EventWireReflection` is the native-image registration.** Read its javadoc before adding a
   wire type; the failure it prevents is invisible to every JVM test by construction.
 
@@ -441,11 +452,9 @@ Each is a decision, not an omission:
 - **Cancelling a run.** There is no route and no column for it. A step is one HTTP call to a peer
   that is already deleting; interrupting the wait would abandon the answer rather than the work, and
   a run row saying CANCELLED would be a claim this service cannot make.
-- **PUBLISHING an event.** The `qits-eventstream` dependency arrived on 2026-09-05 for the
-  *consuming* half — see "The event bus" — and nothing here announces anything. A run's start, its
-  verdict and what it deleted are all readable on the API, nothing subscribes to any of them today,
-  and a publisher would arrive with the vocabulary jar every announcing service has. `EventEnvelope`
-  is already registered for reflection against that day.
+- **Announcing what a run deleted.** The run and step events (qits-2472) carry status and time
+  only. What a step deleted is in its answer on the API, and an event repeating it would be a
+  second, unbounded copy of a body the store already bounds at 1 MiB.
 - **Causation stamping.** `op_run` and `op_step` carry no `causation_id`, so a run started by a
   deployment does not record which one. The event id is in reach on the frame and the column is a
   migration, but a run is caused by a WAVE rather than by one event — the debounce is what makes the

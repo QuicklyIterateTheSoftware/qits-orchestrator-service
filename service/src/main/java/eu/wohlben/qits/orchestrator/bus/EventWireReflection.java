@@ -23,7 +23,7 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
  * with Jackson's "no serializer found … you may need to configure reflection", JVM suite green
  * throughout.
  *
- * <p><b>Why these three.</b> {@link EventFrame} is what arrives on {@code /events/stream} and what
+ * <p><b>Why these five.</b> {@link EventFrame} is what arrives on {@code /events/stream} and what
  * the catch-up sweep reads out of the log. {@link DeploymentActiveListener.DeploymentActivePayload}
  * is the wire type this binary actually has to deserialize: qits-deployments' vocabulary jar is not
  * on this classpath (the platform's Maven registry serves nothing under that coordinate), so the
@@ -31,10 +31,12 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
  * native binary that subscribes to every deployment and cannot read one — no run would ever be
  * triggered again, silently, with the JVM suite green.
  *
- * <p>{@link EventEnvelope} is the PUT body, and this service <b>publishes nothing</b> today. It is
- * listed anyway, for the reason qits-projects listed it before it had a publisher: the envelope is
- * the type the day something first announces, and the failure an absent registration causes lands at
- * that moment rather than at the commit that caused it.
+ * <p>{@link ProcessRunChanged} and {@link ProcessRunStepChanged} are what this service PUBLISHES
+ * (qits-2472), and {@code CanonicalJson.payload} serializes each through that same hand-built
+ * mapper. An absent line is a native binary whose every run announcement fails at publish — no
+ * crash, the run itself untouched, and every page following a run on the bus waiting for an event
+ * that never comes. {@link EventEnvelope} is the PUT body they travel in; it was listed before
+ * anything here published, for the reason qits-projects listed it before it had a publisher.
  *
  * <p><b>And why a mix-in by name.</b> {@code CanonicalJson$QitsEventMixin} keeps {@code QitsEvent}'s
  * declared methods — {@code eventId} above all — out of a payload, and Jackson finds its {@code
@@ -50,7 +52,9 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
     targets = {
       DeploymentActiveListener.DeploymentActivePayload.class,
       EventEnvelope.class,
-      EventFrame.class
+      EventFrame.class,
+      ProcessRunChanged.class,
+      ProcessRunStepChanged.class
     },
     classNames = "eu.wohlben.qits.eventstream.control.CanonicalJson$QitsEventMixin")
 public final class EventWireReflection {

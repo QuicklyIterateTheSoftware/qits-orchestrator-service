@@ -182,7 +182,27 @@ DEBUG line and the wave is parked for another quiet period.
 
 The bus side is one durable consumer, `orchestrator-gc-on-deploy`, initialized at the **head** of the
 log — replaying from the epoch would arm a collection for every deployment this platform has ever
-made. It is this service's only use of the event bus, and it publishes nothing.
+made. It is the only event this service consumes.
+
+### What it publishes (qits-2472)
+
+Two events, so a page can follow a run without polling `GET /runs/{id}`. Neither carries a body or
+a summary: they say what moved and when, and the API stays the account.
+
+| event | when | payload |
+|---|---|---|
+| `ProcessRunChanged` | once `RUNNING` when the run opens, once `SUCCEEDED` / `FAILED` when it closes | `kind`, `runId`, `status`, `trigger` (`manual` / `scheduled` / `event`), `dryRun`, `startedAt`, `finishedAt` (null while `RUNNING`), `changedAt` |
+| `ProcessRunStepChanged` | `RUNNING` when a step starts, then its terminal `SUCCEEDED` / `FAILED` / `SKIPPED` | `kind`, `runId`, `stepId`, `status`, `changedAt` |
+
+The envelope's `occurredAt` is `changedAt`. A step a failure skipped never started, so it gets its
+terminal `SKIPPED` alone; a step skipped by policy (a dry run's `artifacts.sweep`) did start, and
+gets both. One run's events are in order: the opening, then each step in declaration order, then
+the close.
+
+**Each is published after the store write that made it true returned**, never inside it, and a
+write that threw announces nothing — a run whose close could not be written gets no terminal event,
+because its row still says `RUNNING`. **An announcement can never break a run**: anything thrown out
+of it is a WARN and the run carries on, because the executor must never throw.
 
 ## API
 

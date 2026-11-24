@@ -12,6 +12,7 @@ import eu.wohlben.qits.orchestrator.process.TechnicalProcess;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.jboss.logging.Logger;
 
 /**
@@ -34,7 +36,16 @@ import org.jboss.logging.Logger;
  *
  * <p><b>The route does not wait.</b> {@code POST /processes/{kind}/runs} answers 202 with the id as
  * soon as the rows exist; a gc run is minutes of somebody else's pruning and an HTTP request is the
- * wrong place to hold it. The UI polls.
+ * wrong place to hold it. The client polls {@code GET /runs/{id}} today; a page can instead follow
+ * the run on the event bus — {@link RunAnnouncer} — and read the run when an event says it moved.
+ *
+ * <h2>What it announces</h2>
+ *
+ * The run opening (RUNNING) and closing (SUCCEEDED / FAILED), and each step starting and ending, in
+ * the order they happened, each <b>after</b> the {@link RunStore} write that made it true returned
+ * — never inside it, and never for a write that threw. Every announcement is wrapped so that it
+ * cannot throw: an announcer that blows up is a WARN, and the run carries on and closes exactly as
+ * it would have. {@link #execute} never throws, and an event is not worth breaking that for.
  *
  * <h2>What a failure does</h2>
  *
@@ -75,6 +86,12 @@ public class RunExecutor {
 
   @Inject PeerClient peers;
 
+  /**
+   * Where the run's transitions are told, if anywhere: {@code service/}'s bus adapter in a
+   * deployment, a recorder in this module's suite, and nothing at all when unresolvable — see
+   * {@link #announce}.
+   */
+  @Inject Instance<RunAnnouncer> announcer;
 
   /**
    * The one worker. A daemon thread with a name, so a stuck run is identifiable in a thread dump
@@ -112,8 +129,14 @@ public class RunExecutor {
   public UUID start(String kind, RunTrigger trigger, boolean dryRun) {
     TechnicalProcess process =
         registry.byKind(kind).orElseThrow(() -> new NoSuchProcessException(kind));
-    UUID runId = runs.open(kind, trigger, dryRun, process.steps(), Instant.now());
-    worker.execute(() -> execute(process, runId, dryRun));
+    Instant startedAt = Instant.now();
+    UUID runId = runs.open(kind, trigger, dryRun, process.steps(), startedAt);
+    // BEFORE the worker is handed the run, so the RUNNING event is certainly ahead of every step's.
+    RunAnnouncer.RunChange opened =
+        new RunAnnouncer.RunChange(
+            kind, runId, RunStatus.RUNNING, trigger, dryRun, startedAt, null, startedAt);
+    announce("the opening of " + kind + " run " + runId, to -> to.runChanged(opened));
+    worker.execute(() -> execute(process, runId, trigger, dryRun, startedAt));
     return runId;
   }
 
@@ -122,7 +145,8 @@ public class RunExecutor {
    * sentence in its summary, because a thrown exception on the worker would leave a RUNNING row
    * nothing can ever close and no second run of that kind would be allowed again.
    */
-  void execute(TechnicalProcess process, UUID runId, boolean dryRun) {
+  void execute(
+      TechnicalProcess process, UUID runId, RunTrigger trigger, boolean dryRun, Instant startedAt) {
     RunContext context = new RunContext(runId, dryRun, peers);
     // THE ONLY THING A DEPENDENCY CHECK READS. A step is in this map when it FAILED (mapped to
     // itself) or when it was skipped BECAUSE something failed (mapped to that same origin, carried
@@ -141,8 +165,9 @@ public class RunExecutor {
         if (blocker != null) {
           result = StepResult.skippedByFailure(blocker);
         } else {
-          Instant startedAt = Instant.now();
-          runs.stepRunning(runId, step.id(), startedAt);
+          Instant stepStartedAt = Instant.now();
+          runs.stepRunning(runId, step.id(), stepStartedAt);
+          announceStep(process.kind(), runId, step.id(), RunStatus.RUNNING, stepStartedAt);
           result = run(step, context);
         }
         if (result.status() == RunStatus.FAILED) {
@@ -156,7 +181,9 @@ public class RunExecutor {
         if (result.answer() != null) {
           context.record(step.id(), result.answer().json(), result.answer().body());
         }
-        runs.stepFinished(runId, step.id(), result, Instant.now());
+        Instant stepFinishedAt = Instant.now();
+        runs.stepFinished(runId, step.id(), result, stepFinishedAt);
+        announceStep(process.kind(), runId, step.id(), result.status(), stepFinishedAt);
         lines.add(line(step, result));
       }
     } catch (RuntimeException e) {
@@ -168,11 +195,24 @@ public class RunExecutor {
 
     RunStatus status = anyFailed ? RunStatus.FAILED : RunStatus.SUCCEEDED;
     String summary = String.join("; ", lines);
+    Instant finishedAt = Instant.now();
+    boolean closed = false;
     try {
-      runs.close(runId, status, summary, Instant.now());
+      runs.close(runId, status, summary, finishedAt);
+      closed = true;
     } catch (RuntimeException e) {
       // Nothing else can be done here: the account of the run is what could not be written.
       LOG.errorf(e, "The %s run %s finished %s but could not be closed", process.kind(), runId, status);
+    }
+    if (closed) {
+      // Only a close that RETURNED is announced. The row of one that threw still says RUNNING, and
+      // an event saying otherwise would be a claim the store does not back.
+      RunAnnouncer.RunChange ended =
+          new RunAnnouncer.RunChange(
+              process.kind(), runId, status, trigger, dryRun, startedAt, finishedAt, finishedAt);
+      announce(
+          "the " + status + " of " + process.kind() + " run " + runId,
+          to -> to.runChanged(ended));
     }
     if (status == RunStatus.FAILED) {
       // The steps that failed, not the whole summary: twenty clauses of which nineteen say "ok" or
@@ -186,6 +226,34 @@ public class RunExecutor {
               + (failures.isEmpty() ? summary : String.join("; ", failures)));
     } else {
       LOG.infof("%s run %s %s: %s", process.kind(), runId, status, summary);
+    }
+  }
+
+  /** One step's transition, told after the write that made it returned. Never throws. */
+  private void announceStep(
+      String kind, UUID runId, String stepId, RunStatus status, Instant changedAt) {
+    RunAnnouncer.StepChange change =
+        new RunAnnouncer.StepChange(kind, runId, stepId, status, changedAt);
+    announce(
+        "step " + stepId + " " + status + " of " + kind + " run " + runId,
+        to -> to.stepChanged(change));
+  }
+
+  /**
+   * Hands one change to the announcer, if there is one. <b>Never throws</b>: it runs on the worker
+   * between store writes, and a throw there would skip the writes after it — a RUNNING row nobody
+   * closes, and no second run of that kind ever again. An unresolvable announcer is the module on
+   * its own, and announces nothing; an ambiguous one is a deployment mistake, and is a WARN per
+   * change rather than a dead run.
+   */
+  private void announce(String what, Consumer<RunAnnouncer> call) {
+    try {
+      if (announcer.isUnsatisfied()) {
+        return;
+      }
+      call.accept(announcer.get());
+    } catch (RuntimeException e) {
+      LOG.warnf(e, "Could not announce %s", what);
     }
   }
 

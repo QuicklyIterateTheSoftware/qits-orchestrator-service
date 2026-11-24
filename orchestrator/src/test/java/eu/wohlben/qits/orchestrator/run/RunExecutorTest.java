@@ -1,6 +1,7 @@
 package eu.wohlben.qits.orchestrator.run;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -11,6 +12,7 @@ import eu.wohlben.qits.orchestrator.entity.OpStep;
 import eu.wohlben.qits.orchestrator.error.NoSuchProcessException;
 import eu.wohlben.qits.orchestrator.error.RunAlreadyActiveException;
 import eu.wohlben.qits.orchestrator.persistence.RunStore;
+import eu.wohlben.qits.orchestrator.run.RecordingRunAnnouncer.Announced;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Duration;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -34,6 +37,13 @@ class RunExecutorTest {
   @Inject RunExecutor executor;
 
   @Inject RunStore runs;
+
+  @Inject RecordingRunAnnouncer announcer;
+
+  @BeforeEach
+  void quiet() {
+    announcer.clear();
+  }
 
   /**
    * A poll, the way a deployment does it.
@@ -65,6 +75,37 @@ class RunExecutorTest {
       }
     }
     throw new AssertionError("run " + id + " never finished");
+  }
+
+  /**
+   * Every announcement of one run, once its terminal run event is in. The close is announced AFTER
+   * the row is written, so a run the poll above saw closed may not have told anybody yet.
+   */
+  private List<Announced> awaitAnnounced(UUID id) {
+    Instant deadline = Instant.now().plus(Duration.ofSeconds(30));
+    while (Instant.now().isBefore(deadline)) {
+      List<Announced> calls = announcer.of(id);
+      if (!calls.isEmpty()) {
+        Announced last = calls.get(calls.size() - 1);
+        if (last.run() != null && last.run().status() != RunStatus.RUNNING) {
+          return calls;
+        }
+      }
+      try {
+        Thread.sleep(20);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(e);
+      }
+    }
+    throw new AssertionError("run " + id + " never announced its end: " + announcer.of(id));
+  }
+
+  /** One call, as a word a sequence assertion can read: {@code run RUNNING}, {@code step a FAILED}. */
+  private static String spelled(Announced call) {
+    return call.run() != null
+        ? "run " + call.run().status()
+        : "step " + call.step().stepId() + " " + call.step().status();
   }
 
   private Map<String, OpStep> stepsOf(UUID id) {
@@ -292,6 +333,99 @@ class RunExecutorTest {
     assertEquals(RunStatus.FAILED.name(), steps.get("throws").status);
     assertTrue(steps.get("throws").error.contains("the body blew up"), steps.get("throws").error);
     assertEquals(RunStatus.SKIPPED.name(), steps.get("after").status);
+  }
+
+  /**
+   * qits-2472: what a page following a run on the bus sees. The opening, every step's start and end
+   * in declaration order, then the close — and a step a FAILURE skipped, which never started, still
+   * gets its one terminal event, while a step skipped by POLICY started and gets both.
+   */
+  @Test
+  void aRunAnnouncesItsOpeningEachStepsTransitionsInOrderAndItsClose() {
+    ProbeProcess.script =
+        List.of(
+            ProbeProcess.succeeding("root"),
+            ProbeProcess.failing("broken", "root"),
+            ProbeProcess.succeeding("child", "broken"),
+            ProbeProcess.policySkipping("deleting", "root"),
+            ProbeProcess.succeeding("after", "deleting"));
+
+    UUID id = executor.start(ProbeProcess.KIND, RunTrigger.SCHEDULED, true);
+    OpRun run = awaitClosed(id);
+    List<Announced> calls = awaitAnnounced(id);
+
+    assertEquals(
+        List.of(
+            "run RUNNING",
+            "step root RUNNING",
+            "step root SUCCEEDED",
+            "step broken RUNNING",
+            "step broken FAILED",
+            "step child SKIPPED",
+            "step deleting RUNNING",
+            "step deleting SKIPPED",
+            "step after RUNNING",
+            "step after SUCCEEDED",
+            "run FAILED"),
+        calls.stream().map(RunExecutorTest::spelled).toList());
+
+    RunAnnouncer.RunChange opened = calls.get(0).run();
+    RunAnnouncer.RunChange closed = calls.get(calls.size() - 1).run();
+    for (RunAnnouncer.RunChange change : List.of(opened, closed)) {
+      assertEquals(ProbeProcess.KIND, change.kind());
+      assertEquals(id, change.runId());
+      assertEquals(RunTrigger.SCHEDULED, change.trigger());
+      assertTrue(change.dryRun());
+      assertNotNull(change.startedAt());
+    }
+    assertEquals(opened.startedAt(), closed.startedAt());
+    assertEquals(opened.startedAt(), opened.changedAt());
+    assertNull(opened.finishedAt(), "a RUNNING run has not finished");
+    assertNotNull(closed.finishedAt());
+    assertEquals(closed.finishedAt(), closed.changedAt());
+    assertEquals(RunStatus.FAILED.name(), run.status);
+
+    for (Announced call : calls.subList(1, calls.size() - 1)) {
+      assertEquals(ProbeProcess.KIND, call.step().kind());
+      assertEquals(id, call.step().runId());
+      assertNotNull(call.step().changedAt());
+    }
+  }
+
+  /**
+   * qits-2472: an announcer that throws on every call changes nothing about the run. The executor
+   * must never throw — a throw on the worker is a RUNNING row nothing ever closes — so every
+   * announcement is caught, and the run still runs every step and closes.
+   */
+  @Test
+  void anAnnouncerThatThrowsStillLeavesTheRunClosed() {
+    ProbeProcess.script =
+        List.of(ProbeProcess.succeeding("first"), ProbeProcess.succeeding("second", "first"));
+    announcer.failing(true);
+    try {
+      UUID id = executor.start(ProbeProcess.KIND, RunTrigger.MANUAL, false);
+      OpRun run = awaitClosed(id);
+
+      assertEquals(RunStatus.SUCCEEDED.name(), run.status);
+      assertNotNull(run.finishedAt);
+      for (OpStep step : stepsOf(id).values()) {
+        assertEquals(RunStatus.SUCCEEDED.name(), step.status, step.stepId);
+      }
+      // Every call was made, and every one of them threw: nothing was skipped for it.
+      List<String> calls = awaitAnnounced(id).stream().map(RunExecutorTest::spelled).toList();
+      assertEquals(
+          List.of(
+              "run RUNNING",
+              "step first RUNNING",
+              "step first SUCCEEDED",
+              "step second RUNNING",
+              "step second SUCCEEDED",
+              "run SUCCEEDED"),
+          calls);
+      assertFalse(runs.active(ProbeProcess.KIND).isPresent(), "nothing is left RUNNING");
+    } finally {
+      announcer.failing(false);
+    }
   }
 
   @Test
