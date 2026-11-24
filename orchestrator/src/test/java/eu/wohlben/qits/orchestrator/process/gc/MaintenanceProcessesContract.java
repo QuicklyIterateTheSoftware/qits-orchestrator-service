@@ -42,19 +42,12 @@ import java.util.UUID;
  *
  * <p><b>A row is LIVE only when the recording is the request the step sends</b> ({@link #live}).
  *
- * <p><b>{@code requestScan} is {@link #PENDING}, not in {@link #ROWS}.</b> qits-maintenance records
- * it under {@value #A_FINISHED_SCAN} with a body naming ONE repository ({@code
- * {"scope":"INTERNAL","repository":"{repoName}"}}), while this process scans the whole catalogue
- * ({@code {"scope":"INTERNAL"}}) — qits-2490 added the state it belongs under, {@value
- * #A_CATALOGUE_WIDE_SCAN}, but qits-maintenance has not published a golden-masters version that
- * carries it yet (the orchestrator still pins {@code qits.maintenance-golden-masters.version}
- * 2026.1121.195220). A row whose state is entirely absent from the pinned jar is not merely not
- * live — {@link GoldenMasters#operation} throws {@link ProviderStateMissing} for it, which {@link
- * #call} would propagate out of the coverage pass's "every row is a call" guard rather than let it
- * report skipped — so, like {@link GcContract#PENDING}, it names its call itself ({@code method}
- * and {@code path}, as the step sends it) instead of reading them off a recording. Once
- * qits-maintenance publishes the state, move the row into {@link #ROWS} with a real {@code consumes}
- * list and {@code body} built the same way every live row's is.
+ * <p><b>{@code requestScan} is in {@link #ROWS}, under {@value #A_CATALOGUE_WIDE_SCAN}.</b>
+ * qits-maintenance also records it under {@value #A_FINISHED_SCAN}, but with a body naming ONE
+ * repository ({@code {"scope":"INTERNAL","repository":"{repoName}"}}); this process scans the
+ * whole catalogue ({@code {"scope":"INTERNAL"}}), which is {@value #A_CATALOGUE_WIDE_SCAN} —
+ * qits-2490 added that state, and the orchestrator now pins the qits-maintenance golden-masters
+ * version that carries it (2026.1124.131229).
  *
  * <p>{@code getScan} stays on {@value #A_FINISHED_SCAN} and in {@link #ROWS}: it is still a finished
  * scan the follow step reads for its {@code scope} and {@code status}, whichever request started
@@ -78,7 +71,6 @@ final class MaintenanceProcessesContract {
   /**
    * The whole-catalogue scan's state (qits-2490): {@code requestScan} recorded here with no {@code
    * repository}, as this process's {@code internal.request}/{@code external.request} steps send it.
-   * Not published in the pinned qits-maintenance golden masters yet — see {@link #PENDING}.
    */
   static final String A_CATALOGUE_WIDE_SCAN = "a catalogue-wide scan";
 
@@ -98,6 +90,15 @@ final class MaintenanceProcessesContract {
 
   static final List<Row> ROWS =
       List.of(
+          // internal.request: queues a scan of the whole catalogue, read only for the id this
+          // service follows it by.
+          new Row(
+              ScanProcess.KIND,
+              ScanProcess.INTERNAL_REQUEST,
+              GoldenInteraction.of(SCAN_NIGHTLY, A_CATALOGUE_WIDE_SCAN, "requestScan")
+                  .consumes("id"),
+              "{\"scope\":\"INTERNAL\"}",
+              null),
           // internal.follow: a finished scan, read for its scope and status. `message` is read too,
           // but only from a FAILED scan, and the recording is a SUCCEEDED one whose message is null.
           new Row(
@@ -140,24 +141,11 @@ final class MaintenanceProcessesContract {
   }
 
   /**
-   * {@code internal.request}: the scan process's {@code POST /maintenance/api/scans} with no
-   * repository, recorded under {@value #A_CATALOGUE_WIDE_SCAN} — not published in the pinned
-   * qits-maintenance golden masters yet. See the class comment.
+   * None: every call the scan and SBOM check processes make binds a recorded state, since
+   * qits-2490's {@code requestScan} row moved into {@link #ROWS}. The mechanism stays for the
+   * next row a provider has not recorded yet — the same reasoning as {@link GcContract#PENDING}.
    */
-  static final List<Pending> PENDING =
-      List.of(
-          new Pending(
-              ScanProcess.INTERNAL_REQUEST,
-              A_CATALOGUE_WIDE_SCAN,
-              "requestScan",
-              "POST",
-              ScanProcess.SCANS_PATH,
-              List.of("id"),
-              "a requestScan recording whose body is {\"scope\":\"INTERNAL\"} with no repository —"
-                  + " the scan process scans the whole catalogue, and qits-maintenance has not"
-                  + " published a golden-masters version recording '"
-                  + A_CATALOGUE_WIDE_SCAN
-                  + "' yet"));
+  static final List<Pending> PENDING = List.of();
 
   /**
    * Whether {@code row} is in the pact: its operation is recorded, and recorded with the body the
