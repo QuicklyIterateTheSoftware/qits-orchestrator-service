@@ -1,6 +1,6 @@
 [submodule "qits-orchestrator-frontend"]
 	path = service/src/main/webui
-	url = https://github.com/QuicklyIterateTheSoftware/qits-orchestrator-frontend.git
+	url = ../qits-orchestrator-frontend.git
 	ignore = all
 	update = merge
 	branch = main
