@@ -122,13 +122,13 @@ public class RunHistoryIT {
         .body("kind", contains(StoryTarget.GC, "sbom-check", "scan"))
         .body(gc() + ".name", equalTo("Garbage collection"))
         .body(gc() + ".description", notNullValue())
-        .body(gc() + ".steps.size()", equalTo(21))
+        .body(gc() + ".steps.size()", equalTo(22))
         .body(gc() + ".steps.id[0]", equalTo("usage.before"))
         .body(gc() + ".steps.id", hasItem("branches.sweep"))
         .body(gc() + ".steps.target", hasItem("workspaces"));
     story
         .note(
-            "the catalogue: every process — gc's twenty-one steps, the scans' four, the SBOM"
+            "the catalogue: every process — gc's twenty-two steps, the scans' four, the SBOM"
                 + " check's one — each step naming the peer it calls: the graph the client draws"
                 + " before a run exists")
         .as("plan-served");
@@ -225,7 +225,7 @@ public class RunHistoryIT {
         .body("kind", equalTo(StoryTarget.GC))
         .body("trigger", equalTo("manual"))
         .body("finishedAt", notNullValue())
-        .body("steps.size()", equalTo(21))
+        .body("steps.size()", equalTo(22))
         .body(StoryRuns.stepPath("usage.before") + ".target", equalTo("containers"))
         .body(StoryRuns.stepPath("usage.before") + ".request.method", equalTo("GET"))
         .body(

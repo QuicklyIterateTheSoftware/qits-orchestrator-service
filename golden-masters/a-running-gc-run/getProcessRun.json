@@ -395,6 +395,21 @@
       "responseBytes": null,
       "error": null,
       "summary": null
+    },
+    {
+      "id": "toggles.retirement",
+      "name": "Retire unused toggles",
+      "target": "toggles",
+      "dependsOn": [],
+      "status": "PENDING",
+      "startedAt": null,
+      "finishedAt": null,
+      "httpStatus": null,
+      "request": null,
+      "response": null,
+      "responseBytes": null,
+      "error": null,
+      "summary": null
     }
   ]
 }

@@ -121,6 +121,9 @@
         <qits.idp-golden-masters.version>2026.1123.194348</qits.idp-golden-masters.version>
         <!-- qits-mirror's, for mirror.sweep (qits-2253): the first version recording sweepGc. -->
         <qits.mirror-golden-masters.version>2026.1121.190031</qits.mirror-golden-masters.version>
+        <!-- qits-toggles', for toggles.retirement (qits-2703): the first version recording
+             runToggleRetirement. A first adoption, so no bump brought it. -->
+        <qits.toggles-golden-masters.version>2026.1126.203614</qits.toggles-golden-masters.version>
         <qits.maven.repository.url>https://registry.qits.wohlben.eu/artifacts/maven/maven</qits.maven.repository.url>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -337,6 +340,11 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>qits-mirror-golden-masters</artifactId>
                 <version>${qits.mirror-golden-masters.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-toggles-golden-masters</artifactId>
+                <version>${qits.toggles-golden-masters.version}</version>
             </dependency>
             <dependency>
                 <!-- Managed here rather than versioned at the use site because Quinoa is in no BOM;

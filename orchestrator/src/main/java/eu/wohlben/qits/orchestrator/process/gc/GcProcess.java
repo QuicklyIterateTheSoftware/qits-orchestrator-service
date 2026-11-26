@@ -185,6 +185,13 @@ import java.util.Optional;
  * minutes) is a FAILED row and a FAILED run, and every other store's step still runs. It frees no
  * docker disk this run measures, so it hangs off neither {@code usage.after} plane, and it sits
  * after every other deleter so a slow mirror delays nothing else.
+ *
+ * <p><b>{@code toggles.retirement} is the clock of qits-toggles' retirement run</b> (epic qits-2542,
+ * qits-2703): {@code POST /toggles/api/retirement/runs}, {@code ?dryRun=true} on a dry run.
+ * qits-toggles reads the deployed consumers' pacts itself and files a removal ticket for every
+ * toggle none of them has used for three days; this service decides nothing about it. It deletes
+ * nothing, so it has no edge and nothing waits on it, and it is the LAST step: it frees no disk
+ * either measurement could see, and a slow pact read behind it then delays no deleter.
  */
 @ApplicationScoped
 public class GcProcess implements TechnicalProcess {
@@ -218,6 +225,7 @@ public class GcProcess implements TechnicalProcess {
   static final String MIRROR_SWEEP = "mirror.sweep";
   static final String ARTIFACTS_USAGE_AFTER = "artifacts.usage.after";
   static final String USAGE_AFTER = "usage.after";
+  static final String TOGGLES_RETIREMENT = "toggles.retirement";
 
   /**
    * The five pin reads. Every step that deletes depends on ALL of them (ticket qits-1175): a run
@@ -251,6 +259,8 @@ public class GcProcess implements TechnicalProcess {
 
   static final String MIRROR_SWEEP_PATH = "/mirror/api/gc/sweep";
 
+  static final String TOGGLES_RETIREMENT_PATH = "/toggles/api/retirement/runs";
+
   private static final ObjectMapper JSON = new ObjectMapper();
 
   @Inject GcConfig config;
@@ -278,7 +288,8 @@ public class GcProcess implements TechnicalProcess {
         + " nothing pins: registry identities and blobs (qits-artifacts), host images, orphan"
         + " volumes and buildkit cache (qits-containers), service clients nothing claims"
         + " (qits-idp), and mirrored images no manifest pins (qits-mirror). Measures host disk and"
-        + " the registry store before and after.";
+        + " the registry store before and after, and last asks qits-toggles to ticket every"
+        + " toggle no deployed pact uses any more.";
   }
 
   /**
@@ -478,7 +489,41 @@ public class GcProcess implements TechnicalProcess {
             context ->
                 StepResult.of(
                     context.peers().get(PeerTarget.CONTAINERS, USAGE_PATH),
-                    answer -> GcSummaries.usage(answer.json()))));
+                    answer -> GcSummaries.usage(answer.json()))),
+        new StepDefinition(
+            TOGGLES_RETIREMENT,
+            "Retire unused toggles",
+            PeerTarget.TOGGLES,
+            // NO edge, and nothing depends on it: it deletes nothing (a removal ticket asks a person
+            // to delete a declaration), so no pin guards it, and a qits-toggles or qits-maintenance
+            // that is down must cost the night none of its reclaim.
+            List.of(),
+            GcProcess::togglesRetirement));
+  }
+
+  /**
+   * {@code toggles.retirement} (epic qits-2542, qits-2703): qits-toggles' retirement run, which files
+   * a MAINTENANCE ticket "remove toggle &lt;slug&gt;" for every declared toggle no deployed
+   * consumer's pact has used for three days, comments on and drops the ticket of a toggle that is
+   * used again, and reads the deployed pacts itself — the decision and the ticket are qits-toggles',
+   * the owner of the toggles; this step is only its clock.
+   *
+   * <p><b>A dry gc run asks for a dry retirement run</b>, {@code ?dryRun=true}, and qits-toggles then
+   * files, drops and records nothing and answers what it would. A real run sends the bare path, which
+   * is exactly the request qits-toggles' golden master records (the door's {@code dryRun} defaults to
+   * false).
+   *
+   * <p><b>It runs LAST, after both measurements.</b> It frees no disk, so it belongs to neither {@code
+   * usage.after} plane, and a slow qits-maintenance read behind it (qits-toggles reads every deployed
+   * consumer's pact) then delays no deleter and no measurement. A failure is a FAILED row and a FAILED
+   * run, like any step's; every deleter has already run by then, and would run anyway, since nothing
+   * depends on it. A 502 is qits-toggles failing closed: its pact read failed and it filed nothing.
+   */
+  static StepResult togglesRetirement(RunContext context) {
+    String path = TOGGLES_RETIREMENT_PATH + (context.dryRun() ? "?dryRun=true" : "");
+    return StepResult.of(
+        context.peers().post(PeerTarget.TOGGLES, path, null),
+        answer -> GcSummaries.togglesRetirement(answer.json()));
   }
 
   /**

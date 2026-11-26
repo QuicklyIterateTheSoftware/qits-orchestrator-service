@@ -362,4 +362,39 @@ class GcSummariesTest {
             + " reclaimed; tags judged by the mirror's own window, no image pins; 0 errors",
         GcSummaries.mirrorSweep(json("{\"nope\":1}")));
   }
+
+  // --- the toggles retirement (qits-2703) ----------------------------------------------------------
+
+  @Test
+  void aRetirementReportIsQuotedNeverReJudged() {
+    assertEquals(
+        "filed 2 removal tickets (toggles-smoke qits-2799, old-banner qits-2800); kept 3; dropped 1;"
+            + " 2 toggles used by a deployed pact; 1 failed",
+        GcSummaries.togglesRetirement(
+            json(
+                "{\"dryRun\":false,\"used\":[\"a\",\"b\"],"
+                    + "\"filed\":[{\"slug\":\"toggles-smoke\",\"ticket\":\"qits-2799\"},"
+                    + "{\"slug\":\"old-banner\",\"ticket\":\"qits-2800\"}],"
+                    + "\"kept\":[{},{},{}],\"dropped\":[{}],"
+                    + "\"failed\":[{\"slug\":\"x\",\"error\":\"projects 503\"}]}")));
+  }
+
+  @Test
+  void aDryRetirementReportSaysWhatItWouldFileAndDrop() {
+    assertEquals(
+        "would file 1 removal ticket (toggles-smoke); kept 0; would drop 0; 0 toggles used by a"
+            + " deployed pact; 0 failed",
+        GcSummaries.togglesRetirement(
+            json(
+                "{\"dryRun\":true,\"used\":[],\"filed\":[{\"slug\":\"toggles-smoke\","
+                    + "\"ticket\":null}],\"kept\":[],\"dropped\":[],\"failed\":[]}")));
+  }
+
+  @Test
+  void aRetirementAnswerWithNothingInItReadsAsZeroes() {
+    assertEquals("no retirement report in the answer", GcSummaries.togglesRetirement(null));
+    assertEquals(
+        "filed 0 removal tickets; kept 0; dropped 0; 0 toggles used by a deployed pact; 0 failed",
+        GcSummaries.togglesRetirement(json("{\"nope\":1}")));
+  }
 }

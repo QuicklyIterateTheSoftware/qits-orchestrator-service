@@ -412,6 +412,8 @@ public class PeerFailureIT {
     // …and the mirror's own pair, which the five pins do not guard (qits-2253).
     to(StoryPeers.MAINTENANCE, StoryPeers.read(StoryPeers.MIRROR_IMAGE_PINS_PATH));
     to(StoryPeers.MIRROR, StoryPeers.written(StoryPeers.MIRROR_SWEEP_PATH));
+    // …and the toggles retirement, which deletes nothing and waits on nothing (qits-2703).
+    to(StoryPeers.TOGGLES, StoryPeers.written(StoryPeers.RETIREMENT_PATH));
 
     // THE CLAIM A PRESENCE CHECK CANNOT MAKE. Nothing that DELETES was called, in any store, because
     // a pin source could not be read. Every deleter's path has `/gc/` in it except the usage read,
@@ -430,10 +432,11 @@ public class PeerFailureIT {
     assertTrue(
         report.network().stream().noneMatch(edge -> StoryPeers.IDP.equals(edge.to())),
         () -> "qits-idp was asked to delete without every pin: " + report.network());
-    // Two in, eleven out: the 503, nine reads that answered and the mirror's sweep. The credential was minted an hour ago by the first run of the
+    // Two in, twelve out: the 503, nine reads that answered, the mirror's sweep and the toggles
+    // retirement (qits-2703). The credential was minted an hour ago by the first run of the
     // catalogue, so no token arrow belongs here — see StoryPeers on why exactly one story owns that
     // edge.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 13);
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, FAIL_CLOSED_SLUG, 14);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         FAIL_CLOSED_SLUG,
@@ -454,9 +457,9 @@ public class PeerFailureIT {
     // THE CLAIM. Not one request reached qits-idp — no sweep, and no token either: the credential
     // was minted by the first run of the catalogue and is cached for the hour.
     ReportAssertions.assertNoEdgesTo(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, StoryPeers.IDP);
-    // Two in, eighteen out: the seventeen calls that need no claim, the claims read as its 503 —
-    // and no service-client sweep.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 20);
+    // Two in, nineteen out: the eighteen calls that need no claim (the toggles retirement among
+    // them, qits-2703), the claims read as its 503 — and no service-client sweep.
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, CLAIMS_UNREAD_SLUG, 21);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         CLAIMS_UNREAD_SLUG,
@@ -484,9 +487,10 @@ public class PeerFailureIT {
         StoryTarget.SERVICE,
         StoryPeers.MIRROR,
         StoryPeers.written(StoryPeers.MIRROR_SWEEP_PATH));
-    // Two in, nineteen out: every call of a whole run (each store's two measurements one arrow),
-    // the image pin read drawn as its 503 — six asks, one arrow.
-    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, IMAGE_PINS_UNREAD_SLUG, 21);
+    // Two in, twenty out: every call of a whole run (each store's two measurements one arrow, the
+    // toggles retirement included, qits-2703), the image pin read drawn as its 503 — six asks, one
+    // arrow.
+    ReportAssertions.assertEdgeCount(CATEGORY_SLUG, IMAGE_PINS_UNREAD_SLUG, 22);
     ReportAssertions.assertOnlyEdgesFrom(
         CATEGORY_SLUG,
         IMAGE_PINS_UNREAD_SLUG,

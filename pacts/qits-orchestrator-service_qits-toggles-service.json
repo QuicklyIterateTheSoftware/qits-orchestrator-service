@@ -1,0 +1,135 @@
+{
+  "consumer": {
+    "name": "qits-orchestrator-service"
+  },
+  "interactions": [
+    {
+      "comments": {
+        "references": {
+          "qits-call": {
+            "app": "qits-toggles-service",
+            "operationId": "runToggleRetirement"
+          },
+          "qits-trigger": {
+            "app": "qits-orchestrator-service",
+            "kind": "schedule",
+            "schedule": "GcSchedule.onSchedule"
+          }
+        }
+      },
+      "description": "GcSchedule.onSchedule: runToggleRetirement",
+      "key": "f70b372e",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a toggle no deployed pact has used for three days, asked by a service",
+          "params": {
+            "authorization": "Bearer contract-qits-consumer",
+            "slug": "toggles-smoke"
+          }
+        }
+      ],
+      "request": {
+        "generators": {
+          "header": {
+            "Authorization": {
+              "dataType": "RAW",
+              "expression": "${authorization}",
+              "type": "ProviderState"
+            }
+          }
+        },
+        "headers": {
+          "Authorization": [
+            "Bearer contract-qits-consumer"
+          ]
+        },
+        "method": "POST",
+        "path": "/toggles/api/retirement/runs"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "dropped": [],
+            "dryRun": false,
+            "failed": [],
+            "filed": [
+              {
+                "slug": "toggles-smoke",
+                "ticket": "qits-100"
+              }
+            ],
+            "kept": [],
+            "used": []
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.dryRun": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.filed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 0
+                }
+              ]
+            },
+            "$.filed[*].slug": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.filed[*].ticket": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json.*"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "4.0"
+    },
+    "plugins": []
+  },
+  "provider": {
+    "name": "qits-toggles-service"
+  }
+}

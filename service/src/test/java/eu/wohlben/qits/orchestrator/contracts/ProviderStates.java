@@ -276,7 +276,10 @@ public class ProviderStates {
             new PeerCall(
                 seeded.method(),
                 peers.url(step.target(), seeded.path()),
-                "POST".equals(seeded.method()) ? "{\"dryRun\":true}" : null);
+                // qits-toggles' door takes its flag in the query and no body (qits-2703).
+                "POST".equals(seeded.method()) && !step.id().equals("toggles.retirement")
+                    ? "{\"dryRun\":true}"
+                    : null);
         result =
             new StepResult(
                 RunStatus.SUCCEEDED,
@@ -467,6 +470,14 @@ public class ProviderStates {
         FakePeers.Scripted.ok(
             "{\"dryRun\":false,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],"
                 + "\"blobs\":{\"unlinked\":0,\"reclaimedBytes\":0}}"));
+    peers.answer(
+        "/toggles/api/retirement/runs?dryRun=true",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":true,\"used\":[],\"filed\":[],\"kept\":[],\"dropped\":[],\"failed\":[]}"));
+    peers.answer(
+        "/toggles/api/retirement/runs",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"used\":[],\"filed\":[],\"kept\":[],\"dropped\":[],\"failed\":[]}"));
     return params(Map.of("kind", GcProcess.KIND));
   }
 
@@ -825,6 +836,16 @@ public class ProviderStates {
             "/containers/api/gc/usage",
             "{\"images\":{\"sizeBytes\":10,\"reclaimableBytes\":2},\"buildCache\":{\"sizeBytes\":4}}",
             "images 10 B (2 B reclaimable), build cache 4 B"));
+    steps.put(
+        "toggles.retirement",
+        new SeededStep(
+            "POST",
+            "/toggles/api/retirement/runs?dryRun=true",
+            "{\"dryRun\":true,\"at\":\"2026-01-01T03:00:00Z\",\"used\":[],\"filed\":[{\"slug\":"
+                + "\"toggles-smoke\",\"ticket\":null,\"unusedSince\":\"2025-12-29T03:00:00Z\"}],"
+                + "\"kept\":[],\"dropped\":[],\"failed\":[]}",
+            "would file 1 removal ticket (toggles-smoke); kept 0; would drop 0; 0 toggles used by"
+                + " a deployed pact; 0 failed"));
     return Collections.unmodifiableMap(steps);
   }
 }

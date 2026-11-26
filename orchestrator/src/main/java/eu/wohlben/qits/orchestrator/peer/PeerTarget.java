@@ -1,7 +1,7 @@
 package eu.wohlben.qits.orchestrator.peer;
 
 /**
- * The nine peers, by their wire name.
+ * The ten peers, by their wire name.
  *
  * <p>Constants rather than an enum because the same string is two things at once: the value a step
  * reports as its {@code target}, and the middle of the config key {@code
@@ -48,6 +48,14 @@ public final class PeerTarget {
    * gone: the gc run's {@code mirror.sweep} is the only clock its eviction has.
    */
   public static final String MIRROR = "mirror";
+
+  /**
+   * qits-toggles — the feature toggles, whose retirement run files a removal ticket for every
+   * toggle no deployed consumer's pact has used for three days (epic qits-2542, qits-2703). The gc
+   * run's {@code toggles.retirement} is that run's only clock. It deletes nothing itself: the ticket
+   * asks a person to delete a declaration.
+   */
+  public static final String TOGGLES = "toggles";
 
   private PeerTarget() {}
 }

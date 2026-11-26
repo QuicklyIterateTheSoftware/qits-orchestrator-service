@@ -136,6 +136,14 @@ class ProcessApiTest {
         FakePeers.Scripted.ok(
             "{\"dryRun\":false,\"pins\":{\"supplied\":true,\"images\":1},\"types\":[],"
                 + "\"blobs\":{\"unlinked\":0,\"reclaimedBytes\":0}}"));
+    peers.answer(
+        "/toggles/api/retirement/runs?dryRun=true",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":true,\"used\":[],\"filed\":[],\"kept\":[],\"dropped\":[],\"failed\":[]}"));
+    peers.answer(
+        "/toggles/api/retirement/runs",
+        FakePeers.Scripted.ok(
+            "{\"dryRun\":false,\"used\":[],\"filed\":[],\"kept\":[],\"dropped\":[],\"failed\":[]}"));
   }
 
   /**
@@ -205,7 +213,7 @@ class ProcessApiTest {
         .body("kind", hasItem("gc"))
         .body("find { it.kind == 'gc' }.name", equalTo("Garbage collection"))
         .body("find { it.kind == 'gc' }.description", notNullValue())
-        .body("find { it.kind == 'gc' }.steps.size()", equalTo(21))
+        .body("find { it.kind == 'gc' }.steps.size()", equalTo(22))
         .body("find { it.kind == 'gc' }.steps[0].id", equalTo("usage.before"))
         .body("find { it.kind == 'gc' }.steps[0].target", equalTo("containers"))
         .body("find { it.kind == 'gc' }.steps[0].dependsOn", equalTo(java.util.List.of()))
@@ -433,7 +441,7 @@ class ProcessApiTest {
         .body("id", equalTo(id))
         .body("kind", equalTo("gc"))
         .body("dryRun", equalTo(true))
-        .body("steps.size()", equalTo(21))
+        .body("steps.size()", equalTo(22))
         .body("steps[0].id", equalTo("usage.before"))
         .body("steps[0].name", equalTo("Disk usage before"))
         .body("steps[0].target", equalTo("containers"))
@@ -506,7 +514,14 @@ class ProcessApiTest {
         .body("steps[19].status", equalTo("SUCCEEDED"))
         .body(
             "steps[19].request.url",
-            equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"));
+            equalTo("http://dev-qits-artifacts:8080/artifacts/api/store/summary"))
+        // qits-toggles' retirement run, last (qits-2703): a dry gc run asks for a dry one.
+        .body("steps[21].id", equalTo("toggles.retirement"))
+        .body("steps[21].target", equalTo("toggles"))
+        .body("steps[21].status", equalTo("SUCCEEDED"))
+        .body(
+            "steps[21].request.url",
+            equalTo("http://dev-qits-toggles:8080/toggles/api/retirement/runs?dryRun=true"));
   }
 
   @Test
@@ -540,7 +555,7 @@ class ProcessApiTest {
         .statusCode(200)
         .body("id", equalTo(id))
         .body("status", equalTo("SUCCEEDED"))
-        .body("steps.size()", equalTo(21))
+        .body("steps.size()", equalTo(22))
         .body("steps.response", everyItem(nullValue()))
         .body("steps.findAll { it.request != null }.request.body", everyItem(nullValue()))
         // branches.sweep POSTs a body: the request line stays, its body and the answer go.

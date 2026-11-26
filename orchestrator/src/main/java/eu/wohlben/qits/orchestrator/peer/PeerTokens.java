@@ -12,7 +12,7 @@ import org.jboss.logging.Logger;
 
 /**
  * The one named oidc client, {@code qits} (epic qits-540 dossier, 'Plan (as of 2026-09-13)', C4),
- * which mints the bearer every one of the nine peer calls carries.
+ * which mints the bearer every one of the ten peer calls carries.
  *
  * <p><b>One audience for every call, {@code qits-platform}</b> — the plan's open calling model: a
  * token is cut for the PLATFORM rather than for one receiver, so one token is good for all nine

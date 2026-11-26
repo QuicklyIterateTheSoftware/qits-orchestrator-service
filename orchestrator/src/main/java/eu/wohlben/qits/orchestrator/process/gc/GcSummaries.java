@@ -428,6 +428,45 @@ final class GcSummaries {
         + (failed.isEmpty() ? "" : "; failed: " + String.join(", ", failed));
   }
 
+  /**
+   * {@code filed 1 removal ticket (toggles-smoke qits-123); kept 2; dropped 0; 1 toggle used by a
+   * deployed pact; 0 failed} — qits-toggles' retirement report (epic qits-2542, qits-2703), read and
+   * never re-judged: which toggle is due, and why one is kept, are qits-toggles' to say. On a dry run
+   * it says {@code would file …} and {@code would drop …}.
+   */
+  static String togglesRetirement(JsonNode body) {
+    if (body == null) {
+      return "no retirement report in the answer";
+    }
+    boolean dry = body.path("dryRun").asBoolean();
+    JsonNode filed = body.path("filed");
+    List<String> named = new ArrayList<>();
+    for (JsonNode toggle : filed) {
+      if (named.size() == NAMED_CLIENTS) {
+        named.add("…");
+        break;
+      }
+      String ticket = toggle.path("ticket").asText("");
+      named.add(toggle.path("slug").asText("?") + (ticket.isBlank() ? "" : " " + ticket));
+    }
+    int used = body.path("used").size();
+    return (dry ? "would file " : "filed ")
+        + filed.size()
+        + (filed.size() == 1 ? " removal ticket" : " removal tickets")
+        + (named.isEmpty() ? "" : " (" + String.join(", ", named) + ")")
+        + "; kept "
+        + body.path("kept").size()
+        + "; "
+        + (dry ? "would drop " : "dropped ")
+        + body.path("dropped").size()
+        + "; "
+        + used
+        + (used == 1 ? " toggle" : " toggles")
+        + " used by a deployed pact; "
+        + body.path("failed").size()
+        + " failed";
+  }
+
   private static String text(JsonNode node, String field, String fallback) {
     JsonNode value = node == null ? null : node.get(field);
     return value == null || value.isNull() ? fallback : value.asText();

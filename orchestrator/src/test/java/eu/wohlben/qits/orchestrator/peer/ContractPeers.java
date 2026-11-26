@@ -97,6 +97,7 @@ public final class ContractPeers {
     client.maintenanceUrl = url.apply(PeerTarget.MAINTENANCE);
     client.idpUrl = url.apply(PeerTarget.IDP);
     client.mirrorUrl = url.apply(PeerTarget.MIRROR);
+    client.togglesUrl = url.apply(PeerTarget.TOGGLES);
     client.callTimeout = Duration.ofSeconds(10);
     client.tokens =
         new PeerTokens() {

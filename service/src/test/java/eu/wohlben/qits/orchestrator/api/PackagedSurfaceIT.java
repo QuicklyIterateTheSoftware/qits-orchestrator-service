@@ -144,6 +144,8 @@ public class PackagedSurfaceIT {
       overrides.put("qits.orchestrator.targets.idp-url", dead);
       // mirror is the mirror sweep's peer (qits-2253).
       overrides.put("qits.orchestrator.targets.mirror-url", dead);
+      // toggles is the retirement run's peer (qits-2703).
+      overrides.put("qits.orchestrator.targets.toggles-url", dead);
       // The clock must not start a run beside the one this IT starts itself.
       overrides.put("quarkus.scheduler.enabled", "false");
       return overrides;
@@ -238,13 +240,13 @@ public class PackagedSurfaceIT {
         .get("/orchestrator/api/runs/" + id)
         .then()
         .statusCode(200)
-        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — twenty-one since the
-        // mirror's pair joined (qits-2253), the same count ProcessApiTest and the userflow IT pin.
+        // The whole gc plan, one row per StepDefinition in GcProcess.steps() — twenty-two since the
+        // toggles retirement joined last (qits-2703), the same count ProcessApiTest and the userflow IT pin.
         // Step 0 is the first peer read and fails; step 8 (the registry plan) depends on all five
         // pin reads and is skipped fail-closed when they do. The qits oidc client is shipped off
         // and this profile leaves it so, so PeerClient fails closed before dialling (epic qits-543:
         // no bearer, no call) — the dead port is never reached, and the error says so.
-        .body("steps.size()", Matchers.equalTo(21))
+        .body("steps.size()", Matchers.equalTo(22))
         .body("steps[0].status", Matchers.equalTo("FAILED"))
         .body("steps[0].error", Matchers.containsString("was not called"))
         .body("steps[8].status", Matchers.equalTo("SKIPPED"))
@@ -254,7 +256,7 @@ public class PackagedSurfaceIT {
     // out of the postgres this JVM handed the process through ${QITS_RESOURCE_DB_URL}. That is the
     // whole claim: the shipped expression resolved, and Flyway's migration survived as a classpath
     // resource — exactly the shape a native image drops.
-    assertTrue(stepRows(id) == 21, "the packaged process must have written its steps");
+    assertTrue(stepRows(id) == 22, "the packaged process must have written its steps");
   }
 
   @Test

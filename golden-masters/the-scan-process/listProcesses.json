@@ -2,7 +2,7 @@
   {
     "kind": "gc",
     "name": "Garbage collection",
-    "description": "Reads the platform's pin set once, then asks every store's own owner to delete what nothing pins: registry identities and blobs (qits-artifacts), host images, orphan volumes and buildkit cache (qits-containers), service clients nothing claims (qits-idp), and mirrored images no manifest pins (qits-mirror). Measures host disk and the registry store before and after.",
+    "description": "Reads the platform's pin set once, then asks every store's own owner to delete what nothing pins: registry identities and blobs (qits-artifacts), host images, orphan volumes and buildkit cache (qits-containers), service clients nothing claims (qits-idp), and mirrored images no manifest pins (qits-mirror). Measures host disk and the registry store before and after, and last asks qits-toggles to ticket every toggle no deployed pact uses any more.",
     "dryRunnable": true,
     "steps": [
       {
@@ -191,6 +191,12 @@
           "containers.volumes",
           "containers.build-cache"
         ]
+      },
+      {
+        "id": "toggles.retirement",
+        "name": "Retire unused toggles",
+        "target": "toggles",
+        "dependsOn": []
       }
     ]
   },

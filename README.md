@@ -47,6 +47,7 @@ so what comes after it still runs.
 | `mirror.sweep` | mirror | `POST /mirror/api/gc/sweep {pins: {images}, dryRun}` — `{dryRun}` alone when `pins.mirror-images` failed | — |
 | `artifacts.usage.after` | artifacts | `GET /artifacts/api/store/summary` | artifacts.sweep |
 | `usage.after` | containers | `GET /containers/api/gc/usage` | artifacts.sweep, containers.images, containers.volumes, containers.build-cache |
+| `toggles.retirement` | toggles | `POST /toggles/api/retirement/runs` — `?dryRun=true` on a dry run | — (and nothing depends on it) |
 
 **The pins are read once and handed on.** `artifacts.plan` and `artifacts.sweep` send
 
@@ -132,6 +133,18 @@ sweep runs synchronously inside the request, so it has the longest budget of all
 `qits.orchestrator.gc.mirror-sweep-call-timeout` (30 minutes), and qits-mirror answers an
 overlapping sweep 409, so a timed-out call never doubles the work. `pins.mirror-images` is not
 `pins.images`: that id was qits-configuration's, retired by qits-1176.
+
+**`toggles.retirement` is the clock of qits-toggles' retirement run** (epic qits-2542, qits-2703).
+qits-toggles reads every deployed consumer's pact itself, from qits-maintenance, and files a
+MAINTENANCE ticket "remove toggle `<slug>`" for every declared toggle none of them has used for three
+days; it comments on and drops the ticket of a toggle that is used again. The decision and the ticket
+are qits-toggles', the owner of the toggles; this step decides nothing and only quotes the report
+(filed, kept, dropped, used, failed). It deletes nothing, so it has no edge and nothing depends on
+it, and it is the **last** step: it frees no disk either measurement could see, and a slow pact read
+behind it then delays no deleter. A dry run asks for a dry retirement run, `?dryRun=true`, which files
+and records nothing; a real run sends the bare path. A failure — qits-toggles answers 502 when its
+pact read failed, having filed nothing — is a FAILED row and a FAILED run that has cost no other
+store its step.
 
 **Only what needs a pin waits for one.** `containers.build-cache` hangs off `usage.before`, not
 off the image sweep: a prune has no keep-set, so a broken pin read must not cost the platform the
@@ -335,6 +348,7 @@ and overridable by environment without a rebuild.
 | `qits.orchestrator.targets.maintenance-url` | `https://maintenance.qits.${QITS_DOMAIN}` | where the dependency pins are |
 | `qits.orchestrator.targets.idp-url` | `https://idp.qits.${QITS_DOMAIN}` | where the service-client store is |
 | `qits.orchestrator.targets.mirror-url` | `https://mirror.qits.${QITS_DOMAIN}` | where the pull-through caches are (qits-2253) |
+| `qits.orchestrator.targets.toggles-url` | `https://toggles.qits.${QITS_DOMAIN}` | where the feature toggles are, for their retirement run (qits-2703) |
 | `qits.orchestrator.gc.enabled` | `true` | whether the CLOCK may start a run |
 | `qits.orchestrator.gc.cron` | `0 0 3 * * ?` | when it does: 03:00 every day |
 | `qits.orchestrator.gc.time-zone` | `UTC` | the zone the cron is read in (the platform's convention) |
@@ -384,7 +398,7 @@ this application's own qits-idp service client and injects `QITS_RESOURCE_IDP_UR
 qits-idp's edge host `https://idp.qits.<domain>/idp` and `dev-qits-orchestrator`). No configuration entry names any of
 the three, and the old `QUARKUS_OIDC_CLIENT_ARTIFACTS_*` fallback is gone. A token is cut for the
 PLATFORM rather than for one receiver — qits-idp puts `qits-platform` on every token it mints and
-every peer accepts it — so one client and one audience serve all nine peers, and what this service
+every peer accepts it — so one client and one audience serve all ten peers, and what this service
 may do at a peer is decided by its roles.
 
 One switch, `quarkus.oidc-client.qits.client-enabled`: shipped **true**, because every deployment
@@ -419,7 +433,7 @@ builds the client. `./mvnw test` needs neither — Quinoa is off in test mode.
 
 Integration tests are skipped by default. `-DskipITs=false` runs them against the fast-jar —
 `PackagedSurfaceIT`, and the five **user-story** classes that drive a whole gc run against an in-JVM
-stand-in for all nine peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
+stand-in for all ten peers and emit `service/target/userstories/` (see `AGENTS.md`); `-Dnative`
 builds the GraalVM binary (`.sdkmanrc` names `25.0.2-graalce`) and runs it against that.
 
 The stories reach nothing outside the JVM they run in, so they need no docker and no credentials

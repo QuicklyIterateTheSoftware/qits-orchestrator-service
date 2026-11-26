@@ -100,6 +100,7 @@ final class GcContract {
   static final GoldenMasters PROJECTS = GoldenMasters.of("qits-projects-service", "qits-projects");
   static final GoldenMasters IDP = GoldenMasters.of("qits-idp-service", "qits-idp");
   static final GoldenMasters MIRROR = GoldenMasters.of("qits-mirror-service", "qits-mirror");
+  static final GoldenMasters TOGGLES = GoldenMasters.of("qits-toggles-service", "qits-toggles");
 
   /** The peer each {@link PeerTarget} is. */
   static final Map<String, GoldenMasters> PEERS =
@@ -112,7 +113,8 @@ final class GcContract {
           PeerTarget.WORKSPACES, WORKSPACES,
           PeerTarget.PROJECTS, PROJECTS,
           PeerTarget.IDP, IDP,
-          PeerTarget.MIRROR, MIRROR);
+          PeerTarget.MIRROR, MIRROR,
+          PeerTarget.TOGGLES, TOGGLES);
 
   // --- the rows ----------------------------------------------------------------------------------
 
@@ -227,7 +229,30 @@ final class GcContract {
                       "types[].errors[]", "types[].failure", "blobs.reclaimable",
                       "blobs.reclaimableBytes", "blobs.unlinked", "blobs.reclaimedBytes")
                   .anyLength("types"),
-              GcContract::mirrorPinsFromBody));
+              GcContract::mirrorPinsFromBody),
+          // qits-toggles-service (epic qits-2542, qits-2703). Called, like every peer, with this
+          // service's own bearer, which the door accepts for a qits:system service client: the
+          // state's `authorization` bound as a provider-state generator, as qits-idp's row does.
+          // Recorded as a REAL run with no query, which is exactly what a real gc run sends; a dry
+          // gc run adds ?dryRun=true, which no recording carries, so the dry call is not pacted
+          // (GcProcessTest holds the flag). anyLength("filed"): how many toggles are due tonight is
+          // qits-toggles' decision and no contract either side means to hold. The other four lists
+          // are EMPTY in the recording, which an anyLength matcher cannot be built from (it needs an
+          // element to take its template from), so the pact holds them as recorded: GcSummaries only
+          // counts them, and qits-toggles answers this state with them empty.
+          new Row(
+              PeerTarget.TOGGLES,
+              GcProcess.TOGGLES_RETIREMENT,
+              GoldenInteraction.of(
+                      NIGHTLY,
+                      "a toggle no deployed pact has used for three days, asked by a service",
+                      "runToggleRetirement")
+                  .header("Authorization", "{authorization}")
+                  .consumes(
+                      "dryRun", "used[]", "filed[].slug", "filed[].ticket", "kept[]",
+                      "dropped[]", "failed[]")
+                  .anyLength("filed"),
+              NOTHING));
 
   /**
    * The call a row makes, as {@code "<target> <METHOD> <path>"}, for a row whose operation the

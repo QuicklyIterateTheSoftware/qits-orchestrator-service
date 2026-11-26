@@ -67,7 +67,8 @@ class GcConsumerPactTest {
           PeerTarget.WORKSPACES,
           PeerTarget.PROJECTS,
           PeerTarget.IDP,
-          PeerTarget.MIRROR);
+          PeerTarget.MIRROR,
+          PeerTarget.TOGGLES);
 
   @TestFactory
   Stream<DynamicTest> everyRowIsWhatTheStepAsksAndReads() {

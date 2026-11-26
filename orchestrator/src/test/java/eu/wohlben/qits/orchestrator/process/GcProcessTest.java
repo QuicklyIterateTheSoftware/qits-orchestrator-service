@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * The gc process against faked peers: the twenty-one steps, the bodies they send, the summaries they
+ * The gc process against faked peers: the twenty-two steps, the bodies they send, the summaries they
  * read back, and what a broken pin read does.
  *
  * <p>The peers are {@link FakePeers}, an {@code @Alternative} over {@code PeerClient}'s two call
@@ -57,6 +57,17 @@ class GcProcessTest {
   private static final String SERVICE_CLIENTS = "/idp/api/gc/service-clients";
   private static final String MIRROR_IMAGE_PINS = "/maintenance/api/pins/images";
   private static final String MIRROR_SWEEP = "/mirror/api/gc/sweep";
+  private static final String RETIREMENT = "/toggles/api/retirement/runs";
+  private static final String DRY_RETIREMENT = RETIREMENT + "?dryRun=true";
+
+  /** qits-toggles' retirement report (qits-2703), as the door answers a real run. */
+  private static final String RETIREMENT_REPORT =
+      """
+      {"dryRun":false,"at":"2026-11-26T03:00:00Z","used":["new-release-page"],
+       "filed":[{"slug":"toggles-smoke","ticket":"qits-2799","unusedSince":"2026-11-26T15:06:51Z"}],
+       "kept":[{"slug":"new-release-page","reason":"USED","ticket":null}],
+       "dropped":[],"failed":[]}
+      """;
 
   private static final String IMAGE_PINS =
       """
@@ -244,6 +255,10 @@ class GcProcessTest {
              "keptCounts":{"claimed":1,"grace":0,"caller":1}}
             """));
     peers.answer(MIRROR_IMAGE_PINS, FakePeers.Scripted.ok(IMAGE_PINS));
+    peers.answer(RETIREMENT, FakePeers.Scripted.ok(RETIREMENT_REPORT));
+    peers.answer(
+        DRY_RETIREMENT,
+        FakePeers.Scripted.ok(RETIREMENT_REPORT.replace("\"dryRun\":false", "\"dryRun\":true")));
     peers.answer(
         MIRROR_SWEEP,
         FakePeers.Scripted.ok(
@@ -316,7 +331,7 @@ class GcProcessTest {
   }
 
   @Test
-  void aHealthyPlatformRunsAllTwentyOneStepsAndSummarisesEachFromTheAnswer() {
+  void aHealthyPlatformRunsAllTwentyTwoStepsAndSummarisesEachFromTheAnswer() {
     UUID id = executor.start("gc", RunTrigger.MANUAL, false);
     OpRun run = awaitClosed(id);
 
@@ -345,7 +360,8 @@ class GcProcessTest {
             "idp.service-clients",
             "mirror.sweep",
             "artifacts.usage.after",
-            "usage.after"),
+            "usage.after",
+            "toggles.retirement"),
         runs.steps(id).stream().map(step -> step.stepId).toList());
     steps.values().forEach(step -> assertEquals(RunStatus.SUCCEEDED.name(), step.status, step.stepId));
 
@@ -444,6 +460,90 @@ class GcProcessTest {
         "http://dev-qits-mirror:8080/mirror/api/gc/sweep", steps.get("mirror.sweep").requestUrl);
     assertEquals("POST", steps.get("mirror.sweep").requestMethod);
     assertEquals("mirror", steps.get("mirror.sweep").target);
+    // qits-toggles' retirement run, the tenth peer (qits-2703): the bare path on a real run.
+    assertEquals(
+        "filed 1 removal ticket (toggles-smoke qits-2799); kept 1; dropped 0; 1 toggle used by a"
+            + " deployed pact; 0 failed",
+        steps.get("toggles.retirement").summary);
+    assertEquals(
+        "http://dev-qits-toggles:8080/toggles/api/retirement/runs",
+        steps.get("toggles.retirement").requestUrl);
+    assertEquals("POST", steps.get("toggles.retirement").requestMethod);
+    assertEquals("toggles", steps.get("toggles.retirement").target);
+    assertNull(steps.get("toggles.retirement").requestBody);
+  }
+
+  // --- the toggles retirement (qits-2703) ----------------------------------------------------------
+
+  @Test
+  void theRetirementRunIsLastHasNoEdgeAndNothingWaitsOnIt() {
+    List<String> ids = process.steps().stream().map(s -> s.id()).toList();
+    assertEquals("toggles.retirement", ids.getLast());
+    process.steps()
+        .forEach(
+            s -> {
+              if (s.id().equals("toggles.retirement")) {
+                assertTrue(s.dependsOn().isEmpty(), "it deletes nothing, so no pin guards it");
+              } else {
+                assertFalse(s.dependsOn().contains("toggles.retirement"), s.id());
+              }
+            });
+  }
+
+  @Test
+  void aDryGcRunAsksForADryRetirementRun() {
+    UUID id = executor.start("gc", RunTrigger.MANUAL, true);
+    awaitClosed(id);
+
+    OpStep retirement = step(id, "toggles.retirement");
+    assertEquals(RunStatus.SUCCEEDED.name(), retirement.status);
+    assertEquals(
+        "http://dev-qits-toggles:8080/toggles/api/retirement/runs?dryRun=true",
+        retirement.requestUrl);
+    assertEquals(1, peers.callsTo(DRY_RETIREMENT));
+    assertTrue(
+        retirement.summary.startsWith("would file 1 removal ticket (toggles-smoke qits-2799)"),
+        retirement.summary);
+  }
+
+  @Test
+  void aRetirementRunThatFailsClosedIsAFailedStepAndStopsNoStore() {
+    // 502: qits-toggles could not read the deployed pacts, so it filed nothing (it fails closed).
+    peers.answer(
+        RETIREMENT,
+        FakePeers.Scripted.status(
+            502, "{\"error\":\"qits-maintenance did not answer the deployed pacts\"}"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    OpRun run = awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), run.status, "the failure is reported");
+    OpStep retirement = step(id, "toggles.retirement");
+    assertEquals(RunStatus.FAILED.name(), retirement.status);
+    assertEquals(502, retirement.httpStatus);
+    assertTrue(retirement.error.endsWith("/toggles/api/retirement/runs answered 502"), retirement.error);
+    for (String path : DELETERS) {
+      assertEquals(1, peers.callsTo(path), path + " must not wait on the retirement run");
+    }
+    stepsOf(id)
+        .forEach(
+            (stepId, row) -> {
+              if (!stepId.equals("toggles.retirement")) {
+                assertEquals(RunStatus.SUCCEEDED.name(), row.status, stepId);
+              }
+            });
+  }
+
+  @Test
+  void anUnreachableQitsTogglesIsAFailedStepAndEverythingElseStillRuns() {
+    peers.answer(RETIREMENT, FakePeers.Scripted.unreachable("qits-toggles: no route"));
+
+    UUID id = executor.start("gc", RunTrigger.MANUAL, false);
+    awaitClosed(id);
+
+    assertEquals(RunStatus.FAILED.name(), step(id, "toggles.retirement").status);
+    assertEquals(RunStatus.SUCCEEDED.name(), step(id, "usage.after").status);
+    assertEquals(1, peers.callsTo(MIRROR_SWEEP));
   }
 
   // --- the mirror (qits-2253) ---------------------------------------------------------------------
@@ -875,7 +975,10 @@ class GcProcessTest {
             "claims.idp-clients",
             "pins.mirror-images",
             "artifacts.usage.after",
-            "usage.after");
+            "usage.after",
+            // It deletes nothing (qits-2703): a removal ticket asks a person to delete a
+            // declaration. Its edgelessness is asserted in its own test.
+            "toggles.retirement");
     // mirror.sweep deletes WITHOUT a pin edge, and on purpose (qits-2253): its tags are guarded by
     // the image pins, and a sweep sent without them keeps qits-mirror's own window rule — the
     // mirror's fail-safe, not this run's. Its edgelessness is asserted in its own test.
@@ -991,6 +1094,9 @@ class GcProcessTest {
     // which clients it would have removed.
     assertEquals(RunStatus.SUCCEEDED.name(), steps.get("idp.service-clients").status);
     assertTrue(json(peers.bodiesFor(SERVICE_CLIENTS).getFirst()).get("dryRun").asBoolean());
+    // NOR IS THE RETIREMENT RUN (qits-2703): qits-toggles answers what it would file.
+    assertEquals(RunStatus.SUCCEEDED.name(), steps.get("toggles.retirement").status);
+    assertTrue(peers.bodiesFor(RETIREMENT).isEmpty(), "a dry gc run never asks for a real one");
   }
 
   @Test

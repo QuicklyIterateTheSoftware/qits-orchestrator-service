@@ -51,6 +51,7 @@ import java.util.Optional;
  * claims.idp-clients           qits-platform-deployments     GET  /deployments/api/claims/idp-clients
  * idp.service-clients          qits-idp                      POST /idp/api/gc/service-clients
  * mirror.sweep                 qits-mirror                   POST /mirror/api/gc/sweep
+ * toggles.retirement           qits-toggles                  POST /toggles/api/retirement/runs
  * </pre>
  *
  * <p><b>One process impersonates all of them, and the diagram is drawn from the PATH.</b> The nine
@@ -154,10 +155,14 @@ public final class StoryPeers {
   /** The pull-through caches, whose mirrored image tags are evicted by image pins (qits-2253). */
   public static final String MIRROR = "qits-mirror";
 
+  /** The feature toggles, whose retirement run gc is the clock of (qits-2703). */
+  public static final String TOGGLES = "qits-toggles";
+
   /** Every peer, for the negative claims a refusal story makes about all of them at once. */
   public static final List<String> ALL =
       List.of(
-          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, IDP, MIRROR);
+          CONTAINERS, ARTIFACTS, CI, DEPLOYMENTS, PROJECTS, WORKSPACES, MAINTENANCE, IDP, MIRROR,
+          TOGGLES);
 
   // --- the paths, exactly as GcProcess spells them --------------------------------------------
 
@@ -181,6 +186,10 @@ public final class StoryPeers {
   public static final String SERVICE_CLIENTS_PATH = "/idp/api/gc/service-clients";
   public static final String MIRROR_IMAGE_PINS_PATH = "/maintenance/api/pins/images";
   public static final String MIRROR_SWEEP_PATH = "/mirror/api/gc/sweep";
+  public static final String RETIREMENT_PATH = "/toggles/api/retirement/runs";
+
+  /** The toggle the retirement run tickets in the stories: declared, and no pact uses it. */
+  public static final String RETIRED_TOGGLE = "toggles-smoke";
   /** qits-maintenance's scan door (qits-2490): POST queues one, {@code /{id}} reads it. */
   public static final String SCANS_PATH = "/maintenance/api/scans";
   /** qits-maintenance's SBOM check door (qits-2490): synchronous, answers the report. */
@@ -314,7 +323,10 @@ public final class StoryPeers {
       status = REFUSED_STATUS;
       body = "{\"message\":\"" + path + " is unavailable\"}";
     } else {
-      String answer = answer(method, path, request);
+      // qits-toggles' door takes its dry flag in the QUERY (qits-2703), every other in the body.
+      String query = exchange.getRequestURI().getQuery();
+      boolean dryQuery = query != null && query.contains("dryRun=true");
+      String answer = answer(method, path, dryQuery ? "{\"dryRun\":true}" : request);
       status = answer == null ? 404 : 200;
       body = answer == null ? "{\"message\":\"no such route\"}" : answer;
     }
@@ -457,6 +469,18 @@ public final class StoryPeers {
               + ",\"reclaimedBytes\":"
               + (dryRun ? 0 : 2400000000L)
               + "}}";
+      // qits-toggles' retirement report (qits-2703): one toggle due, on a dry run only would-be.
+      case RETIREMENT_PATH ->
+          "POST".equals(method)
+              ? "{\"dryRun\":"
+                  + dryRun
+                  + ",\"at\":\"2026-11-26T03:00:00Z\",\"used\":[],\"filed\":[{\"slug\":\""
+                  + RETIRED_TOGGLE
+                  + "\",\"ticket\":"
+                  + (dryRun ? "null" : "\"qits-2799\"")
+                  + ",\"unusedSince\":\"2026-11-23T03:00:00Z\"}],\"kept\":[],\"dropped\":[],"
+                  + "\"failed\":[]}"
+              : null;
       // The scan process (qits-2490): every scan is queued under one id and has ended by the
       // first read, so a follow makes exactly one call and a story never waits a poll interval.
       case SCANS_PATH -> "POST".equals(method) ? "{\"id\":\"" + SCAN_ID + "\"}" : null;
@@ -645,6 +669,9 @@ public final class StoryPeers {
     }
     if (path.startsWith("/mirror/")) {
       return MIRROR;
+    }
+    if (path.startsWith("/toggles/")) {
+      return TOGGLES;
     }
     return null;
   }

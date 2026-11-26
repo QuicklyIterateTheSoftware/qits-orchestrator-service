@@ -49,6 +49,7 @@ class EdgeAddressShippedConfigTest {
         "qits.orchestrator.targets.maintenance-url", "https://maintenance.qits.example.test");
     TARGETS.put("qits.orchestrator.targets.idp-url", "https://idp.qits.example.test");
     TARGETS.put("qits.orchestrator.targets.mirror-url", "https://mirror.qits.example.test");
+    TARGETS.put("qits.orchestrator.targets.toggles-url", "https://toggles.qits.example.test");
   }
 
   @Test
