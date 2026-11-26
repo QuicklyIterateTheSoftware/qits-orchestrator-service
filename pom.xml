@@ -60,13 +60,13 @@
              address the builder container can actually reach — see docker/Dockerfile and
              .qits-maven-settings.xml. -->
         <qits.db-core.version>2026.1107.191249</qits.db-core.version>
-        <qits.auth-core.version>2026.1106.507</qits.auth-core.version>
+        <qits.auth-core.version>2026.1126.172511</qits.auth-core.version>
         <qits.arch-rules.version>2026.1113.14706</qits.arch-rules.version>
         <!-- Service-to-service HTTP that says who is calling: QitsHttpClients.wrap turns a raw
              java.net.http.HttpClient into one that opens a CLIENT span and sends traceparent plus
              X-Qits-Caller; the server filter (jandex-discovered off this jar alone) records an
              inbound caller on the server span. Not released yet (qits-1198). -->
-        <qits.http-core.version>2026.1106.507</qits.http-core.version>
+        <qits.http-core.version>2026.1126.172511</qits.http-core.version>
         <!-- qits-telemetry-core (epic qits-428): the three OTLP/HTTP exporters as CDI beans whose
              header supplier carries the `qits` oidc client's current bearer, so spans, logs and
              metrics reach qits-observability at its edge host. Published by
@@ -84,7 +84,7 @@
              does not serve is a build that only works on a machine with the right ~/.m2. This is
              the pin the siblings carry (qits-projects, qits-workspaces and
              qits-maintenance all sit on it). -->
-        <qits.eventstream.version>2026.1120.94334</qits.eventstream.version>
+        <qits.eventstream.version>2026.1126.192104</qits.eventstream.version>
         <!-- The user-story framework (test scope). This repository's story catalogue is five IT
              classes (api.TokenValidationBootstrapIT plus service/…/stories/**), so a
              `mvn verify -DskipITs=false -Dit.test=<those five>` also regenerates
@@ -105,6 +105,7 @@
              is gone, qits-2477), ConsumerPactVerificationTest's pinned consumer:
              `pacts/qits-landing-app_qits-orchestrator-service.json`. -->
         <qits.landing-app-pacts-qits-orchestrator-service.version>2026.1124.142255</qits.landing-app-pacts-qits-orchestrator-service.version>
+        <qits.platform-access-monorepo-pacts-qits-orchestrator-service.version>2026.1124.191722</qits.platform-access-monorepo-pacts-qits-orchestrator-service.version>
         <!-- The consumer pacts of the gc process (ticket qits-1149, epic qits-546): qits-pact-consumer
              reads each peer's published golden masters off the test classpath and turns a recorded
              (provider state, operation) into a pact interaction — orchestrator/src/test/.../
@@ -113,12 +114,12 @@
         <qits.pact-consumer.version>2026.1106.507</qits.pact-consumer.version>
         <qits.containers-golden-masters.version>2026.1114.40637</qits.containers-golden-masters.version>
         <qits.artifacts-golden-masters.version>2026.1124.154841</qits.artifacts-golden-masters.version>
-        <qits.deployments-golden-masters.version>2026.1119.141022</qits.deployments-golden-masters.version>
+        <qits.deployments-golden-masters.version>2026.1126.12943</qits.deployments-golden-masters.version>
         <qits.ci-golden-masters.version>2026.1119.60052</qits.ci-golden-masters.version>
-        <qits.maintenance-golden-masters.version>2026.1124.131229</qits.maintenance-golden-masters.version>
-        <qits.workspaces-golden-masters.version>2026.1123.125658</qits.workspaces-golden-masters.version>
-        <qits.projects-golden-masters.version>2026.1122.200309</qits.projects-golden-masters.version>
-        <qits.idp-golden-masters.version>2026.1123.194348</qits.idp-golden-masters.version>
+        <qits.maintenance-golden-masters.version>2026.1126.192119</qits.maintenance-golden-masters.version>
+        <qits.workspaces-golden-masters.version>2026.1124.202359</qits.workspaces-golden-masters.version>
+        <qits.projects-golden-masters.version>2026.1126.34009</qits.projects-golden-masters.version>
+        <qits.idp-golden-masters.version>2026.1125.71255</qits.idp-golden-masters.version>
         <!-- qits-mirror's, for mirror.sweep (qits-2253): the first version recording sweepGc. -->
         <qits.mirror-golden-masters.version>2026.1121.190031</qits.mirror-golden-masters.version>
         <!-- qits-toggles', for toggles.retirement (qits-2703): the first version recording
@@ -295,6 +296,13 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>qits-landing-app-pacts-qits-orchestrator-service</artifactId>
                 <version>${qits.landing-app-pacts-qits-orchestrator-service.version}</version>
+            </dependency>
+            <dependency>
+                <!-- Test scope at every declaration site: a consumer's pact, verified by
+                     ConsumerPactVerificationTest. -->
+                <groupId>${project.groupId}</groupId>
+                <artifactId>qits-platform-access-monorepo-pacts-qits-orchestrator-service</artifactId>
+                <version>${qits.platform-access-monorepo-pacts-qits-orchestrator-service.version}</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>

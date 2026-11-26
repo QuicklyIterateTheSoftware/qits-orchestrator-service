@@ -180,6 +180,14 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- ConsumerPactVerificationTest's pinned consumer: qits-landing-app (its cleanup page of
+                 qits-2329 is gone, qits-2477). The jar carries pacts/qits-landing-app_qits-orchestrator-service.json,
+                 read off the classpath by ClasspathPactLoader. -->
+            <groupId>${project.groupId}</groupId>
+            <artifactId>qits-platform-access-monorepo-pacts-qits-orchestrator-service</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- The user-story framework: ten @UserStory methods across five IT classes, so the
                  gate-on packaged proofs double as documentation — steps, notes and an observed
                  network diagram each, emitted under target/userstories/. Every story is browserless
