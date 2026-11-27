@@ -255,9 +255,16 @@ public class ProviderStates {
    * GET /runs/{id}} takes and the {@code stepId} {@code GET /runs/{id}/steps/{stepId}} takes
    * ({@link #SEEDED_STEP_ID}, ticket qits-2359). Applying it twice writes a second run; each
    * answers for itself.
+   *
+   * <p><b>It forgets every other gc run first</b> ({@link #forgetRuns}, ticket qits-2733): {@code
+   * listProcessRuns} answers only the newest {@code DEFAULT_LIMIT} runs, and this seeded run's
+   * instant is fixed in the past, so without that it falls off the page once twenty newer gc runs
+   * exist — as the suite's own earlier interactions and a bumped {@code QITS_DEPLOYED_PACTS_DIR}
+   * both produce.
    */
   private Setup aFinishedGcDryRun() {
     awaitNoActiveRun();
+    forgetRuns(GcProcess.KIND);
     List<StepDefinition> steps = definedSteps(A_FINISHED_GC_DRY_RUN);
     UUID runId = runs.open(GcProcess.KIND, RunTrigger.MANUAL, true, steps, SEEDED_START);
     List<String> lines = new ArrayList<>();
@@ -308,15 +315,24 @@ public class ProviderStates {
    */
   private Setup theGcProcessBeforeItsFirstRun() {
     awaitNoActiveRun();
+    forgetRuns(GcProcess.KIND);
+    return params(Map.of("kind", GcProcess.KIND));
+  }
+
+  /**
+   * Deletes every run of {@code kind} the run log holds, steps and all — so a state that seeds one
+   * fixed run afterwards is not sharing a {@code listProcessRuns} page with whatever earlier states
+   * and interactions left behind (ticket qits-2733: the listing answers only the newest {@code
+   * DEFAULT_LIMIT}, and a fixed, past instant otherwise sorts behind them).
+   */
+  private void forgetRuns(String kind) {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
-              OpStep.delete(
-                  "runId in (select r.id from OpRun r where r.kind = ?1)", GcProcess.KIND);
-              OpRun.delete("kind", GcProcess.KIND);
+              OpStep.delete("runId in (select r.id from OpRun r where r.kind = ?1)", kind);
+              OpRun.delete("kind", kind);
             });
     runs.getEntityManager().clear();
-    return params(Map.of("kind", GcProcess.KIND));
   }
 
   /**
@@ -541,9 +557,14 @@ public class ProviderStates {
    * its id) and followed to SUCCEEDED, written through {@link RunStore} at fixed instants from
    * {@link #SEEDED_SCAN_START}. Its params are the {@code kind}, the {@code runId} and the {@code
    * stepId} {@code GET /runs/{id}/steps/{stepId}} takes ({@link #SEEDED_SCAN_STEP_ID}).
+   *
+   * <p>It forgets every other scan run first ({@link #forgetRuns}, ticket qits-2733) for the same
+   * reason {@link #aFinishedGcDryRun} does: the listing's page is twenty, and this run's instant is
+   * fixed in the past.
    */
   private Setup aFinishedScanRun() {
     awaitNoActiveRun();
+    forgetRuns(ScanProcess.KIND);
     Map<String, SeededStep> seeded = new LinkedHashMap<>();
     seeded.put(
         ScanProcess.INTERNAL_REQUEST,
@@ -589,9 +610,14 @@ public class ProviderStates {
    * One SBOM check run, started by the clock ({@code scheduled}), SUCCEEDED: its one call answered
    * 202 with {@link #SEEDED_SBOM_CHECK_REPORT}. Its params are the {@code kind}, the {@code runId}
    * and the {@code stepId} ({@code check}).
+   *
+   * <p>It forgets every other sbom-check run first ({@link #forgetRuns}, ticket qits-2733) for the
+   * same reason {@link #aFinishedGcDryRun} does: the listing's page is twenty, and this run's
+   * instant is fixed in the past.
    */
   private Setup aFinishedSbomCheckRun() {
     awaitNoActiveRun();
+    forgetRuns(SbomCheckProcess.KIND);
     Map<String, SeededStep> seeded = new LinkedHashMap<>();
     seeded.put(
         SbomCheckProcess.CHECK,
